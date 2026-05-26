@@ -472,6 +472,11 @@
         <div class="value" id="cache-write">—</div>
         <div class="sub">secondary · cache created</div>
       </div>
+      <div class="stat-card">
+        <div class="label">Est. Cost</div>
+        <div class="value" id="estimated-cost">—</div>
+        <div class="sub" id="estimated-cost-sub">OpenRouter pricing when matched</div>
+      </div>
     </div>
 
     <!-- Chart -->
@@ -501,7 +506,7 @@
     <!-- Model breakdown table -->
     <section class="table-section" id="models">
       <h2>Model Breakdown</h2>
-      <div class="subtitle">Sessions and tokens broken down by model. Cache is shown as secondary context.</div>
+      <div class="subtitle">Sessions, tokens, and estimated cost by model. Cost uses latest matched OpenRouter pricing and is approximate.</div>
       <table class="data-table">
         <thead>
           <tr>
@@ -511,10 +516,11 @@
             <th class="num">Input</th>
             <th class="num">Output</th>
             <th class="num">Cache Read</th>
+            <th class="num">Est. Cost</th>
           </tr>
         </thead>
         <tbody id="model-table-body">
-          <tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
+          <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
         </tbody>
       </table>
     </section>
@@ -560,6 +566,13 @@ function fmtTokens(n) {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return String(n);
+}
+
+function fmtCost(n) {
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
+  if (n === 0) return '$0.00';
+  if (Math.abs(n) < 0.01) return `$${Number(n).toFixed(4)}`;
+  return `$${Number(n).toFixed(2)}`;
 }
 
 // ── Range tabs ──────────────────────────────────────────────────────────────
@@ -631,9 +644,17 @@ async function loadModels(days) {
 
     const tbody = document.getElementById('model-table-body');
     if (!models.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">No data</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">No data</td></tr>';
       return;
     }
+
+    const priced = models.filter(m => m.estimated_cost !== null && m.estimated_cost !== undefined);
+    const estimatedTotal = priced.reduce((sum, m) => sum + (m.estimated_cost || 0), 0);
+    const unpricedCount = models.length - priced.length;
+    document.getElementById('estimated-cost').textContent = priced.length ? fmtCost(estimatedTotal) : '—';
+    document.getElementById('estimated-cost-sub').textContent = priced.length
+      ? `${priced.length}/${models.length} models priced · ${unpricedCount} unmatched`
+      : 'No matched pricing yet';
 
     tbody.innerHTML = models.map(m => `
       <tr>
@@ -646,6 +667,7 @@ async function loadModels(days) {
         <td class="num">${fmtTokens(m.tokens_input)}</td>
         <td class="num">${fmtTokens(m.tokens_output)}</td>
         <td class="num" title="Cache write: ${fmtTokens(m.cache_write || 0)}">${fmtTokens(m.cache_read || 0)}</td>
+        <td class="num" title="${m.pricing_status === 'priced' ? `${m.pricing_source}: ${m.pricing_model_id}` : `No matched pricing for ${m.pricing_model_id || m.model_id}`}">${fmtCost(m.estimated_cost)}</td>
       </tr>
     `).join('');
   } catch(e) {

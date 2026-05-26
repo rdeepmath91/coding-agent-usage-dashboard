@@ -5,8 +5,11 @@ Currently reads from ~/.local/share/opencode/opencode.db and serves a dark-theme
 """
 
 import datetime
+import json
 import os
 import sqlite3
+import time
+import urllib.request
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
@@ -14,6 +17,8 @@ from flask import Flask, jsonify, render_template, request
 app = Flask(__name__)
 
 DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
+OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+PRICING_CACHE = {"fetched_at": 0.0, "prices": {}}
 
 
 def get_db():
@@ -102,6 +107,88 @@ def parse_top_n(default: int = 8) -> int:
     return max(3, min(raw or default, len(QUALITATIVE_COLORS)))
 
 
+def openrouter_model_id(provider: str, model_id: str) -> str | None:
+    """Best-effort mapping from local provider/model IDs to OpenRouter model IDs."""
+    if not model_id:
+        return None
+
+    free = model_id.endswith("-free")
+    base = model_id.removesuffix("-free")
+
+    if "/" in base:
+        return base
+    if provider == "openai":
+        return f"openai/{base}"
+    if provider == "google":
+        return f"google/{base}"
+    if base.startswith("deepseek-"):
+        suffix = ":free" if free else ""
+        return f"deepseek/{base}{suffix}"
+    if base.startswith("kimi-"):
+        return f"moonshotai/{base}"
+    if base.startswith("qwen"):
+        return f"qwen/{base}"
+    if base.startswith("minimax-"):
+        suffix = ":free" if free else ""
+        return f"minimax/{base}{suffix}"
+    if base.startswith("ling-"):
+        return f"inclusionai/{base}"
+    return None
+
+
+def openrouter_prices() -> dict:
+    """Fetch public OpenRouter per-token pricing, cached for one hour."""
+    now = time.time()
+    if PRICING_CACHE["prices"] and now - PRICING_CACHE["fetched_at"] < 3600:
+        return PRICING_CACHE["prices"]
+
+    try:
+        with urllib.request.urlopen(OPENROUTER_MODELS_URL, timeout=8) as response:
+            payload = json.load(response)
+        prices = {m.get("id"): m.get("pricing", {}) for m in payload.get("data", []) if m.get("id")}
+        PRICING_CACHE.update({"fetched_at": now, "prices": prices})
+        return prices
+    except Exception:
+        return PRICING_CACHE["prices"]
+
+
+def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output: int, cache_read: int = 0, cache_write: int = 0) -> dict:
+    """Estimate USD cost from token counts using latest fetched OpenRouter pricing."""
+    router_id = openrouter_model_id(provider, model_id)
+    pricing = openrouter_prices().get(router_id or "", {})
+
+    def price(key: str) -> float:
+        try:
+            return float(pricing.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    if not pricing:
+        return {
+            "estimated_cost": None,
+            "pricing_status": "unpriced",
+            "pricing_source": None,
+            "pricing_model_id": router_id,
+        }
+
+    estimated = (
+        (tokens_input or 0) * price("prompt")
+        + (tokens_output or 0) * price("completion")
+        + (cache_read or 0) * price("input_cache_read")
+        + (cache_write or 0) * price("input_cache_write")
+    )
+    return {
+        "estimated_cost": estimated,
+        "pricing_status": "priced",
+        "pricing_source": "OpenRouter /api/v1/models",
+        "pricing_model_id": router_id,
+        "input_price": price("prompt"),
+        "output_price": price("completion"),
+        "cache_read_price": price("input_cache_read"),
+        "cache_write_price": price("input_cache_write"),
+    }
+
+
 # ── API Routes ──────────────────────────────────────────────────────────────
 
 
@@ -182,6 +269,10 @@ def api_models():
         import json
         info = normalize_model(json.dumps(raw))
         total = (row["tokens_input"] or 0) + (row["tokens_output"] or 0)
+        tokens_input = row["tokens_input"] or 0
+        tokens_output = row["tokens_output"] or 0
+        cache_read = row["cache_read"] or 0
+        cache_write = row["cache_write"] or 0
         models.append({
             "label": info["label"],
             "provider": info["provider"],
@@ -189,12 +280,13 @@ def api_models():
             "rank": rank + 1,
             "sessions": row["sessions"] or 0,
             "messages": row["messages"] or 0,
-            "tokens_input": row["tokens_input"] or 0,
-            "tokens_output": row["tokens_output"] or 0,
+            "tokens_input": tokens_input,
+            "tokens_output": tokens_output,
             "tokens_total": total,
-            "cache_read": row["cache_read"] or 0,
-            "cache_write": row["cache_write"] or 0,
+            "cache_read": cache_read,
+            "cache_write": cache_write,
             "color": QUALITATIVE_COLORS[rank] if rank < len(QUALITATIVE_COLORS) else "#64748B",
+            **estimate_cost(info["provider"], info["id"], tokens_input, tokens_output, cache_read, cache_write),
         })
     conn.close()
     return jsonify(models)
