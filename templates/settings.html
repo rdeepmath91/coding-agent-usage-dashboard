@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Settings — OpenCode Dashboard</title>
+<script src="/static/color-modes.js"></script>
+<style>
+  :root {
+    --bg-primary: #08090a;
+    --bg-secondary: #111315;
+    --bg-tertiary: #1a1d20;
+    --bg-card: #111315;
+    --border: #272b30;
+    --text-primary: #e8eaed;
+    --text-secondary: #9aa0a6;
+    --text-tertiary: #5f6368;
+    --accent: #2196F3;
+    --radius: 8px;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.5;
+    padding: 40px;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 24px; margin-bottom: 24px; }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .card h2 { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
+  .card .path {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: var(--bg-tertiary);
+    padding: 6px 10px;
+    border-radius: 4px;
+    color: var(--accent);
+  }
+  .card p { font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .back { margin-bottom: 24px; display: inline-block; color: var(--text-secondary); font-size: 14px; }
+</style>
+</head>
+<body>
+<a href="/" class="back">← Cost Dashboard</a>
+<h1>Settings</h1>
+
+<div class="card">
+  <h2>Database Location</h2>
+  <div class="path">~/.local/share/opencode/opencode.db</div>
+  <p style="margin-top:8px;">Read directly from your local OpenCode SQLite database. The dashboard uses a read-only connection and does not modify any data.</p>
+</div>
+
+<div class="card">
+  <h2>Environment Variable</h2>
+  <div class="path">OPENCODE_DB_PATH</div>
+  <p style="margin-top:8px;">Set this to override the database path if yours is stored elsewhere.</p>
+</div>
+
+<div class="card">
+  <h2>Source</h2>
+  <p>Built from local session data stored in <code style="font-family:var(--font-mono);color:var(--accent);">session</code> table — model, cost, tokens_input, tokens_output, tokens_cache_read, tokens_cache_write per session. Cost figures are what OpenCode recorded at session time and may differ from the hosted dashboard at opencode.ai which has server-side pricing.</p>
+</div>
+</body>
+</html>
