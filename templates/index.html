@@ -385,7 +385,7 @@
     <!-- Pill tabs -->
     <div class="pill-tabs" id="range-tabs">
       <button class="pill" data-days="7">7d</button>
-      <button class="pill active" data-days="31">30d</button>
+      <button class="pill active" data-days="30">30d</button>
       <button class="pill" data-days="90">90d</button>
       <button class="pill" data-days="0">All</button>
       <span class="custom-range">
@@ -499,7 +499,7 @@ function fmtTokens(n) {
 }
 
 // ── Range tabs ──────────────────────────────────────────────────────────────
-let currentDays = 31;
+let currentDays = 30;
 
 function rangeParam() {
   return currentDays === 0 ? 'all' : String(currentDays);
