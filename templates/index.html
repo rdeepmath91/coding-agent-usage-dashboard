@@ -8,28 +8,28 @@
 <script src="/static/color-modes.js"></script>
 <style>
   :root {
-    --bg-primary: #08090a;
-    --bg-secondary: #111315;
-    --bg-tertiary: #1a1d20;
-    --bg-card: #111315;
-    --border: #272b30;
-    --text-primary: #e8eaed;
-    --text-secondary: #9aa0a6;
-    --text-tertiary: #5f6368;
-    --accent: #2196F3;
-    --accent-hover: #64B5F6;
-    --green: #2E7D32;
-    --orange: #FF9800;
-    --red: #D32F2F;
-    --radius: 8px;
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+    --bg-primary: #201d1d;
+    --bg-secondary: #282424;
+    --bg-tertiary: #302c2c;
+    --bg-card: #242121;
+    --border: #464141;
+    --text-primary: #fdfcfc;
+    --text-secondary: #b8b3b3;
+    --text-tertiary: #7d7777;
+    --accent: #007aff;
+    --accent-hover: #3395ff;
+    --green: #30d158;
+    --orange: #ff9f0a;
+    --red: #ff3b30;
+    --radius: 4px;
+    --font-sans: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     background: var(--bg-primary);
     color: var(--text-primary);
     line-height: 1.5;
@@ -44,13 +44,16 @@
   }
 
   .sidebar {
-    width: 220px;
+    width: 224px;
     flex-shrink: 0;
     border-right: 1px solid var(--border);
-    padding: 24px 16px;
+    padding: 28px 16px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
   }
 
   .sidebar .logo {
@@ -91,14 +94,17 @@
 
   .main-area {
     flex: 1;
-    padding: 32px 40px;
-    max-width: 1200px;
+    padding: 56px clamp(32px, 5vw, 72px);
+    max-width: 1680px;
     overflow-y: auto;
   }
 
+  html { scroll-behavior: smooth; }
+  section { scroll-margin-top: 32px; }
+
   /* Header */
-  .page-header { margin-bottom: 24px; }
-  .page-header h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+  .page-header { margin-bottom: 28px; }
+  .page-header h1 { font-size: 38px; font-weight: 700; letter-spacing: -1px; line-height: 1.2; }
   .page-header .subtitle {
     font-family: var(--font-mono);
     font-size: 13px;
@@ -139,19 +145,20 @@
   /* Cards */
   .stat-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    grid-template-columns: repeat(5, minmax(180px, 1fr));
     gap: 16px;
-    margin-bottom: 28px;
+    margin-bottom: 32px;
   }
 
   .stat-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 20px;
+    padding: 18px 20px;
+    min-height: 132px;
   }
   .stat-card .label { font-size: 12px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-  .stat-card .value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+  .stat-card .value { font-size: clamp(24px, 2vw, 34px); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -1px; }
   .stat-card .sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-family: var(--font-mono); }
 
   /* Chart */
@@ -159,8 +166,8 @@
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 24px;
-    margin-bottom: 28px;
+    padding: 22px 24px 18px;
+    margin-bottom: 40px;
   }
   .chart-container h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
 
@@ -168,10 +175,12 @@
   .chart-legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 16px;
-    margin-top: 16px;
-    padding-top: 12px;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 14px;
     border-top: 1px solid var(--border);
+    max-height: 116px;
+    overflow: auto;
   }
   .legend-item {
     display: flex;
@@ -180,6 +189,11 @@
     font-size: 12px;
     color: var(--text-secondary);
     font-family: var(--font-mono);
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-secondary);
+    white-space: nowrap;
   }
   .legend-dot {
     width: 10px;
@@ -259,8 +273,8 @@
     flex-wrap: wrap;
   }
   .pill {
-    padding: 6px 16px;
-    border-radius: 20px;
+    padding: 8px 18px;
+    border-radius: var(--radius);
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     color: var(--text-secondary);
@@ -270,7 +284,7 @@
     font-family: var(--font-sans);
   }
   .pill:hover { border-color: var(--accent); color: var(--text-primary); }
-  .pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .pill.active { background: var(--accent); border-color: var(--accent); color: #fdfcfc; }
 
   /* Loading */
   .loading {
@@ -306,10 +320,15 @@
   ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 
   /* Responsive */
+  @media (max-width: 1280px) {
+    .stat-cards { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+  }
+
   @media (max-width: 800px) {
+    .app-layout { display: block; }
     .sidebar { display: none; }
     .main-area { padding: 24px 16px; }
-    .stat-cards { grid-template-columns: repeat(2, 1fr); }
+    .stat-cards { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -319,26 +338,18 @@
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="logo">opencode <span>dashboard</span></div>
-    <a href="/" class="nav-item active" id="nav-cost">
-      ☤ Cost
-    </a>
-    <a href="#" class="nav-item" onclick="return false" style="cursor:default;opacity:0.4;">
-      ◇ Models
-    </a>
-    <a href="#" class="nav-item" onclick="return false" style="cursor:default;opacity:0.4;">
-      ◆ Usage
-    </a>
-    <a href="#" class="nav-item" onclick="return false" style="cursor:default;opacity:0.4;">
-      ⚙ Settings
-    </a>
+    <a href="#cost" class="nav-item active" data-nav="cost">☤ Cost</a>
+    <a href="#models" class="nav-item" data-nav="models">◇ Models</a>
+    <a href="#usage" class="nav-item" data-nav="usage">◆ Usage</a>
+    <a href="/settings" class="nav-item">⚙ Settings</a>
   </aside>
 
   <!-- Main -->
   <main class="main-area">
-    <div class="page-header">
+    <section id="cost" class="page-header">
       <h1>Cost</h1>
       <div class="subtitle">Usage costs broken down by model.</div>
-    </div>
+    </section>
 
     <!-- Pill tabs -->
     <div class="pill-tabs" id="range-tabs">
@@ -378,14 +389,14 @@
     <!-- Chart -->
     <div class="chart-container">
       <h2>Daily Cost by Model</h2>
-      <div style="position:relative;height:300px;">
+      <div style="position:relative;height:360px;">
         <canvas id="cost-chart"></canvas>
       </div>
       <div class="chart-legend" id="chart-legend"></div>
     </div>
 
     <!-- Model breakdown table -->
-    <div class="table-section">
+    <section class="table-section" id="models">
       <h2>Model Breakdown</h2>
       <div class="subtitle">Usage costs broken down by model.</div>
       <table class="data-table">
@@ -403,10 +414,10 @@
           <tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
         </tbody>
       </table>
-    </div>
+    </section>
 
     <!-- Usage History -->
-    <div class="table-section" style="margin-top:40px;">
+    <section class="table-section" id="usage" style="margin-top:40px;">
       <h2>Usage History</h2>
       <div class="subtitle">Recent API usage and costs.</div>
       <table class="data-table">
@@ -422,7 +433,7 @@
           <tr><td colspan="4" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
         </tbody>
       </table>
-    </div>
+    </section>
 
     <div class="footer">
       ◇ <span id="db-path-display">~/.local/share/opencode/opencode.db</span>
@@ -639,6 +650,27 @@ async function loadHistory() {
     console.error('history', e);
   }
 }
+
+// ── Sidebar section navigation ──────────────────────────────────────────────
+document.querySelectorAll('.nav-item[data-nav]').forEach(link => {
+  link.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    link.classList.add('active');
+  });
+});
+
+const sectionObserver = new IntersectionObserver(entries => {
+  const visible = entries
+    .filter(e => e.isIntersecting)
+    .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+  if (!visible) return;
+  const id = visible.target.id;
+  document.querySelectorAll('.nav-item[data-nav]').forEach(n => {
+    n.classList.toggle('active', n.dataset.nav === id);
+  });
+}, { threshold: [0.2, 0.5, 0.8] });
+
+document.querySelectorAll('section[id]').forEach(s => sectionObserver.observe(s));
 
 // ── Init ────────────────────────────────────────────────────────────────────
 loadAll();

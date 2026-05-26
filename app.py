@@ -247,25 +247,46 @@ def api_daily():
             model_totals[mid] = model_totals.get(mid, 0) + daily_data[dt][mid]["cost"]
     all_models_ordered.sort(key=lambda m: model_totals.get(m, 0), reverse=True)
 
-    # Keep top-N cost models + any with zero cost if they have sessions
-    top_n = 12
-    top_models = [m for m in all_models_ordered[:top_n] if model_totals.get(m, 0) > 0]
-    # Add zero-cost models only if they actually have sessions on some day
-    for m in all_models_ordered:
-        if m not in top_models:
-            has_sessions = any(daily_data[dt].get(m, {}).get("sessions", 0) > 0 for dt in dates)
-            if has_sessions and len(top_models) < 16:
-                top_models.append(m)
+    # Keep chart readable: top paid models plus a single "Other" bucket.
+    top_n = 8
+    paid_models = [m for m in all_models_ordered if model_totals.get(m, 0) > 0]
+    top_models = paid_models[:top_n]
+    other_models = [m for m in all_models_ordered if m not in top_models]
 
-    return jsonify({
-        "dates": dates,
-        "models": [{
-            "id": mid,
-            "label": model_map[mid]["label"],
-            "color": model_map[mid]["color"],
-        } for mid in top_models],
-        "data": {dt: {mid: daily_data[dt].get(mid, {"cost": 0, "sessions": 0, "tokens_input": 0, "tokens_output": 0}) for mid in top_models} for dt in dates},
-    })
+    chart_data = {}
+    for dt in dates:
+        chart_data[dt] = {
+            mid: daily_data[dt].get(
+                mid,
+                {"cost": 0, "sessions": 0, "tokens_input": 0, "tokens_output": 0},
+            )
+            for mid in top_models
+        }
+        other = {"cost": 0, "sessions": 0, "tokens_input": 0, "tokens_output": 0}
+        for mid in other_models:
+            row = daily_data[dt].get(mid)
+            if not row:
+                continue
+            other["cost"] = round(other["cost"] + row["cost"], 4)
+            other["sessions"] += row["sessions"]
+            other["tokens_input"] += row["tokens_input"]
+            other["tokens_output"] += row["tokens_output"]
+        if other["cost"] > 0 or other["sessions"] > 0:
+            chart_data[dt]["other"] = other
+
+    chart_models = [
+        {"id": mid, "label": model_map[mid]["label"], "color": model_map[mid]["color"]}
+        for mid in top_models
+    ]
+    if any("other" in chart_data[dt] for dt in dates):
+        chart_models.append({"id": "other", "label": "Other", "color": "#646262"})
+        for dt in dates:
+            chart_data[dt].setdefault(
+                "other",
+                {"cost": 0, "sessions": 0, "tokens_input": 0, "tokens_output": 0},
+            )
+
+    return jsonify({"dates": dates, "models": chart_models, "data": chart_data})
 
 
 @app.route("/api/usage-history")
