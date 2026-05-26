@@ -232,7 +232,7 @@
   .data-table tr:hover td { background: var(--bg-tertiary); }
   .data-table .model-cell { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
   .data-table .num { text-align: right; font-family: var(--font-mono); }
-  .data-table .cost-cell { color: var(--accent); font-weight: 600; }
+  .data-table .token-cell { color: var(--accent); font-weight: 600; }
 
   .model-badge {
     display: inline-block;
@@ -369,7 +369,7 @@
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="logo">opencode <span>dashboard</span></div>
-    <a href="#cost" class="nav-item active" data-nav="cost">☤ Cost</a>
+    <a href="#cost" class="nav-item active" data-nav="cost">☤ Overview</a>
     <a href="#models" class="nav-item" data-nav="models">◇ Models</a>
     <a href="#usage" class="nav-item" data-nav="usage">◆ Usage</a>
     <a href="/settings" class="nav-item">⚙ Settings</a>
@@ -378,8 +378,8 @@
   <!-- Main -->
   <main class="main-area">
     <section id="cost" class="page-header">
-      <h1>Cost</h1>
-      <div class="subtitle">Usage costs broken down by model.</div>
+      <h1>Overview</h1>
+      <div class="subtitle">Sessions and tokens broken down by model.</div>
     </section>
 
     <!-- Pill tabs -->
@@ -397,13 +397,14 @@
     <!-- Overview cards -->
     <div class="stat-cards" id="overview-cards">
       <div class="stat-card">
-        <div class="label">Total Cost</div>
-        <div class="value" id="total-cost">—</div>
-        <div class="sub" id="cost-sub"></div>
-      </div>
-      <div class="stat-card">
         <div class="label">Sessions</div>
         <div class="value" id="total-sessions">—</div>
+        <div class="sub" id="sessions-sub"></div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Total Tokens</div>
+        <div class="value" id="total-tokens">—</div>
+        <div class="sub" id="tokens-sub"></div>
       </div>
       <div class="stat-card">
         <div class="label">Input Tokens</div>
@@ -415,17 +416,13 @@
         <div class="value" id="total-output">—</div>
         <div class="sub" id="output-sub"></div>
       </div>
-      <div class="stat-card">
-        <div class="label">Cache Read</div>
-        <div class="value" id="total-cache-read">—</div>
-      </div>
     </div>
 
     <!-- Chart -->
     <div class="chart-container">
-      <h2>Daily Cost by Model</h2>
+      <h2>Daily Tokens by Model</h2>
       <div style="position:relative;height:360px;">
-        <canvas id="cost-chart"></canvas>
+        <canvas id="usage-chart"></canvas>
       </div>
       <div class="chart-legend" id="chart-legend"></div>
     </div>
@@ -433,20 +430,19 @@
     <!-- Model breakdown table -->
     <section class="table-section" id="models">
       <h2>Model Breakdown</h2>
-      <div class="subtitle">Usage costs broken down by model.</div>
+      <div class="subtitle">Sessions and tokens broken down by model.</div>
       <table class="data-table">
         <thead>
           <tr>
             <th>Model</th>
             <th class="num">Sessions</th>
+            <th class="num">Total Tokens</th>
             <th class="num">Input</th>
             <th class="num">Output</th>
-            <th class="num">Cache Read</th>
-            <th class="num">Cost</th>
           </tr>
         </thead>
         <tbody id="model-table-body">
-          <tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
+          <tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
         </tbody>
       </table>
     </section>
@@ -454,18 +450,20 @@
     <!-- Usage History -->
     <section class="table-section" id="usage" style="margin-top:40px;">
       <h2>Usage History</h2>
-      <div class="subtitle">Recent API usage and costs.</div>
+      <div class="subtitle">Recent OpenCode sessions and token usage.</div>
       <table class="data-table">
         <thead>
           <tr>
             <th>Date</th>
             <th>Model</th>
             <th>Title</th>
-            <th class="num">Cost</th>
+            <th class="num">Tokens</th>
+            <th class="num">Input</th>
+            <th class="num">Output</th>
           </tr>
         </thead>
         <tbody id="history-table-body">
-          <tr><td colspan="4" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
+          <tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
         </tbody>
       </table>
     </section>
@@ -479,17 +477,9 @@
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-let costChart = null;
+let usageChart = null;
 const FORMATTER = new Intl.NumberFormat('en-US');
-const COST_FORMATTER = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 function fmtNum(n) { return FORMATTER.format(n); }
-function fmtCost(n) { return COST_FORMATTER.format(n); }
 
 function fmtTokens(n) {
   if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B';
@@ -538,15 +528,15 @@ async function loadOverview(days) {
     const r = await fetch(`/api/overview?days=${rangeParam()}`);
     const d = await r.json();
 
-    document.getElementById('total-cost').textContent = fmtCost(d.total_cost);
     document.getElementById('total-sessions').textContent = fmtNum(d.total_sessions);
+    document.getElementById('total-tokens').textContent = fmtTokens(d.total_tokens);
     document.getElementById('total-input').textContent = fmtTokens(d.total_input);
     document.getElementById('total-output').textContent = fmtTokens(d.total_output);
-    document.getElementById('total-cache-read').textContent = fmtTokens(d.total_cache_read);
 
-    document.getElementById('cost-sub').textContent = `avg $${(d.total_cost / Math.max(d.total_sessions, 1)).toFixed(2)}/session`;
-    document.getElementById('input-sub').textContent = `${(d.total_input / Math.max(d.total_sessions, 1) / 1000).toFixed(0)}K avg/session`;
-    document.getElementById('output-sub').textContent = `${(d.total_output / Math.max(d.total_sessions, 1) / 1000).toFixed(0)}K avg/session`;
+    document.getElementById('sessions-sub').textContent = `${d.first_session || '—'} → ${d.last_session || '—'}`;
+    document.getElementById('tokens-sub').textContent = `${fmtTokens(d.total_tokens / Math.max(d.total_sessions, 1))} avg/session`;
+    document.getElementById('input-sub').textContent = `${fmtTokens(d.total_input / Math.max(d.total_sessions, 1))} avg/session`;
+    document.getElementById('output-sub').textContent = `${fmtTokens(d.total_output / Math.max(d.total_sessions, 1))} avg/session`;
   } catch(e) {
     console.error('overview', e);
   }
@@ -559,7 +549,7 @@ async function loadModels(days) {
 
     const tbody = document.getElementById('model-table-body');
     if (!models.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">No data</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:40px;">No data</td></tr>';
       return;
     }
 
@@ -570,10 +560,9 @@ async function loadModels(days) {
           ${m.label}
         </td>
         <td class="num">${fmtNum(m.sessions)}</td>
+        <td class="num">${fmtTokens(m.tokens_total)}</td>
         <td class="num">${fmtTokens(m.tokens_input)}</td>
         <td class="num">${fmtTokens(m.tokens_output)}</td>
-        <td class="num">${fmtTokens(m.tokens_cache_read)}</td>
-        <td class="num cost-cell">${fmtCost(m.cost)}</td>
       </tr>
     `).join('');
   } catch(e) {
@@ -594,13 +583,13 @@ async function loadDaily(days) {
 }
 
 function renderChart(data) {
-  const ctx = document.getElementById('cost-chart').getContext('2d');
+  const ctx = document.getElementById('usage-chart').getContext('2d');
 
-  if (costChart) { costChart.destroy(); }
+  if (usageChart) { usageChart.destroy(); }
 
   const datasets = data.models.map(m => ({
     label: m.label,
-    data: data.dates.map(dt => (data.data[dt]?.[m.id]?.cost ?? 0)),
+    data: data.dates.map(dt => (data.data[dt]?.[m.id]?.tokens_total ?? 0)),
     backgroundColor: m.color,
     borderColor: m.color,
     borderWidth: 0,
@@ -610,7 +599,7 @@ function renderChart(data) {
     tension: 0,
   }));
 
-  costChart = new Chart(ctx, {
+  usageChart = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: data.dates.map((d, i) => i % 3 === 0 ? d : ''),
@@ -638,7 +627,7 @@ function renderChart(data) {
           ticks: {
             color: '#5f6368',
             font: { family: "'JetBrains Mono', monospace", size: 11 },
-            callback: v => '$' + v,
+            callback: v => fmtTokens(v),
           },
           border: { display: false },
         },
@@ -655,13 +644,12 @@ function renderChart(data) {
           cornerRadius: 6,
           callbacks: {
             label: ctx => {
-              const total = ctx.dataset.data.reduce((sum, v) => sum + v, 0);
               if (ctx.raw <= 0) return null;
-              return ` ${ctx.dataset.label}: $${ctx.raw.toFixed(2)}`;
+              return ` ${ctx.dataset.label}: ${fmtTokens(ctx.raw)} tokens`;
             },
             afterBody: ctxs => {
               const total = ctxs.reduce((sum, c) => sum + (c.raw || 0), 0);
-              return `\n Total: $${total.toFixed(2)}`;
+              return `\n Total: ${fmtTokens(total)} tokens`;
             },
           },
         },
@@ -687,7 +675,7 @@ async function loadHistory() {
 
     const tbody = document.getElementById('history-table-body');
     if (!sessions.length) {
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-tertiary);padding:40px;">No sessions</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">No sessions</td></tr>';
       return;
     }
 
@@ -695,8 +683,10 @@ async function loadHistory() {
       <tr>
         <td style="font-family:var(--font-mono);font-size:12px;">${s.created}</td>
         <td class="model-cell" style="font-size:12px;">${s.model}</td>
-        <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${s.title.replace(/"/g,'&quot;')}">${s.title || '(untitled)'}</td>
-        <td class="num cost-cell">${s.cost > 0 ? fmtCost(s.cost) : '—'}</td>
+        <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(s.title || '').replace(/"/g,'&quot;')}">${s.title || '(untitled)'}</td>
+        <td class="num">${fmtTokens(s.tokens_total)}</td>
+        <td class="num">${fmtTokens(s.tokens_input)}</td>
+        <td class="num">${fmtTokens(s.tokens_output)}</td>
       </tr>
     `).join('');
   } catch(e) {

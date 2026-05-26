@@ -54,7 +54,7 @@
 </style>
 </head>
 <body>
-<a href="/" class="back">← Cost Dashboard</a>
+<a href="/" class="back">← Usage Dashboard</a>
 <h1>Settings</h1>
 
 <div class="card">
@@ -71,7 +71,7 @@
 
 <div class="card">
   <h2>Source</h2>
-  <p>Built from local session data stored in <code style="font-family:var(--font-mono);color:var(--accent);">session</code> table — model, cost, tokens_input, tokens_output, tokens_cache_read, tokens_cache_write per session. Cost figures are what OpenCode recorded at session time and may differ from the hosted dashboard at opencode.ai which has server-side pricing.</p>
+  <p>Built from local session data stored in the <code style="font-family:var(--font-mono);color:var(--accent);">session</code> table — model, session timestamps, tokens_input, and tokens_output per session. Cost and cached-token fields are intentionally hidden for now.</p>
 </div>
 </body>
 </html>

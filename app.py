@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OpenCode Dashboard — local usage & cost viewer.
+OpenCode Dashboard — local session and token usage viewer.
 Reads from ~/.local/share/opencode/opencode.db and serves a dark-themed web UI.
 """
 
@@ -123,11 +123,9 @@ def api_overview():
     cur = conn.execute(f"""
         SELECT
             COUNT(*) as total_sessions,
-            COALESCE(SUM(cost), 0) as total_cost,
             COALESCE(SUM(tokens_input), 0) as total_input,
             COALESCE(SUM(tokens_output), 0) as total_output,
-            COALESCE(SUM(tokens_cache_read), 0) as total_cache_read,
-            COALESCE(SUM(tokens_cache_write), 0) as total_cache_write,
+            COALESCE(SUM(tokens_input), 0) + COALESCE(SUM(tokens_output), 0) as total_tokens,
             MIN(date(time_created / 1000, 'unixepoch', 'localtime')) as first_session,
             MAX(date(time_created / 1000, 'unixepoch', 'localtime')) as last_session
         FROM session
@@ -141,7 +139,7 @@ def api_overview():
 
 @app.route("/api/models")
 def api_models():
-    """Cost and token totals per model."""
+    """Session and token totals per model."""
     days = parse_days(default=30)
     where, params = since_clause(days)
 
@@ -150,19 +148,16 @@ def api_models():
         SELECT
             model,
             COUNT(*) as sessions,
-            COALESCE(SUM(cost), 0) as cost,
             COALESCE(SUM(tokens_input), 0) as tokens_input,
-            COALESCE(SUM(tokens_output), 0) as tokens_output,
-            COALESCE(SUM(tokens_cache_read), 0) as tokens_cache_read,
-            COALESCE(SUM(tokens_cache_write), 0) as tokens_cache_write
+            COALESCE(SUM(tokens_output), 0) as tokens_output
         FROM session
         {where + " AND" if where else "WHERE"} model IS NOT NULL AND model != ''
         GROUP BY model
-        ORDER BY cost DESC
+        ORDER BY sessions DESC
     """, params)
 
     # Aggregate by base model ID (variant-grouped)
-    aggregated = {}  # model_id -> {label, provider, color, cost, sessions, tokens_*}
+    aggregated = {}  # model_id -> {label, provider, color, sessions, tokens_*}
     for row in cur.fetchall():
         info = normalize_model(row["model"])
         mid = info["id"]
@@ -171,30 +166,26 @@ def api_models():
                 "label": info["label"],
                 "provider": info["provider"],
                 "model_id": mid,
-                "cost": 0,
                 "sessions": 0,
                 "tokens_input": 0,
                 "tokens_output": 0,
-                "tokens_cache_read": 0,
-                "tokens_cache_write": 0,
+                "tokens_total": 0,
                 "color": get_color(mid),
             }
         agg = aggregated[mid]
-        agg["cost"] = round(agg["cost"] + row["cost"], 4)
         agg["sessions"] += row["sessions"]
         agg["tokens_input"] += row["tokens_input"]
         agg["tokens_output"] += row["tokens_output"]
-        agg["tokens_cache_read"] += row["tokens_cache_read"]
-        agg["tokens_cache_write"] += row["tokens_cache_write"]
+        agg["tokens_total"] += row["tokens_input"] + row["tokens_output"]
 
-    models = sorted(aggregated.values(), key=lambda m: m["cost"], reverse=True)
+    models = sorted(aggregated.values(), key=lambda m: m["tokens_total"], reverse=True)
     conn.close()
     return jsonify(models)
 
 
 @app.route("/api/daily")
 def api_daily():
-    """Daily cost breakdown by model (for stacked bar chart)."""
+    """Daily token breakdown by model (for stacked bar chart)."""
     days = parse_days(default=31)
     where, params = since_clause(days)
 
@@ -205,16 +196,15 @@ def api_daily():
             date(time_created / 1000, 'unixepoch', 'localtime') as dt,
             model,
             COUNT(*) as sessions,
-            COALESCE(SUM(cost), 0) as daily_cost,
             COALESCE(SUM(tokens_input), 0) as tokens_input,
             COALESCE(SUM(tokens_output), 0) as tokens_output
         FROM session
         {where + " AND" if where else "WHERE"} model IS NOT NULL AND model != ''
         GROUP BY dt, model
-        ORDER BY dt, daily_cost DESC
+        ORDER BY dt, sessions DESC
     """, params)
 
-    # Build: { date -> [{model, cost, color}, ...] }
+    # Build: { date -> [{model, tokens, color}, ...] }
     daily_data = {}
     model_map = {}  # model_id -> {label, color}
     all_models_ordered = []
@@ -222,7 +212,6 @@ def api_daily():
     for row in cur.fetchall():
         info = normalize_model(row["model"])
         dt = row["dt"]
-        cost = round(row["daily_cost"], 4)
         model_id = info["id"]
         label = info["label"]
 
@@ -235,43 +224,43 @@ def api_daily():
         # Accumulate — multiple variants of the same model on one day
         existing = daily_data[dt].get(model_id)
         if existing:
-            existing["cost"] = round(existing["cost"] + cost, 4)
             existing["sessions"] += row["sessions"]
             existing["tokens_input"] += row["tokens_input"]
             existing["tokens_output"] += row["tokens_output"]
+            existing["tokens_total"] += row["tokens_input"] + row["tokens_output"]
         else:
             daily_data[dt][model_id] = {
-                "cost": cost,
                 "sessions": row["sessions"],
                 "tokens_input": row["tokens_input"],
                 "tokens_output": row["tokens_output"],
+                "tokens_total": row["tokens_input"] + row["tokens_output"],
             }
 
-    # Fill in zero-cost days for each model so Chart.js stacked bars work
+    # Fill in zero-token days for each model so Chart.js stacked bars work
     dates = sorted(daily_data.keys())
     for dt in dates:
         for mid in all_models_ordered:
             if mid not in daily_data[dt]:
                 daily_data[dt][mid] = {
-                    "cost": 0,
                     "sessions": 0,
                     "tokens_input": 0,
                     "tokens_output": 0,
+                    "tokens_total": 0,
                 }
 
     conn.close()
 
-    # Sort models by total cost descending
+    # Sort models by total tokens descending.
     model_totals = {}
     for dt in dates:
         for mid in all_models_ordered:
-            model_totals[mid] = model_totals.get(mid, 0) + daily_data[dt][mid]["cost"]
+            model_totals[mid] = model_totals.get(mid, 0) + daily_data[dt][mid]["tokens_total"]
     all_models_ordered.sort(key=lambda m: model_totals.get(m, 0), reverse=True)
 
-    # Keep chart readable: top paid models plus a single "Other" bucket.
+    # Keep chart readable: top token-heavy models plus a single "Other" bucket.
     top_n = 8
-    paid_models = [m for m in all_models_ordered if model_totals.get(m, 0) > 0]
-    top_models = paid_models[:top_n]
+    active_models = [m for m in all_models_ordered if model_totals.get(m, 0) > 0]
+    top_models = active_models[:top_n]
     other_models = [m for m in all_models_ordered if m not in top_models]
 
     chart_data = {}
@@ -279,20 +268,20 @@ def api_daily():
         chart_data[dt] = {
             mid: daily_data[dt].get(
                 mid,
-                {"cost": 0, "sessions": 0, "tokens_input": 0, "tokens_output": 0},
+                {"sessions": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0},
             )
             for mid in top_models
         }
-        other = {"cost": 0, "sessions": 0, "tokens_input": 0, "tokens_output": 0}
+        other = {"sessions": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0}
         for mid in other_models:
             row = daily_data[dt].get(mid)
             if not row:
                 continue
-            other["cost"] = round(other["cost"] + row["cost"], 4)
             other["sessions"] += row["sessions"]
             other["tokens_input"] += row["tokens_input"]
             other["tokens_output"] += row["tokens_output"]
-        if other["cost"] > 0 or other["sessions"] > 0:
+            other["tokens_total"] += row["tokens_total"]
+        if other["tokens_total"] > 0 or other["sessions"] > 0:
             chart_data[dt]["other"] = other
 
     chart_models = [
@@ -304,7 +293,7 @@ def api_daily():
         for dt in dates:
             chart_data[dt].setdefault(
                 "other",
-                {"cost": 0, "sessions": 0, "tokens_input": 0, "tokens_output": 0},
+                {"sessions": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0},
             )
 
     return jsonify({"dates": dates, "models": chart_models, "data": chart_data})
@@ -325,7 +314,6 @@ def api_usage_history():
             title,
             directory,
             model,
-            cost,
             tokens_input,
             tokens_output,
             summary_files,
@@ -347,9 +335,9 @@ def api_usage_history():
             "updated": row["updated"],
             "directory": row["directory"],
             "model": info["label"],
-            "cost": round(row["cost"] or 0, 4),
             "tokens_input": row["tokens_input"] or 0,
             "tokens_output": row["tokens_output"] or 0,
+            "tokens_total": (row["tokens_input"] or 0) + (row["tokens_output"] or 0),
             "files_changed": row["summary_files"],
             "additions": row["summary_additions"],
             "deletions": row["summary_deletions"],

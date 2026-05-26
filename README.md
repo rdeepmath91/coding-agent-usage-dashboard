@@ -1,6 +1,6 @@
 # OpenCode Dashboard
 
-Local usage and cost viewer for OpenCode AI agent. Reads directly from your
+Local session and token usage viewer for OpenCode AI agent. Reads directly from your
 local OpenCode SQLite database and renders a dark-themed web dashboard.
 
 ## Setup
@@ -18,13 +18,12 @@ The dashboard auto-detects your OpenCode database at
 
 ## Overview
 
-- **Cost chart** — daily stacked bar chart by model, 7/30/90/all ranges
-- **Model breakdown** — each model's session count, input/output tokens, cache
-  hits, and total cost
-- **Usage history** — recent session feed with model, title, and cost
+- **Daily token chart** — daily stacked bar chart by model, with 7/30/90/all/custom ranges
+- **Model breakdown** — each model's session count, total tokens, input tokens, and output tokens
+- **Usage history** — recent session feed with model, title, and token totals
 - **Dark theme** — matches OpenCode's aesthetic
 
 ## Data Source
 
 Pulls from the `session` table in OpenCode's local SQLite database. All reads
-are read-only. Costs are what OpenCode recorded at session time.
+are read-only. Cost and cached-token fields are intentionally hidden for now.
