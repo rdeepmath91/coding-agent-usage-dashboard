@@ -3,24 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OpenCode Dashboard</title>
+<title>Coding Agent Usage Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="/static/color-modes.js"></script>
 <style>
   :root {
-    --bg-primary: #201d1d;
-    --bg-secondary: #282424;
-    --bg-tertiary: #302c2c;
-    --bg-card: #242121;
-    --border: #464141;
-    --text-primary: #fdfcfc;
-    --text-secondary: #b8b3b3;
-    --text-tertiary: #7d7777;
-    --accent: #007aff;
-    --accent-hover: #3395ff;
-    --green: #30d158;
-    --orange: #ff9f0a;
-    --red: #ff3b30;
+    --bg-primary: #08090a;
+    --bg-secondary: #111315;
+    --bg-tertiary: #1a1d20;
+    --bg-card: #0d0f11;
+    --border: #272b30;
+    --text-primary: #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --text-tertiary: #71717a;
+    --accent: #38bdf8;
+    --accent-hover: #7dd3fc;
+    --green: #34d399;
+    --orange: #f59e0b;
+    --red: #f87171;
     --radius: 4px;
     --font-sans: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -145,7 +145,7 @@
   /* Cards */
   .stat-cards {
     display: grid;
-    grid-template-columns: repeat(5, minmax(180px, 1fr));
+    grid-template-columns: repeat(6, minmax(150px, 1fr));
     gap: 16px;
     margin-bottom: 32px;
   }
@@ -169,17 +169,40 @@
     padding: 22px 24px 18px;
     margin-bottom: 40px;
   }
-  .chart-container h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+  .chart-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .chart-container h2 { font-size: 16px; font-weight: 600; margin-bottom: 3px; }
+  .chart-note { color: var(--text-tertiary); font-size: 12px; }
+  .chart-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .chart-controls select { min-width: 92px; padding: 6px 28px 6px 10px; font-size: 12px; }
+  .chart-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 20px;
+    align-items: stretch;
+  }
+  .chart-plot { position: relative; height: 360px; min-width: 0; }
 
   /* Legend */
   .chart-legend {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 14px;
-    padding-top: 14px;
-    border-top: 1px solid var(--border);
-    max-height: 116px;
+    flex-direction: column;
+    gap: 7px;
+    padding-left: 18px;
+    border-left: 1px solid var(--border);
+    max-height: 360px;
     overflow: auto;
   }
   .legend-item {
@@ -194,6 +217,26 @@
     border-radius: var(--radius);
     background: var(--bg-secondary);
     white-space: nowrap;
+    cursor: pointer;
+    transition: opacity 0.12s, border-color 0.12s, background 0.12s;
+  }
+  .legend-item:hover { border-color: var(--accent); background: var(--bg-tertiary); }
+  .legend-item.muted { opacity: 0.35; }
+  .legend-item.disabled { opacity: 0.42; text-decoration: line-through; }
+  .legend-name { overflow: hidden; text-overflow: ellipsis; }
+
+  @media (max-width: 1040px) {
+    .chart-layout { display: block; }
+    .chart-legend {
+      flex-direction: row;
+      flex-wrap: wrap;
+      margin-top: 14px;
+      padding-left: 0;
+      padding-top: 14px;
+      border-left: 0;
+      border-top: 1px solid var(--border);
+      max-height: 116px;
+    }
   }
   .legend-dot {
     width: 10px;
@@ -201,6 +244,9 @@
     border-radius: 2px;
     flex-shrink: 0;
   }
+  .legend-item.other { color: var(--text-tertiary); }
+  .legend-item.other .legend-dot { opacity: 0.72; }
+  .legend-share { color: var(--text-tertiary); margin-left: 2px; }
 
   /* Table */
   .table-section { margin-top: 12px; }
@@ -368,7 +414,7 @@
 <div class="app-layout">
   <!-- Sidebar -->
   <aside class="sidebar">
-    <div class="logo">opencode <span>dashboard</span></div>
+    <div class="logo">coding agent <span>usage</span></div>
     <a href="#cost" class="nav-item active" data-nav="cost">☤ Overview</a>
     <a href="#models" class="nav-item" data-nav="models">◇ Models</a>
     <a href="#usage" class="nav-item" data-nav="usage">◆ Usage</a>
@@ -379,7 +425,7 @@
   <main class="main-area">
     <section id="cost" class="page-header">
       <h1>Overview</h1>
-      <div class="subtitle">Sessions and tokens broken down by model.</div>
+      <div class="subtitle">Sessions and tokens broken down by model. Cache is shown as secondary context.</div>
     </section>
 
     <!-- Pill tabs -->
@@ -416,21 +462,46 @@
         <div class="value" id="total-output">—</div>
         <div class="sub" id="output-sub"></div>
       </div>
+      <div class="stat-card">
+        <div class="label">Cache Read</div>
+        <div class="value" id="cache-read">—</div>
+        <div class="sub">secondary · reused context</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Cache Write</div>
+        <div class="value" id="cache-write">—</div>
+        <div class="sub">secondary · cache created</div>
+      </div>
     </div>
 
     <!-- Chart -->
     <div class="chart-container">
-      <h2>Daily Tokens by Model</h2>
-      <div style="position:relative;height:360px;">
-        <canvas id="usage-chart"></canvas>
+      <div class="chart-header">
+        <div>
+          <h2>Daily Tokens by Model</h2>
+          <div class="chart-note" id="chart-note">Position-based categorical colors · top models by token volume · long tail grouped as Other</div>
+        </div>
+        <label class="chart-controls">
+          Show
+          <select id="top-n-select" aria-label="Number of models shown in chart">
+            <option value="5">Top 5</option>
+            <option value="6">Top 6</option>
+            <option value="8" selected>Top 8</option>
+          </select>
+        </label>
       </div>
-      <div class="chart-legend" id="chart-legend"></div>
+      <div class="chart-layout">
+        <div class="chart-plot">
+          <canvas id="usage-chart"></canvas>
+        </div>
+        <div class="chart-legend" id="chart-legend"></div>
+      </div>
     </div>
 
     <!-- Model breakdown table -->
     <section class="table-section" id="models">
       <h2>Model Breakdown</h2>
-      <div class="subtitle">Sessions and tokens broken down by model.</div>
+      <div class="subtitle">Sessions and tokens broken down by model. Cache is shown as secondary context.</div>
       <table class="data-table">
         <thead>
           <tr>
@@ -439,10 +510,11 @@
             <th class="num">Total Tokens</th>
             <th class="num">Input</th>
             <th class="num">Output</th>
+            <th class="num">Cache Read</th>
           </tr>
         </thead>
         <tbody id="model-table-body">
-          <tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
+          <tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
         </tbody>
       </table>
     </section>
@@ -450,7 +522,7 @@
     <!-- Usage History -->
     <section class="table-section" id="usage" style="margin-top:40px;">
       <h2>Usage History</h2>
-      <div class="subtitle">Recent OpenCode sessions and token usage.</div>
+      <div class="subtitle">Recent coding-agent sessions and token usage. OpenCode is the active source.</div>
       <table class="data-table">
         <thead>
           <tr>
@@ -478,6 +550,8 @@
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 let usageChart = null;
+let currentTopN = 8;
+const hiddenChartModels = new Set();
 const FORMATTER = new Intl.NumberFormat('en-US');
 function fmtNum(n) { return FORMATTER.format(n); }
 
@@ -518,6 +592,12 @@ document.getElementById('custom-days').addEventListener('keydown', (event) => {
   if (event.key === 'Enter') document.getElementById('apply-custom-days').click();
 });
 
+document.getElementById('top-n-select').addEventListener('change', (event) => {
+  currentTopN = parseInt(event.target.value || '8');
+  hiddenChartModels.clear();
+  loadDaily(currentDays);
+});
+
 // ── Load everything ─────────────────────────────────────────────────────────
 async function loadAll() {
   await Promise.all([loadOverview(currentDays), loadModels(currentDays), loadDaily(currentDays), loadHistory()]);
@@ -532,9 +612,11 @@ async function loadOverview(days) {
     document.getElementById('total-tokens').textContent = fmtTokens(d.total_tokens);
     document.getElementById('total-input').textContent = fmtTokens(d.total_input);
     document.getElementById('total-output').textContent = fmtTokens(d.total_output);
+    document.getElementById('cache-read').textContent = fmtTokens(d.cache_read || 0);
+    document.getElementById('cache-write').textContent = fmtTokens(d.cache_write || 0);
 
     document.getElementById('sessions-sub').textContent = `${d.first_session || '—'} → ${d.last_session || '—'}`;
-    document.getElementById('tokens-sub').textContent = `${fmtTokens(d.total_tokens / Math.max(d.total_sessions, 1))} avg/session`;
+    document.getElementById('tokens-sub').textContent = `${fmtTokens(d.total_tokens / Math.max(d.total_sessions, 1))} avg/session · input+output`;
     document.getElementById('input-sub').textContent = `${fmtTokens(d.total_input / Math.max(d.total_sessions, 1))} avg/session`;
     document.getElementById('output-sub').textContent = `${fmtTokens(d.total_output / Math.max(d.total_sessions, 1))} avg/session`;
   } catch(e) {
@@ -549,7 +631,7 @@ async function loadModels(days) {
 
     const tbody = document.getElementById('model-table-body');
     if (!models.length) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:40px;">No data</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">No data</td></tr>';
       return;
     }
 
@@ -557,12 +639,13 @@ async function loadModels(days) {
       <tr>
         <td class="model-cell">
           <span class="legend-dot" style="background:${m.color};display:inline-block;vertical-align:middle;margin-right:6px;"></span>
-          ${m.label}
+          ${m.rank}. ${m.label}
         </td>
         <td class="num">${fmtNum(m.sessions)}</td>
         <td class="num">${fmtTokens(m.tokens_total)}</td>
         <td class="num">${fmtTokens(m.tokens_input)}</td>
         <td class="num">${fmtTokens(m.tokens_output)}</td>
+        <td class="num" title="Cache write: ${fmtTokens(m.cache_write || 0)}">${fmtTokens(m.cache_read || 0)}</td>
       </tr>
     `).join('');
   } catch(e) {
@@ -572,11 +655,12 @@ async function loadModels(days) {
 
 async function loadDaily(days) {
   try {
-    const r = await fetch(`/api/daily?days=${rangeParam()}`);
+    const r = await fetch(`/api/daily?days=${rangeParam()}&top_n=${currentTopN}`);
     const data = await r.json();
 
     renderChart(data);
     renderLegend(data.models);
+    document.getElementById('chart-note').textContent = `Position-based colors · top ${data.top_n} models by token volume · ${data.other_count || 0} long-tail models grouped as Other`;
   } catch(e) {
     console.error('daily', e);
   }
@@ -589,14 +673,16 @@ function renderChart(data) {
 
   const datasets = data.models.map(m => ({
     label: m.label,
+    modelId: m.id,
     data: data.dates.map(dt => (data.data[dt]?.[m.id]?.tokens_total ?? 0)),
     backgroundColor: m.color,
     borderColor: m.color,
-    borderWidth: 0,
+    borderWidth: m.id === 'other' ? 1 : 0,
     borderRadius: 0,
     hoverBackgroundColor: m.color,
     pointRadius: 0,
     tension: 0,
+    hidden: hiddenChartModels.has(m.id),
   }));
 
   usageChart = new Chart(ctx, {
@@ -658,14 +744,44 @@ function renderChart(data) {
   });
 }
 
+function setLegendHover(modelId) {
+  if (!usageChart) return;
+  usageChart.data.datasets.forEach(ds => {
+    const active = !modelId || ds.modelId === modelId;
+    ds.backgroundColor = active ? ds.borderColor : `${ds.borderColor}55`;
+  });
+  usageChart.update('none');
+  document.querySelectorAll('.legend-item').forEach(item => {
+    item.classList.toggle('muted', Boolean(modelId) && item.dataset.modelId !== modelId);
+  });
+}
+
+function toggleChartModel(modelId) {
+  if (!usageChart) return;
+  const index = usageChart.data.datasets.findIndex(ds => ds.modelId === modelId);
+  if (index < 0) return;
+  const visible = usageChart.isDatasetVisible(index);
+  usageChart.setDatasetVisibility(index, !visible);
+  if (visible) hiddenChartModels.add(modelId); else hiddenChartModels.delete(modelId);
+  usageChart.update();
+  document.querySelector(`.legend-item[data-model-id="${CSS.escape(modelId)}"]`)?.classList.toggle('disabled', visible);
+}
+
 function renderLegend(models) {
   const el = document.getElementById('chart-legend');
+  const visibleTotal = models.reduce((sum, m) => sum + (m.tokens_total || 0), 0) || 1;
   el.innerHTML = models.map(m => `
-    <div class="legend-item">
+    <div class="legend-item ${m.id === 'other' ? 'other' : ''} ${hiddenChartModels.has(m.id) ? 'disabled' : ''}" data-model-id="${m.id}" title="Click to hide/show. Hover to highlight.">
       <span class="legend-dot" style="background:${m.color};"></span>
-      ${m.label}
+      <span class="legend-name">${m.rank ? `${m.rank}. ` : ''}${m.label}</span>
+      <span class="legend-share">${Math.round(((m.tokens_total || 0) / visibleTotal) * 100)}%</span>
     </div>
   `).join('');
+  el.querySelectorAll('.legend-item').forEach(item => {
+    item.addEventListener('mouseenter', () => setLegendHover(item.dataset.modelId));
+    item.addEventListener('mouseleave', () => setLegendHover(null));
+    item.addEventListener('click', () => toggleChartModel(item.dataset.modelId));
+  });
 }
 
 async function loadHistory() {

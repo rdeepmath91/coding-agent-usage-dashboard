@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Settings — OpenCode Dashboard</title>
+<title>Settings — Coding Agent Usage Dashboard</title>
 <script src="/static/color-modes.js"></script>
 <style>
   :root {
@@ -60,18 +60,18 @@
 <div class="card">
   <h2>Database Location</h2>
   <div class="path">~/.local/share/opencode/opencode.db</div>
-  <p style="margin-top:8px;">Read directly from your local OpenCode SQLite database. The dashboard uses a read-only connection and does not modify any data.</p>
+  <p style="margin-top:8px;">Read directly from local coding-agent usage sources. OpenCode is the active source today. The dashboard uses read-only connections and does not modify source data.</p>
 </div>
 
 <div class="card">
   <h2>Environment Variable</h2>
   <div class="path">OPENCODE_DB_PATH</div>
-  <p style="margin-top:8px;">Set this to override the database path if yours is stored elsewhere.</p>
+  <p style="margin-top:8px;">Set this to override the OpenCode database path if yours is stored elsewhere.</p>
 </div>
 
 <div class="card">
   <h2>Source</h2>
-  <p>Built from local session data stored in the <code style="font-family:var(--font-mono);color:var(--accent);">session</code> table — model, session timestamps, tokens_input, and tokens_output per session. Cost and cached-token fields are intentionally hidden for now.</p>
+  <p>Built from normalized local session data — model, session timestamps, input tokens, and output tokens per session/message. Cost is intentionally hidden for now. Cached tokens are shown only as secondary context, separate from input/output totals.</p>
 </div>
 </body>
 </html>

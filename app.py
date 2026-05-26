@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-OpenCode Dashboard — local session and token usage viewer.
-Reads from ~/.local/share/opencode/opencode.db and serves a dark-themed web UI.
+Coding Agent Usage Dashboard — local session and token usage viewer.
+Currently reads from ~/.local/share/opencode/opencode.db and serves a dark-themed web UI.
 """
 
 import datetime
@@ -78,37 +78,28 @@ def normalize_model(raw: str) -> dict:
     return {"id": model_id, "provider": provider, "label": label, "variant": variant}
 
 
-def get_color(model_id: str) -> str:
-    """Consistent color per model for stacked charts."""
-    palette = {
-        "deepseek-v4-flash": "#5B8C5A",
-        "deepseek-v4-flash-free": "#8BC34A",
-        "deepseek-v4-pro": "#7B5EA7",
-        "kimi-k2.5": "#A5D6A7",
-        "kimi-k2.6": "#2E7D32",
-        "minimax-m2.7": "#2196F3",
-        "qwen3.6-plus": "#795548",
-        "qwen3.6-plus-free": "#A1887F",
-        "gpt-5.5": "#FF9800",
-        "gpt-5.5-fast": "#FFB74D",
-        "gemini-2.5-flash": "#00BCD4",
-        "gemini-2.5-pro": "#0097A7",
-        "anthropic/claude-sonnet-4": "#D32F2F",
-        "gemma": "#607D8B",
-    }
-    # Exact match first
-    if model_id in palette:
-        return palette[model_id]
-    # Prefix match for gemini variants
-    if model_id.startswith("gemini-"):
-        base = "gemini-2.5-flash"
-        h = hash(model_id)
-        return "#" + format(h & 0xFFFFFF, "06x")
-    if model_id.startswith("antigravity-"):
-        h = hash(model_id)
-        return "#" + format(h & 0xFFFFFF, "06x")
-    # Hash for unknowns
-    return "#" + format(hash(model_id) & 0xFFFFFF, "06x")
+QUALITATIVE_COLORS = [
+    # Dark-background-safe categorical set. These are categories, not a gradient.
+    # Keep this short: beyond ~8 hues, stacked bars become hard to compare.
+    "#F59E0B",  # amber
+    "#22C55E",  # green
+    "#0EA5E9",  # sky
+    "#14B8A6",  # teal
+    "#EC4899",  # pink
+    "#F97316",  # orange
+    "#8B5CF6",  # violet
+    "#EAB308",  # yellow
+]
+
+def chart_color(rank: int, model_id: str, provider: str) -> str:
+    """Use rank-first colors so the chart adapts when model mix changes."""
+    return QUALITATIVE_COLORS[rank % len(QUALITATIVE_COLORS)]
+
+
+def parse_top_n(default: int = 8) -> int:
+    """Top N visible chart models; remaining models are folded into Other."""
+    raw = request.args.get("top_n", default, type=int)
+    return max(3, min(raw or default, len(QUALITATIVE_COLORS)))
 
 
 # ── API Routes ──────────────────────────────────────────────────────────────
@@ -119,18 +110,39 @@ def api_overview():
     """Aggregate totals for a selected range; days=0/all means all time."""
     days = parse_days(default=None)
     where, params = since_clause(days)
+    msg_where = where.replace("time_created", "m.time_created")
     conn = get_db()
     cur = conn.execute(f"""
+        WITH session_stats AS (
+            SELECT
+                COUNT(*) as total_sessions,
+                MIN(date(time_created / 1000, 'unixepoch', 'localtime')) as first_session,
+                MAX(date(time_created / 1000, 'unixepoch', 'localtime')) as last_session
+            FROM session
+            {where}
+        ), message_stats AS (
+            SELECT
+                COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0) as total_input,
+                COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as total_output,
+                COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0) as cache_read,
+                COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0) as cache_write
+            FROM message m
+            {msg_where + " AND" if msg_where else "WHERE"}
+              json_valid(m.data)
+              AND json_extract(m.data, '$.role') = 'assistant'
+              AND json_extract(m.data, '$.modelID') IS NOT NULL
+        )
         SELECT
-            COUNT(*) as total_sessions,
-            COALESCE(SUM(tokens_input), 0) as total_input,
-            COALESCE(SUM(tokens_output), 0) as total_output,
-            COALESCE(SUM(tokens_input), 0) + COALESCE(SUM(tokens_output), 0) as total_tokens,
-            MIN(date(time_created / 1000, 'unixepoch', 'localtime')) as first_session,
-            MAX(date(time_created / 1000, 'unixepoch', 'localtime')) as last_session
-        FROM session
-        {where}
-    """, params)
+            session_stats.total_sessions,
+            message_stats.total_input,
+            message_stats.total_output,
+            message_stats.total_input + message_stats.total_output as total_tokens,
+            message_stats.cache_read,
+            message_stats.cache_write,
+            session_stats.first_session,
+            session_stats.last_session
+        FROM session_stats CROSS JOIN message_stats
+    """, params + params)
     row = dict(cur.fetchone())
     row["days"] = days
     conn.close()
@@ -152,7 +164,9 @@ def api_models():
             COUNT(*) as messages,
             COUNT(DISTINCT m.session_id) as sessions,
             COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0) as tokens_input,
-            COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as tokens_output
+            COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as tokens_output,
+            COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0) as cache_read,
+            COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0) as cache_write
         FROM message m
         {msg_where + " AND" if msg_where else "WHERE"}
           json_valid(m.data)
@@ -163,7 +177,7 @@ def api_models():
     """, params)
 
     models = []
-    for row in cur.fetchall():
+    for rank, row in enumerate(cur.fetchall()):
         raw = {"id": row["model_id"], "providerID": row["provider"]}
         import json
         info = normalize_model(json.dumps(raw))
@@ -172,12 +186,15 @@ def api_models():
             "label": info["label"],
             "provider": info["provider"],
             "model_id": info["id"],
+            "rank": rank + 1,
             "sessions": row["sessions"] or 0,
             "messages": row["messages"] or 0,
             "tokens_input": row["tokens_input"] or 0,
             "tokens_output": row["tokens_output"] or 0,
             "tokens_total": total,
-            "color": get_color(info["id"]),
+            "cache_read": row["cache_read"] or 0,
+            "cache_write": row["cache_write"] or 0,
+            "color": QUALITATIVE_COLORS[rank] if rank < len(QUALITATIVE_COLORS) else "#64748B",
         })
     conn.close()
     return jsonify(models)
@@ -187,6 +204,7 @@ def api_models():
 def api_daily():
     """Daily token breakdown by model, attributed per assistant message."""
     days = parse_days(default=31)
+    top_n = parse_top_n(default=8)
     where, params = since_clause(days)
     msg_where = where.replace("time_created", "m.time_created")
 
@@ -199,7 +217,9 @@ def api_daily():
             COUNT(*) as messages,
             COUNT(DISTINCT m.session_id) as sessions,
             COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0) as tokens_input,
-            COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as tokens_output
+            COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as tokens_output,
+            COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0) as cache_read,
+            COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0) as cache_write
         FROM message m
         {msg_where + " AND" if msg_where else "WHERE"}
           json_valid(m.data)
@@ -223,7 +243,12 @@ def api_daily():
         total = (row["tokens_input"] or 0) + (row["tokens_output"] or 0)
 
         if model_id not in model_map:
-            model_map[model_id] = {"label": label, "color": get_color(info["id"])}
+            model_map[model_id] = {
+                "label": label,
+                "model_id": info["id"],
+                "provider": info["provider"],
+                "color": "#64748B",
+            }
             all_models_ordered.append(model_id)
 
         daily_data.setdefault(dt, {})
@@ -233,6 +258,8 @@ def api_daily():
             "tokens_input": row["tokens_input"] or 0,
             "tokens_output": row["tokens_output"] or 0,
             "tokens_total": total,
+            "cache_read": row["cache_read"] or 0,
+            "cache_write": row["cache_write"] or 0,
         }
 
     dates = sorted(daily_data.keys())
@@ -244,6 +271,8 @@ def api_daily():
                 "tokens_input": 0,
                 "tokens_output": 0,
                 "tokens_total": 0,
+                "cache_read": 0,
+                "cache_write": 0,
             })
 
     conn.close()
@@ -254,7 +283,6 @@ def api_daily():
             model_totals[mid] = model_totals.get(mid, 0) + daily_data[dt][mid]["tokens_total"]
     all_models_ordered.sort(key=lambda m: model_totals.get(m, 0), reverse=True)
 
-    top_n = 8
     active_models = [m for m in all_models_ordered if model_totals.get(m, 0) > 0]
     top_models = active_models[:top_n]
     other_models = [m for m in all_models_ordered if m not in top_models]
@@ -268,10 +296,12 @@ def api_daily():
                 "tokens_input": 0,
                 "tokens_output": 0,
                 "tokens_total": 0,
+                "cache_read": 0,
+                "cache_write": 0,
             })
             for mid in top_models
         }
-        other = {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0}
+        other = {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0}
         for mid in other_models:
             row = daily_data[dt].get(mid)
             if not row:
@@ -281,22 +311,42 @@ def api_daily():
             other["tokens_input"] += row["tokens_input"]
             other["tokens_output"] += row["tokens_output"]
             other["tokens_total"] += row["tokens_total"]
+            other["cache_read"] += row.get("cache_read", 0) if isinstance(row, dict) else row["cache_read"]
+            other["cache_write"] += row.get("cache_write", 0) if isinstance(row, dict) else row["cache_write"]
         if other["tokens_total"] > 0 or other["sessions"] > 0:
             chart_data[dt]["other"] = other
 
-    chart_models = [
-        {"id": mid, "label": model_map[mid]["label"], "color": model_map[mid]["color"]}
-        for mid in top_models
-    ]
+    chart_models = []
+    for rank, mid in enumerate(top_models):
+        meta = model_map[mid]
+        chart_models.append({
+            "id": mid,
+            "label": meta["label"],
+            "color": chart_color(rank, meta["model_id"], meta["provider"]),
+            "tokens_total": model_totals.get(mid, 0),
+            "rank": rank + 1,
+        })
     if any("other" in chart_data[dt] for dt in dates):
-        chart_models.append({"id": "other", "label": "Other", "color": "#646262"})
+        chart_models.append({
+            "id": "other",
+            "label": f"Other ({len(other_models)} models)",
+            "color": "#64748B",
+            "tokens_total": sum(model_totals.get(mid, 0) for mid in other_models),
+            "rank": None,
+        })
         for dt in dates:
             chart_data[dt].setdefault(
                 "other",
                 {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0},
             )
 
-    return jsonify({"dates": dates, "models": chart_models, "data": chart_data})
+    return jsonify({
+        "dates": dates,
+        "models": chart_models,
+        "data": chart_data,
+        "top_n": top_n,
+        "other_count": len(other_models),
+    })
 
 
 @app.route("/api/usage-history")
@@ -392,6 +442,6 @@ def settings():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8321))
-    print(f"◆ OpenCode Dashboard → http://localhost:{port}")
+    print(f"◆ Coding Agent Usage Dashboard → http://localhost:{port}")
     print(f"◆ Database: {DB_PATH}")
     app.run(host="0.0.0.0", port=port, debug=True)
