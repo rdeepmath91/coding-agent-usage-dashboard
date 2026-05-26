@@ -139,125 +139,121 @@ def api_overview():
 
 @app.route("/api/models")
 def api_models():
-    """Session and token totals per model."""
+    """Session and token totals per model, attributed per assistant message."""
     days = parse_days(default=30)
     where, params = since_clause(days)
+    msg_where = where.replace("time_created", "m.time_created")
 
     conn = get_db()
     cur = conn.execute(f"""
         SELECT
-            model,
-            COUNT(*) as sessions,
-            COALESCE(SUM(tokens_input), 0) as tokens_input,
-            COALESCE(SUM(tokens_output), 0) as tokens_output
-        FROM session
-        {where + " AND" if where else "WHERE"} model IS NOT NULL AND model != ''
-        GROUP BY model
-        ORDER BY sessions DESC
+            json_extract(m.data, '$.modelID') as model_id,
+            json_extract(m.data, '$.providerID') as provider,
+            COUNT(*) as messages,
+            COUNT(DISTINCT m.session_id) as sessions,
+            COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0) as tokens_input,
+            COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as tokens_output
+        FROM message m
+        {msg_where + " AND" if msg_where else "WHERE"}
+          json_valid(m.data)
+          AND json_extract(m.data, '$.role') = 'assistant'
+          AND json_extract(m.data, '$.modelID') IS NOT NULL
+        GROUP BY model_id, provider
+        ORDER BY (tokens_input + tokens_output) DESC
     """, params)
 
-    # Aggregate by base model ID (variant-grouped)
-    aggregated = {}  # model_id -> {label, provider, color, sessions, tokens_*}
+    models = []
     for row in cur.fetchall():
-        info = normalize_model(row["model"])
-        mid = info["id"]
-        if mid not in aggregated:
-            aggregated[mid] = {
-                "label": info["label"],
-                "provider": info["provider"],
-                "model_id": mid,
-                "sessions": 0,
-                "tokens_input": 0,
-                "tokens_output": 0,
-                "tokens_total": 0,
-                "color": get_color(mid),
-            }
-        agg = aggregated[mid]
-        agg["sessions"] += row["sessions"]
-        agg["tokens_input"] += row["tokens_input"]
-        agg["tokens_output"] += row["tokens_output"]
-        agg["tokens_total"] += row["tokens_input"] + row["tokens_output"]
-
-    models = sorted(aggregated.values(), key=lambda m: m["tokens_total"], reverse=True)
+        raw = {"id": row["model_id"], "providerID": row["provider"]}
+        import json
+        info = normalize_model(json.dumps(raw))
+        total = (row["tokens_input"] or 0) + (row["tokens_output"] or 0)
+        models.append({
+            "label": info["label"],
+            "provider": info["provider"],
+            "model_id": info["id"],
+            "sessions": row["sessions"] or 0,
+            "messages": row["messages"] or 0,
+            "tokens_input": row["tokens_input"] or 0,
+            "tokens_output": row["tokens_output"] or 0,
+            "tokens_total": total,
+            "color": get_color(info["id"]),
+        })
     conn.close()
     return jsonify(models)
 
 
 @app.route("/api/daily")
 def api_daily():
-    """Daily token breakdown by model (for stacked bar chart)."""
+    """Daily token breakdown by model, attributed per assistant message."""
     days = parse_days(default=31)
     where, params = since_clause(days)
+    msg_where = where.replace("time_created", "m.time_created")
 
     conn = get_db()
-    # Fetch all rows; normalize model IDs client-side in Python
     cur = conn.execute(f"""
         SELECT
-            date(time_created / 1000, 'unixepoch', 'localtime') as dt,
-            model,
-            COUNT(*) as sessions,
-            COALESCE(SUM(tokens_input), 0) as tokens_input,
-            COALESCE(SUM(tokens_output), 0) as tokens_output
-        FROM session
-        {where + " AND" if where else "WHERE"} model IS NOT NULL AND model != ''
-        GROUP BY dt, model
-        ORDER BY dt, sessions DESC
+            date(m.time_created / 1000, 'unixepoch', 'localtime') as dt,
+            json_extract(m.data, '$.modelID') as model_id,
+            json_extract(m.data, '$.providerID') as provider,
+            COUNT(*) as messages,
+            COUNT(DISTINCT m.session_id) as sessions,
+            COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0) as tokens_input,
+            COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as tokens_output
+        FROM message m
+        {msg_where + " AND" if msg_where else "WHERE"}
+          json_valid(m.data)
+          AND json_extract(m.data, '$.role') = 'assistant'
+          AND json_extract(m.data, '$.modelID') IS NOT NULL
+        GROUP BY dt, model_id, provider
+        ORDER BY dt, (tokens_input + tokens_output) DESC
     """, params)
 
-    # Build: { date -> [{model, tokens, color}, ...] }
     daily_data = {}
-    model_map = {}  # model_id -> {label, color}
+    model_map = {}
     all_models_ordered = []
 
+    import json
     for row in cur.fetchall():
-        info = normalize_model(row["model"])
+        raw = {"id": row["model_id"], "providerID": row["provider"]}
+        info = normalize_model(json.dumps(raw))
         dt = row["dt"]
-        model_id = info["id"]
+        model_id = f"{info['provider']}/{info['id']}"
         label = info["label"]
+        total = (row["tokens_input"] or 0) + (row["tokens_output"] or 0)
 
         if model_id not in model_map:
-            model_map[model_id] = {"label": label, "color": get_color(model_id)}
+            model_map[model_id] = {"label": label, "color": get_color(info["id"])}
             all_models_ordered.append(model_id)
 
-        if dt not in daily_data:
-            daily_data[dt] = {}
-        # Accumulate — multiple variants of the same model on one day
-        existing = daily_data[dt].get(model_id)
-        if existing:
-            existing["sessions"] += row["sessions"]
-            existing["tokens_input"] += row["tokens_input"]
-            existing["tokens_output"] += row["tokens_output"]
-            existing["tokens_total"] += row["tokens_input"] + row["tokens_output"]
-        else:
-            daily_data[dt][model_id] = {
-                "sessions": row["sessions"],
-                "tokens_input": row["tokens_input"],
-                "tokens_output": row["tokens_output"],
-                "tokens_total": row["tokens_input"] + row["tokens_output"],
-            }
+        daily_data.setdefault(dt, {})
+        daily_data[dt][model_id] = {
+            "sessions": row["sessions"] or 0,
+            "messages": row["messages"] or 0,
+            "tokens_input": row["tokens_input"] or 0,
+            "tokens_output": row["tokens_output"] or 0,
+            "tokens_total": total,
+        }
 
-    # Fill in zero-token days for each model so Chart.js stacked bars work
     dates = sorted(daily_data.keys())
     for dt in dates:
         for mid in all_models_ordered:
-            if mid not in daily_data[dt]:
-                daily_data[dt][mid] = {
-                    "sessions": 0,
-                    "tokens_input": 0,
-                    "tokens_output": 0,
-                    "tokens_total": 0,
-                }
+            daily_data[dt].setdefault(mid, {
+                "sessions": 0,
+                "messages": 0,
+                "tokens_input": 0,
+                "tokens_output": 0,
+                "tokens_total": 0,
+            })
 
     conn.close()
 
-    # Sort models by total tokens descending.
     model_totals = {}
     for dt in dates:
         for mid in all_models_ordered:
             model_totals[mid] = model_totals.get(mid, 0) + daily_data[dt][mid]["tokens_total"]
     all_models_ordered.sort(key=lambda m: model_totals.get(m, 0), reverse=True)
 
-    # Keep chart readable: top token-heavy models plus a single "Other" bucket.
     top_n = 8
     active_models = [m for m in all_models_ordered if model_totals.get(m, 0) > 0]
     top_models = active_models[:top_n]
@@ -266,18 +262,22 @@ def api_daily():
     chart_data = {}
     for dt in dates:
         chart_data[dt] = {
-            mid: daily_data[dt].get(
-                mid,
-                {"sessions": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0},
-            )
+            mid: daily_data[dt].get(mid, {
+                "sessions": 0,
+                "messages": 0,
+                "tokens_input": 0,
+                "tokens_output": 0,
+                "tokens_total": 0,
+            })
             for mid in top_models
         }
-        other = {"sessions": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0}
+        other = {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0}
         for mid in other_models:
             row = daily_data[dt].get(mid)
             if not row:
                 continue
             other["sessions"] += row["sessions"]
+            other["messages"] += row["messages"]
             other["tokens_input"] += row["tokens_input"]
             other["tokens_output"] += row["tokens_output"]
             other["tokens_total"] += row["tokens_total"]
@@ -293,7 +293,7 @@ def api_daily():
         for dt in dates:
             chart_data[dt].setdefault(
                 "other",
-                {"sessions": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0},
+                {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0},
             )
 
     return jsonify({"dates": dates, "models": chart_models, "data": chart_data})
@@ -307,34 +307,50 @@ def api_usage_history():
 
     conn = get_db()
     cur = conn.execute("""
+        WITH session_models AS (
+            SELECT
+                session_id,
+                group_concat(DISTINCT json_extract(data, '$.providerID') || '/' || json_extract(data, '$.modelID')) as models,
+                COUNT(*) as messages
+            FROM message
+            WHERE json_valid(data)
+              AND json_extract(data, '$.role') = 'assistant'
+              AND json_extract(data, '$.modelID') IS NOT NULL
+            GROUP BY session_id
+        )
         SELECT
-            datetime(time_created / 1000, 'unixepoch', 'localtime') as created,
-            datetime(time_updated / 1000, 'unixepoch', 'localtime') as updated,
-            id,
-            title,
-            directory,
-            model,
-            tokens_input,
-            tokens_output,
-            summary_files,
-            summary_additions,
-            summary_deletions
-        FROM session
-        WHERE model IS NOT NULL AND model != ''
-        ORDER BY time_created DESC
+            datetime(s.time_created / 1000, 'unixepoch', 'localtime') as created,
+            datetime(s.time_updated / 1000, 'unixepoch', 'localtime') as updated,
+            s.id,
+            s.title,
+            s.directory,
+            s.model,
+            sm.models,
+            sm.messages,
+            s.tokens_input,
+            s.tokens_output,
+            s.summary_files,
+            s.summary_additions,
+            s.summary_deletions
+        FROM session s
+        LEFT JOIN session_models sm ON sm.session_id = s.id
+        WHERE s.model IS NOT NULL AND s.model != ''
+        ORDER BY s.time_created DESC
         LIMIT ? OFFSET ?
     """, (limit, offset))
 
     sessions = []
     for row in cur.fetchall():
         info = normalize_model(row["model"])
+        model_label = row["models"] or info["label"]
         sessions.append({
             "id": row["id"],
             "title": row["title"],
             "created": row["created"],
             "updated": row["updated"],
             "directory": row["directory"],
-            "model": info["label"],
+            "model": model_label,
+            "messages": row["messages"] or 0,
             "tokens_input": row["tokens_input"] or 0,
             "tokens_output": row["tokens_output"] or 0,
             "tokens_total": (row["tokens_input"] or 0) + (row["tokens_output"] or 0),
