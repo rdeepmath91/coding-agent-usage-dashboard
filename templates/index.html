@@ -76,7 +76,7 @@
     color: var(--text-secondary);
     text-decoration: none;
     font-size: 14px;
-    transition: all 0.15s;
+    transition: color 0.15s, background 0.15s;
     position: relative;
   }
   .nav-item:hover { color: var(--text-primary); background: var(--bg-tertiary); }
@@ -145,7 +145,7 @@
   /* Cards */
   .stat-cards {
     display: grid;
-    grid-template-columns: repeat(6, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
     gap: 16px;
     margin-bottom: 32px;
   }
@@ -208,6 +208,7 @@
   .legend-item {
     display: flex;
     align-items: center;
+    text-align: left;
     gap: 6px;
     font-size: 12px;
     color: var(--text-secondary);
@@ -218,9 +219,10 @@
     background: var(--bg-secondary);
     white-space: nowrap;
     cursor: pointer;
-    transition: opacity 0.12s, border-color 0.12s, background 0.12s;
+    transition: opacity 0.12s, border-color 0.12s, background-color 0.12s;
   }
   .legend-item:hover { border-color: var(--accent); background: var(--bg-tertiary); }
+  .legend-item:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
   .legend-item.muted { opacity: 0.35; }
   .legend-item.disabled { opacity: 0.42; text-decoration: line-through; }
   .legend-name { overflow: hidden; text-overflow: ellipsis; }
@@ -252,6 +254,14 @@
   .table-section { margin-top: 12px; }
   .table-section h2 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
   .table-section .subtitle { font-family: var(--font-mono); font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
+
+  .table-wrapper {
+    overflow-x: auto;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
 
   .data-table {
     width: 100%;
@@ -302,7 +312,7 @@
     color: var(--text-tertiary);
     font-size: 14px;
     border-bottom: 2px solid transparent;
-    transition: all 0.15s;
+    transition: color 0.15s, border-bottom-color 0.15s;
     background: none;
     border-top: none;
     border-left: none;
@@ -326,7 +336,7 @@
     color: var(--text-secondary);
     font-size: 13px;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: color 0.15s, border-color 0.15s, background-color 0.15s;
     font-family: var(--font-sans);
   }
   .pill:hover { border-color: var(--accent); color: var(--text-primary); }
@@ -358,8 +368,12 @@
     font: inherit;
     cursor: pointer;
   }
-  .custom-range button:hover, .custom-range input:focus {
+  .custom-range button:hover, .custom-range input:focus-visible, .custom-range button:focus-visible {
     border-color: var(--accent);
+    outline: none;
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .custom-range input:focus {
     outline: none;
   }
 
@@ -396,20 +410,82 @@
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 
+  /* Mobile Header Navigation */
+  .mobile-header {
+    display: none;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .mobile-header .logo {
+    font-size: 15px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+  }
+  .mobile-header .logo span {
+    color: var(--text-tertiary);
+    font-weight: 400;
+  }
+  .mobile-nav-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 6px 12px;
+    border-radius: var(--radius);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .mobile-nav-toggle:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+  }
+  .mobile-menu {
+    display: none;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 16px;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .mobile-menu.show {
+    display: flex;
+  }
+  .mobile-menu .nav-item {
+    padding: 8px 12px;
+  }
+
   /* Responsive */
   @media (max-width: 1280px) {
-    .stat-cards { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+    .stat-cards { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
   }
 
   @media (max-width: 800px) {
     .app-layout { display: block; }
     .sidebar { display: none; }
+    .mobile-header { display: flex; }
     .main-area { padding: 24px 16px; }
-    .stat-cards { grid-template-columns: 1fr; }
+    .stat-cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   }
 </style>
 </head>
 <body>
+<header class="mobile-header">
+  <div class="logo">coding agent <span>usage</span></div>
+  <button class="mobile-nav-toggle" id="mobile-toggle" aria-label="Toggle navigation menu" aria-expanded="false">Menu</button>
+</header>
+<nav class="mobile-menu" id="mobile-menu-container">
+  <a href="#cost" class="nav-item active" data-nav="cost">☤ Overview</a>
+  <a href="#models" class="nav-item" data-nav="models">◇ Models</a>
+  <a href="#usage" class="nav-item" data-nav="usage">◆ Usage</a>
+  <a href="/settings" class="nav-item">⚙ Settings</a>
+</nav>
 
 <div class="app-layout">
   <!-- Sidebar -->
@@ -435,7 +511,7 @@
       <button class="pill" data-days="90">90d</button>
       <button class="pill" data-days="0">All</button>
       <span class="custom-range">
-        <input id="custom-days" type="number" min="1" max="3650" placeholder="N days" aria-label="Custom number of days">
+        <input id="custom-days" name="custom-days" type="number" min="1" max="3650" placeholder="30 days…" autocomplete="off" aria-label="Custom number of days">
         <button id="apply-custom-days" type="button">Apply</button>
       </span>
     </div>
@@ -507,43 +583,47 @@
     <section class="table-section" id="models">
       <h2>Model Breakdown</h2>
       <div class="subtitle">Sessions, tokens, and estimated cost by model. Cost uses latest matched OpenRouter pricing and is approximate.</div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Model</th>
-            <th class="num">Sessions</th>
-            <th class="num">Total Tokens</th>
-            <th class="num">Input</th>
-            <th class="num">Output</th>
-            <th class="num">Cache Read</th>
-            <th class="num">Est. Cost</th>
-          </tr>
-        </thead>
-        <tbody id="model-table-body">
-          <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
-        </tbody>
-      </table>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th class="num">Sessions</th>
+              <th class="num">Total Tokens</th>
+              <th class="num">Input</th>
+              <th class="num">Output</th>
+              <th class="num">Cache Read</th>
+              <th class="num">Est. Cost</th>
+            </tr>
+          </thead>
+          <tbody id="model-table-body">
+            <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <!-- Usage History -->
     <section class="table-section" id="usage" style="margin-top:40px;">
       <h2>Usage History</h2>
       <div class="subtitle">Recent coding-agent sessions and token usage. OpenCode is the active source.</div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Model</th>
-            <th>Title</th>
-            <th class="num">Tokens</th>
-            <th class="num">Input</th>
-            <th class="num">Output</th>
-          </tr>
-        </thead>
-        <tbody id="history-table-body">
-          <tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
-        </tbody>
-      </table>
+      <div class="table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Model</th>
+              <th>Title</th>
+              <th class="num">Tokens</th>
+              <th class="num">Input</th>
+              <th class="num">Output</th>
+            </tr>
+          </thead>
+          <tbody id="history-table-body">
+            <tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <div class="footer">
@@ -710,7 +790,7 @@ function renderChart(data) {
   usageChart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: data.dates.map((d, i) => i % 3 === 0 ? d : ''),
+      labels: data.dates,
       datasets,
     },
     options: {
@@ -725,6 +805,9 @@ function renderChart(data) {
             color: '#5f6368',
             font: { family: "'JetBrains Mono', monospace", size: 11 },
             maxRotation: 0,
+            callback: function(value, index) {
+              return index % 3 === 0 ? this.getLabelForValue(value) : '';
+            },
           },
           border: { display: false },
         },
@@ -786,19 +869,26 @@ function toggleChartModel(modelId) {
   usageChart.setDatasetVisibility(index, !visible);
   if (visible) hiddenChartModels.add(modelId); else hiddenChartModels.delete(modelId);
   usageChart.update();
-  document.querySelector(`.legend-item[data-model-id="${CSS.escape(modelId)}"]`)?.classList.toggle('disabled', visible);
+  const el = document.querySelector(`.legend-item[data-model-id="${CSS.escape(modelId)}"]`);
+  if (el) {
+    el.classList.toggle('disabled', visible);
+    el.setAttribute('aria-pressed', String(!visible));
+  }
 }
 
 function renderLegend(models) {
   const el = document.getElementById('chart-legend');
   const visibleTotal = models.reduce((sum, m) => sum + (m.tokens_total || 0), 0) || 1;
-  el.innerHTML = models.map(m => `
-    <div class="legend-item ${m.id === 'other' ? 'other' : ''} ${hiddenChartModels.has(m.id) ? 'disabled' : ''}" data-model-id="${m.id}" title="Click to hide/show. Hover to highlight.">
-      <span class="legend-dot" style="background:${m.color};"></span>
-      <span class="legend-name">${m.rank ? `${m.rank}. ` : ''}${m.label}</span>
-      <span class="legend-share">${Math.round(((m.tokens_total || 0) / visibleTotal) * 100)}%</span>
-    </div>
-  `).join('');
+  el.innerHTML = models.map(m => {
+    const isHidden = hiddenChartModels.has(m.id);
+    return `
+      <button type="button" class="legend-item ${m.id === 'other' ? 'other' : ''} ${isHidden ? 'disabled' : ''}" data-model-id="${m.id}" aria-pressed="${!isHidden}" title="Click to hide/show. Hover to highlight.">
+        <span class="legend-dot" style="background:${m.color};"></span>
+        <span class="legend-name">${m.rank ? `${m.rank}. ` : ''}${m.label}</span>
+        <span class="legend-share">${Math.round(((m.tokens_total || 0) / visibleTotal) * 100)}%</span>
+      </button>
+    `;
+  }).join('');
   el.querySelectorAll('.legend-item').forEach(item => {
     item.addEventListener('mouseenter', () => setLegendHover(item.dataset.modelId));
     item.addEventListener('mouseleave', () => setLegendHover(null));
