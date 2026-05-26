@@ -286,6 +286,37 @@
   .pill:hover { border-color: var(--accent); color: var(--text-primary); }
   .pill.active { background: var(--accent); border-color: var(--accent); color: #fdfcfc; }
 
+  .custom-range {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 8px;
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+  .custom-range input {
+    width: 92px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    font: inherit;
+  }
+  .custom-range button {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    font: inherit;
+    cursor: pointer;
+  }
+  .custom-range button:hover, .custom-range input:focus {
+    border-color: var(--accent);
+    outline: none;
+  }
+
   /* Loading */
   .loading {
     text-align: center;
@@ -356,7 +387,11 @@
       <button class="pill" data-days="7">7d</button>
       <button class="pill active" data-days="31">30d</button>
       <button class="pill" data-days="90">90d</button>
-      <button class="pill" data-days="365">All</button>
+      <button class="pill" data-days="0">All</button>
+      <span class="custom-range">
+        <input id="custom-days" type="number" min="1" max="3650" placeholder="N days" aria-label="Custom number of days">
+        <button id="apply-custom-days" type="button">Apply</button>
+      </span>
     </div>
 
     <!-- Overview cards -->
@@ -466,13 +501,31 @@ function fmtTokens(n) {
 // ── Range tabs ──────────────────────────────────────────────────────────────
 let currentDays = 31;
 
+function rangeParam() {
+  return currentDays === 0 ? 'all' : String(currentDays);
+}
+
 document.querySelectorAll('#range-tabs .pill').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('#range-tabs .pill').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentDays = parseInt(btn.dataset.days);
+    document.getElementById('custom-days').value = '';
     loadAll();
   });
+});
+
+document.getElementById('apply-custom-days').addEventListener('click', () => {
+  const input = document.getElementById('custom-days');
+  const days = Math.max(1, Math.min(3650, parseInt(input.value || '31')));
+  currentDays = days;
+  input.value = days;
+  document.querySelectorAll('#range-tabs .pill').forEach(b => b.classList.remove('active'));
+  loadAll();
+});
+
+document.getElementById('custom-days').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') document.getElementById('apply-custom-days').click();
 });
 
 // ── Load everything ─────────────────────────────────────────────────────────
@@ -482,7 +535,7 @@ async function loadAll() {
 
 async function loadOverview(days) {
   try {
-    const r = await fetch('/api/overview');
+    const r = await fetch(`/api/overview?days=${rangeParam()}`);
     const d = await r.json();
 
     document.getElementById('total-cost').textContent = fmtCost(d.total_cost);
@@ -501,7 +554,7 @@ async function loadOverview(days) {
 
 async function loadModels(days) {
   try {
-    const r = await fetch(`/api/models?days=${days}`);
+    const r = await fetch(`/api/models?days=${rangeParam()}`);
     const models = await r.json();
 
     const tbody = document.getElementById('model-table-body');
@@ -530,7 +583,7 @@ async function loadModels(days) {
 
 async function loadDaily(days) {
   try {
-    const r = await fetch(`/api/daily?days=${days}`);
+    const r = await fetch(`/api/daily?days=${rangeParam()}`);
     const data = await r.json();
 
     renderChart(data);

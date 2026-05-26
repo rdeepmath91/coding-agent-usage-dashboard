@@ -24,6 +24,29 @@ def get_db():
     return conn
 
 
+def parse_days(default: int | None = 30) -> int | None:
+    """Parse a days=N query param. 0/all means all time."""
+    raw = request.args.get("days")
+    if raw is None:
+        return default
+    if str(raw).lower() in {"all", "0", ""}:
+        return None
+    try:
+        days = int(raw)
+    except ValueError:
+        return default
+    return None if days <= 0 else min(days, 3650)
+
+
+def since_clause(days: int | None) -> tuple[str, tuple]:
+    if days is None:
+        return "", ()
+    since = (
+        datetime.datetime.now() - datetime.timedelta(days=days)
+    ).timestamp() * 1000
+    return "WHERE time_created >= ?", (since,)
+
+
 def normalize_model(raw: str) -> dict:
     """Parse a model JSON or ID string into short name + provider."""
     if not raw:
@@ -93,9 +116,11 @@ def get_color(model_id: str) -> str:
 
 @app.route("/api/overview")
 def api_overview():
-    """Aggregate totals across all time."""
+    """Aggregate totals for a selected range; days=0/all means all time."""
+    days = parse_days(default=None)
+    where, params = since_clause(days)
     conn = get_db()
-    cur = conn.execute("""
+    cur = conn.execute(f"""
         SELECT
             COUNT(*) as total_sessions,
             COALESCE(SUM(cost), 0) as total_cost,
@@ -106,8 +131,10 @@ def api_overview():
             MIN(date(time_created / 1000, 'unixepoch', 'localtime')) as first_session,
             MAX(date(time_created / 1000, 'unixepoch', 'localtime')) as last_session
         FROM session
-    """)
+        {where}
+    """, params)
     row = dict(cur.fetchone())
+    row["days"] = days
     conn.close()
     return jsonify(row)
 
@@ -115,13 +142,11 @@ def api_overview():
 @app.route("/api/models")
 def api_models():
     """Cost and token totals per model."""
-    days = request.args.get("days", "30", type=int)
-    since = (
-        datetime.datetime.now() - datetime.timedelta(days=days)
-    ).timestamp() * 1000
+    days = parse_days(default=30)
+    where, params = since_clause(days)
 
     conn = get_db()
-    cur = conn.execute("""
+    cur = conn.execute(f"""
         SELECT
             model,
             COUNT(*) as sessions,
@@ -131,11 +156,10 @@ def api_models():
             COALESCE(SUM(tokens_cache_read), 0) as tokens_cache_read,
             COALESCE(SUM(tokens_cache_write), 0) as tokens_cache_write
         FROM session
-        WHERE time_created >= ?
-          AND model IS NOT NULL AND model != ''
+        {where + " AND" if where else "WHERE"} model IS NOT NULL AND model != ''
         GROUP BY model
         ORDER BY cost DESC
-    """, (since,))
+    """, params)
 
     # Aggregate by base model ID (variant-grouped)
     aggregated = {}  # model_id -> {label, provider, color, cost, sessions, tokens_*}
@@ -171,14 +195,12 @@ def api_models():
 @app.route("/api/daily")
 def api_daily():
     """Daily cost breakdown by model (for stacked bar chart)."""
-    days = request.args.get("days", "31", type=int)
-    since = (
-        datetime.datetime.now() - datetime.timedelta(days=days)
-    ).timestamp() * 1000
+    days = parse_days(default=31)
+    where, params = since_clause(days)
 
     conn = get_db()
     # Fetch all rows; normalize model IDs client-side in Python
-    cur = conn.execute("""
+    cur = conn.execute(f"""
         SELECT
             date(time_created / 1000, 'unixepoch', 'localtime') as dt,
             model,
@@ -187,11 +209,10 @@ def api_daily():
             COALESCE(SUM(tokens_input), 0) as tokens_input,
             COALESCE(SUM(tokens_output), 0) as tokens_output
         FROM session
-        WHERE time_created >= ?
-          AND model IS NOT NULL AND model != ''
+        {where + " AND" if where else "WHERE"} model IS NOT NULL AND model != ''
         GROUP BY dt, model
         ORDER BY dt, daily_cost DESC
-    """, (since,))
+    """, params)
 
     # Build: { date -> [{model, cost, color}, ...] }
     daily_data = {}
