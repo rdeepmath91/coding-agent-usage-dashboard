@@ -1,0 +1,66 @@
+# AGENTS.md
+
+Guidance for agents working in this repo.
+
+## Scope
+
+- This repo is a local Flask dashboard for coding-agent usage data.
+- The active production data source is OpenCode at `~/.local/share/opencode/opencode.db`.
+- Keep the current product contract explicit: show where totals come from, avoid ambiguous labels, and do not invent data when a source is missing.
+
+## Working style
+
+- Prefer small, reviewable PRs. Do not push straight to `main`.
+- Make the smallest change that fully solves the problem.
+- Preserve existing behavior unless the task explicitly changes it.
+- If a request expands scope, capture it as follow-up work instead of quietly folding unrelated refactors into the same PR.
+
+## Architecture rules
+
+- Keep modules focused. If a file starts carrying multiple unrelated responsibilities, split it.
+- Avoid long files when practical. In particular:
+  - keep Python route, query, formatting, and simulation logic separated by responsibility
+  - move reusable presentation logic out of inline template scripts when it starts growing
+  - avoid packing large CSS, HTML, and JS changes into one monolithic edit when smaller modules/templates/assets would be clearer
+- Prefer DRY code, but do not extract abstractions prematurely. Extract helpers only when logic is reused or the extraction makes the code materially easier to read or test.
+- Keep data-shaping rules centralized. Token definitions, cost rules, source labels, and placeholder semantics should not be duplicated in several places.
+- Favor explicit names over cleverness. Anyone reading the repo should be able to trace how dashboard numbers are derived.
+
+## Data and UX rules
+
+- Source provenance must stay visible. If a chart or summary only reflects OpenCode, say so.
+- Total tokens means `input + output assistant-message tokens`. Cache read/write stays separate unless the task explicitly changes that definition.
+- Unpriced or unsupported models must remain clearly labeled instead of guessed.
+- Simulated/demo mode should stay deterministic enough for screenshots, regression checks, and design review.
+- Tooltips and interactive affordances should work for hover, focus, and tap.
+- Accessibility and keyboard interaction are part of done, not polish.
+
+## Python / Flask guidance
+
+- Keep query code, aggregation code, and response-shaping code straightforward and testable.
+- Prefer small pure helpers for formatting, normalization, and aggregation boundaries.
+- Avoid hidden global state beyond stable app configuration.
+- When adding a new adapter or source, give it a clear boundary rather than scattering source-specific conditionals across unrelated routes.
+
+## Frontend guidance
+
+- Keep the dashboard visually compact, but not at the expense of clarity.
+- Prefer readable dark-theme contrast and stable categorical colors.
+- If inline JS or CSS becomes unwieldy, split it into dedicated static files.
+- Avoid duplicating rendering logic across cards, charts, and filters; shared UI behavior should have one source of truth.
+
+## Testing and verification
+
+- Update or add tests for behavior changes. Do not rely on manual inspection alone.
+- Use the repo's uv-native workflow:
+  - `uv sync`
+  - `uv run python -m unittest tests.test_app tests.test_readme -v`
+  - `uv run python -m py_compile app.py scripts/snapshot_dashboard.py`
+- For UI-affecting changes, also verify the rendered dashboard locally, and use simulated mode when deterministic output helps.
+
+## Repo conventions
+
+- Keep secrets and machine-specific credentials out of the repo.
+- Preserve concise, direct wording in UI and docs.
+- When adding planned adapters, prefer honest placeholders such as `TBD` over fake completeness.
+- If a change introduces a new source of truth, document it in README and keep the wording consistent across backend payloads, templates, and tests.
