@@ -188,14 +188,14 @@ def normalize_model(raw: str) -> dict:
 QUALITATIVE_COLORS = [
     # Dark-background-safe categorical set. These are categories, not a gradient.
     # Keep this short: beyond ~8 hues, stacked bars become hard to compare.
+    "#38BDF8",  # cyan
     "#F59E0B",  # amber
     "#22C55E",  # green
-    "#0EA5E9",  # sky
-    "#14B8A6",  # teal
-    "#EC4899",  # pink
-    "#F97316",  # orange
     "#8B5CF6",  # violet
-    "#EAB308",  # yellow
+    "#EC4899",  # pink
+    "#14B8A6",  # teal
+    "#F97316",  # orange
+    "#64748B",  # slate
 ]
 
 def chart_color(rank: int, model_id: str, provider: str) -> str:

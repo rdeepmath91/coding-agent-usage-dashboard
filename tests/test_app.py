@@ -51,6 +51,15 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('Total tokens are defined as input + output assistant-message tokens.', html)
         self.assertIn('Cost is estimated from matched OpenRouter pricing when available.', html)
 
+    def test_overview_page_includes_clickable_metric_tooltips(self):
+        response = self.client.get('/')
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('class="meta-info-wrap"', html)
+        self.assertIn('class="meta-tooltip"', html)
+        self.assertIn('aria-expanded="false"', html)
+        self.assertIn('bindMetaInfoInteractions', html)
+
 
 if __name__ == '__main__':
     unittest.main()

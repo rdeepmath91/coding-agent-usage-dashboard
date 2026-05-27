@@ -171,6 +171,12 @@
     line-height: 1.45;
   }
   .stat-card .meta-main { min-width: 0; overflow-wrap: anywhere; }
+  .stat-card .meta-info-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+  }
   .stat-card .meta-info {
     display: inline-flex;
     align-items: center;
@@ -184,14 +190,72 @@
     background: var(--bg-secondary);
     font-family: var(--font-mono);
     font-size: 11px;
-    cursor: help;
+    cursor: pointer;
+    padding: 0;
   }
   .stat-card .meta-info:hover,
-  .stat-card .meta-info:focus-visible {
+  .stat-card .meta-info:focus-visible,
+  .stat-card .meta-info-wrap.is-open .meta-info {
     outline: none;
     color: var(--text-primary);
     border-color: var(--accent);
     box-shadow: 0 0 0 2px rgb(33 150 243 / 0.18);
+  }
+  .stat-card .meta-tooltip {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    transform: translateX(-50%) translateY(4px);
+    width: min(280px, calc(100vw - 48px));
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    box-shadow: 0 12px 30px rgb(0 0 0 / 0.35);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+    z-index: 20;
+  }
+  .stat-card .meta-tooltip::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    transform: translateX(-50%);
+    border-width: 6px;
+    border-style: solid;
+    border-color: var(--bg-tertiary) transparent transparent transparent;
+  }
+  .stat-card .meta-info-wrap:hover .meta-tooltip,
+  .stat-card .meta-info-wrap:focus-within .meta-tooltip,
+  .stat-card .meta-info-wrap.is-open .meta-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+  }
+  @media (max-width: 720px) {
+    .stat-card .meta-tooltip {
+      left: auto;
+      right: -8px;
+      transform: translateY(4px);
+      width: min(240px, calc(100vw - 32px));
+    }
+    .stat-card .meta-tooltip::after {
+      left: auto;
+      right: 12px;
+      transform: none;
+    }
+    .stat-card .meta-info-wrap:hover .meta-tooltip,
+    .stat-card .meta-info-wrap:focus-within .meta-tooltip,
+    .stat-card .meta-info-wrap.is-open .meta-tooltip {
+      transform: translateY(0);
+    }
   }
 
   .tool-section {
@@ -665,10 +729,57 @@ function setCardMeta(id, visible, detail = '') {
   const el = document.getElementById(id);
   if (!el) return;
   const detailText = String(detail || '');
+  const tooltipId = `${id}-tooltip`;
   el.innerHTML = `
     <span class="meta-main">${escapeHtml(visible)}</span>
-    ${detailText ? `<span class="meta-info" tabindex="0" role="img" aria-label="${escapeHtml(detailText)}" title="${escapeHtml(detailText)}">i</span>` : ''}
+    ${detailText ? `
+      <span class="meta-info-wrap">
+        <button
+          type="button"
+          class="meta-info"
+          aria-label="More information"
+          aria-expanded="false"
+          aria-describedby="${escapeHtml(tooltipId)}"
+        >i</button>
+        <span class="meta-tooltip" id="${escapeHtml(tooltipId)}" role="tooltip">${escapeHtml(detailText)}</span>
+      </span>
+    ` : ''}
   `;
+  bindMetaInfoInteractions(el);
+}
+
+function closeMetaInfo(exceptWrap = null) {
+  document.querySelectorAll('.meta-info-wrap.is-open').forEach(wrap => {
+    if (wrap === exceptWrap) return;
+    wrap.classList.remove('is-open');
+    wrap.querySelector('.meta-info')?.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function bindMetaInfoInteractions(root = document) {
+  root.querySelectorAll('.meta-info-wrap .meta-info').forEach(button => {
+    if (button.dataset.bound === 'true') return;
+    button.dataset.bound = 'true';
+
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const wrap = button.closest('.meta-info-wrap');
+      const willOpen = !wrap.classList.contains('is-open');
+      closeMetaInfo(wrap);
+      wrap.classList.toggle('is-open', willOpen);
+      button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    });
+
+    button.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        const wrap = button.closest('.meta-info-wrap');
+        wrap?.classList.remove('is-open');
+        button.setAttribute('aria-expanded', 'false');
+        button.blur();
+      }
+    });
+  });
 }
 
 function renderToolSources(sources = []) {
@@ -999,6 +1110,18 @@ const sectionObserver = new IntersectionObserver(entries => {
 }, { threshold: [0.2, 0.5, 0.8] });
 
 document.querySelectorAll('section[id]').forEach(s => sectionObserver.observe(s));
+
+document.addEventListener('click', event => {
+  if (!event.target.closest('.meta-info-wrap')) {
+    closeMetaInfo();
+  }
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    closeMetaInfo();
+  }
+});
 
 // ── Init ────────────────────────────────────────────────────────────────────
 loadAll();
