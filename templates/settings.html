@@ -26,7 +26,7 @@
     background: var(--bg-primary);
     color: var(--text-primary);
     line-height: 1.5;
-    padding: 40px;
+    padding: 40px 16px;
     max-width: 640px;
     margin: 0 auto;
   }
@@ -71,7 +71,7 @@
 
 <div class="card">
   <h2>Source</h2>
-  <p>Built from normalized local session data — model, session timestamps, input tokens, and output tokens per session/message. Cost is intentionally hidden for now. Cached tokens are shown only as secondary context, separate from input/output totals.</p>
+  <p>Built from normalized local session data — model, session timestamps, input tokens, and output tokens per session/message. Total tokens are defined as input + output assistant-message tokens. Cached tokens are shown only as secondary context, separate from input/output totals. Cost is estimated from matched OpenRouter pricing when available.</p>
 </div>
 </body>
 </html>

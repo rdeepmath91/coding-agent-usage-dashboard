@@ -17,8 +17,110 @@ from flask import Flask, jsonify, render_template, request
 app = Flask(__name__)
 
 DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
+
+
+def display_path(path: str) -> str:
+    """Return a stable, user-facing local path."""
+    home = os.path.expanduser("~")
+    return path.replace(home, "~", 1) if path.startswith(home) else path
+
+
+TOOL_SOURCES = [
+    {
+        "id": "opencode",
+        "label": "OpenCode",
+        "status": "active",
+        "status_label": "Active",
+        "source_type": "SQLite database",
+        "source_path": display_path(DB_PATH),
+        "color": "#4FC3F7",
+        "issue": None,
+    },
+    {
+        "id": "codex",
+        "label": "Codex CLI",
+        "status": "placeholder",
+        "status_label": "Planned",
+        "source_type": "Local session/history data",
+        "source_path": "pending discovery",
+        "color": "#BA68C8",
+        "issue": "#3",
+    },
+    {
+        "id": "hermes",
+        "label": "Hermes",
+        "status": "placeholder",
+        "status_label": "Planned",
+        "source_type": "Local session/tool logs or session DB",
+        "source_path": "pending discovery",
+        "color": "#81C784",
+        "issue": "#4",
+    },
+]
+
+TOOL_COLOR_MAP = {t["id"]: t["color"] for t in TOOL_SOURCES}
+
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 PRICING_CACHE = {"fetched_at": 0.0, "prices": {}}
+
+# Per-token fallback prices, keyed by normalized OpenRouter model ID.
+# OpenRouter live pricing remains primary; these keep estimates available when
+# the live endpoint is unavailable or missing fields for models we actively use.
+HARDCODED_MODEL_PRICES = {
+    "openai/gpt-5.5": {
+        "prompt": "0.000005",
+        "completion": "0.00003",
+        "input_cache_read": "0.0000005",
+    },
+    "openai/gpt-5.4": {
+        "prompt": "0.0000025",
+        "completion": "0.000015",
+        "input_cache_read": "0.00000025",
+    },
+    "openai/gpt-5.4-mini": {
+        "prompt": "0.00000075",
+        "completion": "0.0000045",
+        "input_cache_read": "0.000000075",
+    },
+    "openai/gpt-5.3-codex": {
+        "prompt": "0.00000175",
+        "completion": "0.000014",
+        "input_cache_read": "0.000000175",
+    },
+    "deepseek/deepseek-v4-flash:free": {
+        "prompt": "0",
+        "completion": "0",
+    },
+    "deepseek/deepseek-v4-flash": {
+        "prompt": "0.0000001",
+        "completion": "0.0000002",
+        "input_cache_read": "0.00000002",
+    },
+    "deepseek/deepseek-v4-pro": {
+        "prompt": "0.000000435",
+        "completion": "0.00000087",
+        "input_cache_read": "0.000000003625",
+    },
+    "moonshotai/kimi-k2.6": {
+        "prompt": "0.00000073",
+        "completion": "0.00000349",
+        "input_cache_read": "0.00000025",
+    },
+    "qwen/qwen3.6-plus": {
+        "prompt": "0.000000325",
+        "completion": "0.00000195",
+        "input_cache_write": "0.00000040625",
+    },
+    "minimax/minimax-m2.5:free": {
+        "prompt": "0",
+        "completion": "0",
+    },
+    "inclusionai/ling-2.6-flash": {
+        "prompt": "0.00000001",
+        "completion": "0.00000003",
+        "input_cache_read": "0.000000002",
+    },
+}
 
 
 def get_db():
@@ -155,7 +257,9 @@ def openrouter_prices() -> dict:
 def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output: int, cache_read: int = 0, cache_write: int = 0) -> dict:
     """Estimate USD cost from token counts using latest fetched OpenRouter pricing."""
     router_id = openrouter_model_id(provider, model_id)
-    pricing = openrouter_prices().get(router_id or "", {})
+    fallback_pricing = HARDCODED_MODEL_PRICES.get(router_id or "", {})
+    fetched_pricing = openrouter_prices().get(router_id or "", {})
+    pricing = {**fallback_pricing, **fetched_pricing}
 
     def price(key: str) -> float:
         try:
@@ -180,7 +284,7 @@ def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output
     return {
         "estimated_cost": estimated,
         "pricing_status": "priced",
-        "pricing_source": "OpenRouter /api/v1/models",
+        "pricing_source": "OpenRouter /api/v1/models" if fetched_pricing else "Hardcoded pricing fallback",
         "pricing_model_id": router_id,
         "input_price": price("prompt"),
         "output_price": price("completion"),
@@ -232,6 +336,32 @@ def api_overview():
     """, params + params)
     row = dict(cur.fetchone())
     row["days"] = days
+    row["active_tool"] = "opencode"
+    row["active_tool_label"] = "OpenCode"
+    row["source_path"] = display_path(DB_PATH)
+    row["token_total_definition"] = "input + output assistant-message tokens; cache read/write excluded"
+    row["tool_sources"] = []
+    for source in TOOL_SOURCES:
+        item = dict(source)
+        if item["id"] == "opencode":
+            item.update({
+                "sessions": row["total_sessions"],
+                "tokens_total": row["total_tokens"],
+                "tokens_input": row["total_input"],
+                "tokens_output": row["total_output"],
+                "cache_read": row["cache_read"],
+                "cache_write": row["cache_write"],
+            })
+        else:
+            item.update({
+                "sessions": None,
+                "tokens_total": None,
+                "tokens_input": None,
+                "tokens_output": None,
+                "cache_read": None,
+                "cache_write": None,
+            })
+        row["tool_sources"].append(item)
     conn.close()
     return jsonify(row)
 
@@ -274,6 +404,10 @@ def api_models():
         cache_read = row["cache_read"] or 0
         cache_write = row["cache_write"] or 0
         models.append({
+            "tool": "OpenCode",
+            "tool_id": "opencode",
+            "tool_color": TOOL_COLOR_MAP.get("opencode", "#64748B"),
+            "source_path": display_path(DB_PATH),
             "label": info["label"],
             "provider": info["provider"],
             "model_id": info["id"],
@@ -487,6 +621,10 @@ def api_usage_history():
         model_label = row["models"] or info["label"]
         sessions.append({
             "id": row["id"],
+            "tool": "OpenCode",
+            "tool_id": "opencode",
+            "tool_color": TOOL_COLOR_MAP.get("opencode", "#64748B"),
+            "source_path": display_path(DB_PATH),
             "title": row["title"],
             "created": row["created"],
             "updated": row["updated"],

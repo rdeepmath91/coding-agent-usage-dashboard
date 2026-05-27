@@ -145,7 +145,7 @@
   /* Cards */
   .stat-cards {
     display: grid;
-    grid-template-columns: repeat(6, minmax(150px, 1fr));
+    grid-template-columns: repeat(5, minmax(180px, 1fr));
     gap: 16px;
     margin-bottom: 32px;
   }
@@ -157,9 +157,86 @@
     padding: 18px 20px;
     min-height: 132px;
   }
-  .stat-card .label { font-size: 12px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .stat-card .label { font-size: 13px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
   .stat-card .value { font-size: clamp(24px, 2vw, 34px); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -1px; }
-  .stat-card .sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-family: var(--font-mono); }
+  .stat-card .sub {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 24px;
+    margin-top: 6px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .stat-card .meta-main { min-width: 0; overflow-wrap: anywhere; }
+  .stat-card .meta-info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-tertiary);
+    background: var(--bg-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: help;
+  }
+  .stat-card .meta-info:hover,
+  .stat-card .meta-info:focus-visible {
+    outline: none;
+    color: var(--text-primary);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgb(33 150 243 / 0.18);
+  }
+
+  .tool-section {
+    margin: -12px 0 32px;
+  }
+  .tool-section h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .tool-section .subtitle { font-family: var(--font-mono); font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
+  .tool-source-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .tool-source-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    min-height: 118px;
+  }
+  .tool-source-card.placeholder {
+    border-style: dashed;
+    opacity: 0.78;
+  }
+  .tool-source-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .tool-source-name { font-weight: 600; }
+  .tool-source-status { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.4px; }
+  .tool-source-value { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tool-source-meta { margin-top: 6px; color: var(--text-secondary); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; }
+  .tool-pill {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 8px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    white-space: nowrap;
+  }
 
   /* Chart */
   .chart-container {
@@ -398,14 +475,16 @@
 
   /* Responsive */
   @media (max-width: 1280px) {
-    .stat-cards { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+    .stat-cards { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .tool-source-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
   }
 
   @media (max-width: 800px) {
     .app-layout { display: block; }
     .sidebar { display: none; }
     .main-area { padding: 24px 16px; }
-    .stat-cards { grid-template-columns: 1fr; }
+    .stat-cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+    .tool-source-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -463,21 +542,17 @@
         <div class="sub" id="output-sub"></div>
       </div>
       <div class="stat-card">
-        <div class="label">Cache Read</div>
-        <div class="value" id="cache-read">—</div>
-        <div class="sub">secondary · reused context</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Cache Write</div>
-        <div class="value" id="cache-write">—</div>
-        <div class="sub">secondary · cache created</div>
-      </div>
-      <div class="stat-card">
         <div class="label">Est. Cost</div>
         <div class="value" id="estimated-cost">—</div>
         <div class="sub" id="estimated-cost-sub">OpenRouter pricing when matched</div>
       </div>
     </div>
+
+    <section class="tool-section" aria-labelledby="tool-sources-heading">
+      <h2 id="tool-sources-heading">Tool Sources</h2>
+      <div class="subtitle" id="tool-sources-subtitle">Active source and planned tool adapters.</div>
+      <div class="tool-source-grid" id="tool-source-grid"></div>
+    </section>
 
     <!-- Chart -->
     <div class="chart-container">
@@ -510,6 +585,7 @@
       <table class="data-table">
         <thead>
           <tr>
+            <th>Tool</th>
             <th>Model</th>
             <th class="num">Sessions</th>
             <th class="num">Total Tokens</th>
@@ -520,7 +596,7 @@
           </tr>
         </thead>
         <tbody id="model-table-body">
-          <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
+          <tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
         </tbody>
       </table>
     </section>
@@ -532,6 +608,7 @@
       <table class="data-table">
         <thead>
           <tr>
+            <th>Tool</th>
             <th>Date</th>
             <th>Model</th>
             <th>Title</th>
@@ -541,13 +618,13 @@
           </tr>
         </thead>
         <tbody id="history-table-body">
-          <tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
+          <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
         </tbody>
       </table>
     </section>
 
     <div class="footer">
-      ◇ <span id="db-path-display">~/.local/share/opencode/opencode.db</span>
+      ◇ active source: <span id="db-path-display">OpenCode · ~/.local/share/opencode/opencode.db</span>
       ☤ last updated: <span id="last-updated">—</span>
     </div>
   </main>
@@ -573,6 +650,46 @@ function fmtCost(n) {
   if (n === 0) return '$0.00';
   if (Math.abs(n) < 0.01) return `$${Number(n).toFixed(4)}`;
   return `$${Number(n).toFixed(2)}`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"]/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+  }[char]));
+}
+
+function setCardMeta(id, visible, detail = '') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const detailText = String(detail || '');
+  el.innerHTML = `
+    <span class="meta-main">${escapeHtml(visible)}</span>
+    ${detailText ? `<span class="meta-info" tabindex="0" role="img" aria-label="${escapeHtml(detailText)}" title="${escapeHtml(detailText)}">i</span>` : ''}
+  `;
+}
+
+function renderToolSources(sources = []) {
+  const grid = document.getElementById('tool-source-grid');
+  if (!grid) return;
+  grid.innerHTML = sources.map(source => {
+    const active = source.status === 'active';
+    const value = active && source.tokens_total !== null ? fmtTokens(source.tokens_total || 0) : '—';
+    const color = source.color || '#64748B';
+    const border = active ? `border-color:${color};border-left:3px solid ${color};padding-left:13px;` : '';
+    return `
+      <article class="tool-source-card ${active ? 'active' : 'placeholder'}" style="${border}">
+        <div class="tool-source-head">
+          <span class="tool-source-name" style="color:${color}">${source.label}</span>
+          <span class="tool-source-status">${source.status_label}</span>
+        </div>
+        <div class="tool-source-value">${value}</div>
+        <div class="tool-source-meta">${active ? source.source_path : (source.issue || '')}</div>
+      </article>
+    `;
+  }).join('');
 }
 
 // ── Range tabs ──────────────────────────────────────────────────────────────
@@ -625,13 +742,34 @@ async function loadOverview(days) {
     document.getElementById('total-tokens').textContent = fmtTokens(d.total_tokens);
     document.getElementById('total-input').textContent = fmtTokens(d.total_input);
     document.getElementById('total-output').textContent = fmtTokens(d.total_output);
-    document.getElementById('cache-read').textContent = fmtTokens(d.cache_read || 0);
-    document.getElementById('cache-write').textContent = fmtTokens(d.cache_write || 0);
 
-    document.getElementById('sessions-sub').textContent = `${d.first_session || '—'} → ${d.last_session || '—'}`;
-    document.getElementById('tokens-sub').textContent = `${fmtTokens(d.total_tokens / Math.max(d.total_sessions, 1))} avg/session · input+output`;
-    document.getElementById('input-sub').textContent = `${fmtTokens(d.total_input / Math.max(d.total_sessions, 1))} avg/session`;
-    document.getElementById('output-sub').textContent = `${fmtTokens(d.total_output / Math.max(d.total_sessions, 1))} avg/session`;
+    const sourceLabel = d.active_tool_label || 'OpenCode';
+    const sourcePath = d.source_path || '~/.local/share/opencode/opencode.db';
+    const totalAvg = fmtTokens(d.total_tokens / Math.max(d.total_sessions, 1));
+    const inputAvg = fmtTokens(d.total_input / Math.max(d.total_sessions, 1));
+    const outputAvg = fmtTokens(d.total_output / Math.max(d.total_sessions, 1));
+    setCardMeta(
+      'sessions-sub',
+      `${d.first_session || '—'} → ${d.last_session || '—'}`,
+      `Source: ${sourceLabel}. Path: ${sourcePath}`,
+    );
+    setCardMeta(
+      'tokens-sub',
+      `${totalAvg} avg/session`,
+      `${d.token_total_definition || 'Total tokens are input + output.'} Source: ${sourceLabel} only. Cache read/write is shown as secondary context, not included in total tokens.`,
+    );
+    setCardMeta(
+      'input-sub',
+      `${inputAvg} avg/session`,
+      `${fmtTokens(d.cache_read || 0)} cache read. Reused context is shown separately from input tokens.`,
+    );
+    setCardMeta(
+      'output-sub',
+      `${outputAvg} avg/session`,
+      `${fmtTokens(d.cache_write || 0)} cache write. Cache created is shown separately from output tokens.`,
+    );
+    document.getElementById('tool-sources-subtitle').textContent = `Totals currently come from ${sourceLabel} (${sourcePath}). ${d.token_total_definition || 'Total tokens are input + output.'}`;
+    renderToolSources(d.tool_sources || []);
   } catch(e) {
     console.error('overview', e);
   }
@@ -644,7 +782,7 @@ async function loadModels(days) {
 
     const tbody = document.getElementById('model-table-body');
     if (!models.length) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">No data</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:40px;">No data</td></tr>';
       return;
     }
 
@@ -652,12 +790,17 @@ async function loadModels(days) {
     const estimatedTotal = priced.reduce((sum, m) => sum + (m.estimated_cost || 0), 0);
     const unpricedCount = models.length - priced.length;
     document.getElementById('estimated-cost').textContent = priced.length ? fmtCost(estimatedTotal) : '—';
-    document.getElementById('estimated-cost-sub').textContent = priced.length
-      ? `${priced.length}/${models.length} models priced · ${unpricedCount} unmatched`
-      : 'No matched pricing yet';
+    setCardMeta(
+      'estimated-cost-sub',
+      priced.length ? `${priced.length}/${models.length} priced` : 'No matched pricing',
+      priced.length
+        ? `${unpricedCount} unmatched models. Cost uses live OpenRouter pricing first, then hardcoded fallback pricing for known OpenAI and opencode/go models.`
+        : 'No OpenRouter or hardcoded pricing matched the active models.',
+    );
 
     tbody.innerHTML = models.map(m => `
       <tr>
+        <td><span class="tool-pill" style="border-color:${m.tool_color || '#64748B'};color:${m.tool_color || '#9aa0a6'};" title="${m.source_path || ''}">${m.tool || 'OpenCode'}</span></td>
         <td class="model-cell">
           <span class="legend-dot" style="background:${m.color};display:inline-block;vertical-align:middle;margin-right:6px;"></span>
           ${m.rank}. ${m.label}
@@ -816,12 +959,13 @@ async function loadHistory() {
 
     const tbody = document.getElementById('history-table-body');
     if (!sessions.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">No sessions</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">No sessions</td></tr>';
       return;
     }
 
     tbody.innerHTML = sessions.map(s => `
       <tr>
+        <td><span class="tool-pill" style="border-color:${s.tool_color || '#64748B'};color:${s.tool_color || '#9aa0a6'};" title="${s.source_path || ''}">${s.tool || 'OpenCode'}</span></td>
         <td style="font-family:var(--font-mono);font-size:12px;">${s.created}</td>
         <td class="model-cell" style="font-size:12px;">${s.model}</td>
         <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(s.title || '').replace(/"/g,'&quot;')}">${s.title || '(untitled)'}</td>
