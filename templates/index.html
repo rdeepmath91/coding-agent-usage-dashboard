@@ -3,24 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OpenCode Dashboard</title>
+<title>Coding Agent Usage Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="/static/color-modes.js"></script>
 <style>
   :root {
-    --bg-primary: #201d1d;
-    --bg-secondary: #282424;
-    --bg-tertiary: #302c2c;
-    --bg-card: #242121;
-    --border: #464141;
-    --text-primary: #fdfcfc;
-    --text-secondary: #b8b3b3;
-    --text-tertiary: #7d7777;
-    --accent: #007aff;
-    --accent-hover: #3395ff;
-    --green: #30d158;
-    --orange: #ff9f0a;
-    --red: #ff3b30;
+    --bg-primary: #08090a;
+    --bg-secondary: #111315;
+    --bg-tertiary: #1a1d20;
+    --bg-card: #0d0f11;
+    --border: #272b30;
+    --text-primary: #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --text-tertiary: #71717a;
+    --accent: #38bdf8;
+    --accent-hover: #7dd3fc;
+    --green: #34d399;
+    --orange: #f59e0b;
+    --red: #f87171;
     --radius: 4px;
     --font-sans: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -157,9 +157,150 @@
     padding: 18px 20px;
     min-height: 132px;
   }
-  .stat-card .label { font-size: 12px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .stat-card .label { font-size: 13px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
   .stat-card .value { font-size: clamp(24px, 2vw, 34px); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -1px; }
-  .stat-card .sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-family: var(--font-mono); }
+  .stat-card .sub {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 24px;
+    margin-top: 6px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .stat-card .meta-main { min-width: 0; overflow-wrap: anywhere; }
+  .stat-card .meta-info-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+  }
+  .stat-card .meta-info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-tertiary);
+    background: var(--bg-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 0;
+  }
+  .stat-card .meta-info:hover,
+  .stat-card .meta-info:focus-visible,
+  .stat-card .meta-info-wrap.is-open .meta-info {
+    outline: none;
+    color: var(--text-primary);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgb(33 150 243 / 0.18);
+  }
+  .stat-card .meta-tooltip {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    transform: translateX(-50%) translateY(4px);
+    width: min(280px, calc(100vw - 48px));
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    box-shadow: 0 12px 30px rgb(0 0 0 / 0.35);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+    z-index: 20;
+  }
+  .stat-card .meta-tooltip::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    transform: translateX(-50%);
+    border-width: 6px;
+    border-style: solid;
+    border-color: var(--bg-tertiary) transparent transparent transparent;
+  }
+  .stat-card .meta-info-wrap:hover .meta-tooltip,
+  .stat-card .meta-info-wrap:focus-within .meta-tooltip,
+  .stat-card .meta-info-wrap.is-open .meta-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+  }
+  @media (max-width: 720px) {
+    .stat-card .meta-tooltip {
+      left: auto;
+      right: -8px;
+      transform: translateY(4px);
+      width: min(240px, calc(100vw - 32px));
+    }
+    .stat-card .meta-tooltip::after {
+      left: auto;
+      right: 12px;
+      transform: none;
+    }
+    .stat-card .meta-info-wrap:hover .meta-tooltip,
+    .stat-card .meta-info-wrap:focus-within .meta-tooltip,
+    .stat-card .meta-info-wrap.is-open .meta-tooltip {
+      transform: translateY(0);
+    }
+  }
+
+  .tool-section {
+    margin: -12px 0 32px;
+  }
+  .tool-section h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .tool-section .subtitle { font-family: var(--font-mono); font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
+  .tool-source-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .tool-source-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    min-height: 118px;
+  }
+  .tool-source-card.placeholder {
+    border-style: dashed;
+    opacity: 0.78;
+  }
+  .tool-source-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .tool-source-name { font-weight: 600; }
+  .tool-source-status { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.4px; }
+  .tool-source-value { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tool-source-meta { margin-top: 6px; color: var(--text-secondary); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; }
+  .tool-pill {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 8px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    white-space: nowrap;
+  }
 
   /* Chart */
   .chart-container {
@@ -169,17 +310,73 @@
     padding: 22px 24px 18px;
     margin-bottom: 40px;
   }
-  .chart-container h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+  .chart-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .chart-container h2 { font-size: 16px; font-weight: 600; margin-bottom: 3px; }
+  .chart-note { color: var(--text-tertiary); font-size: 12px; }
+  .chart-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .chart-controls select { min-width: 92px; padding: 6px 28px 6px 10px; font-size: 12px; }
+  .chart-filter-bar {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: -4px 0 16px;
+    padding: 9px 12px;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    background: rgb(33 150 243 / 0.08);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .chart-filter-bar.active { display: flex; }
+  .chart-filter-model { color: var(--text-primary); font-weight: 600; }
+  .chart-filter-clear {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font: inherit;
+    padding: 4px 10px;
+    transition: color 0.12s, border-color 0.12s, background-color 0.12s;
+  }
+  .chart-filter-clear:hover,
+  .chart-filter-clear:focus-visible {
+    outline: none;
+    color: var(--text-primary);
+    border-color: var(--accent);
+    background: var(--bg-tertiary);
+  }
+  .chart-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 20px;
+    align-items: stretch;
+  }
+  .chart-plot { position: relative; height: 360px; min-width: 0; }
 
   /* Legend */
   .chart-legend {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 14px;
-    padding-top: 14px;
-    border-top: 1px solid var(--border);
-    max-height: 116px;
+    flex-direction: column;
+    gap: 7px;
+    padding-left: 18px;
+    border-left: 1px solid var(--border);
+    max-height: 360px;
     overflow: auto;
   }
   .legend-item {
@@ -194,6 +391,29 @@
     border-radius: var(--radius);
     background: var(--bg-secondary);
     white-space: nowrap;
+    cursor: pointer;
+    transition: opacity 0.12s, border-color 0.12s, background 0.12s;
+    appearance: none;
+    text-align: left;
+  }
+  .legend-item:hover { border-color: var(--accent); background: var(--bg-tertiary); }
+  .legend-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .legend-item.muted { opacity: 0.35; }
+  .legend-item.disabled { opacity: 0.42; text-decoration: line-through; }
+  .legend-name { overflow: hidden; text-overflow: ellipsis; }
+
+  @media (max-width: 1040px) {
+    .chart-layout { display: block; }
+    .chart-legend {
+      flex-direction: row;
+      flex-wrap: wrap;
+      margin-top: 14px;
+      padding-left: 0;
+      padding-top: 14px;
+      border-left: 0;
+      border-top: 1px solid var(--border);
+      max-height: 116px;
+    }
   }
   .legend-dot {
     width: 10px;
@@ -201,6 +421,9 @@
     border-radius: 2px;
     flex-shrink: 0;
   }
+  .legend-item.other { color: var(--text-tertiary); }
+  .legend-item.other .legend-dot { opacity: 0.72; }
+  .legend-share { color: var(--text-tertiary); margin-left: 2px; }
 
   /* Table */
   .table-section { margin-top: 12px; }
@@ -230,9 +453,39 @@
     font-variant-numeric: tabular-nums;
   }
   .data-table tr:hover td { background: var(--bg-tertiary); }
+  .data-table tr.model-filter-row.active td {
+    background: rgb(33 150 243 / 0.1);
+    border-bottom-color: rgb(33 150 243 / 0.35);
+  }
   .data-table .model-cell { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
   .data-table .num { text-align: right; font-family: var(--font-mono); }
   .data-table .token-cell { color: var(--accent); font-weight: 600; }
+  .chart-focus-button {
+    margin-left: 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .chart-focus-button:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+  }
+  .chart-focus-button[aria-pressed="true"] {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: rgb(33 150 243 / 0.12);
+  }
+  .chart-focus-button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 
   .model-badge {
     display: inline-block;
@@ -352,14 +605,16 @@
 
   /* Responsive */
   @media (max-width: 1280px) {
-    .stat-cards { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+    .stat-cards { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .tool-source-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
   }
 
   @media (max-width: 800px) {
     .app-layout { display: block; }
     .sidebar { display: none; }
     .main-area { padding: 24px 16px; }
-    .stat-cards { grid-template-columns: 1fr; }
+    .stat-cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+    .tool-source-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -368,7 +623,7 @@
 <div class="app-layout">
   <!-- Sidebar -->
   <aside class="sidebar">
-    <div class="logo">opencode <span>dashboard</span></div>
+    <div class="logo">coding agent <span>usage</span></div>
     <a href="#cost" class="nav-item active" data-nav="cost">☤ Overview</a>
     <a href="#models" class="nav-item" data-nav="models">◇ Models</a>
     <a href="#usage" class="nav-item" data-nav="usage">◆ Usage</a>
@@ -379,7 +634,7 @@
   <main class="main-area">
     <section id="cost" class="page-header">
       <h1>Overview</h1>
-      <div class="subtitle">Sessions and tokens broken down by model.</div>
+      <div class="subtitle">Sessions and tokens broken down by model. Cache is shown as secondary context.</div>
     </section>
 
     <!-- Pill tabs -->
@@ -416,33 +671,66 @@
         <div class="value" id="total-output">—</div>
         <div class="sub" id="output-sub"></div>
       </div>
+      <div class="stat-card">
+        <div class="label">Est. Cost</div>
+        <div class="value" id="estimated-cost">—</div>
+        <div class="sub" id="estimated-cost-sub">OpenRouter pricing when matched</div>
+      </div>
     </div>
+
+    <section class="tool-section" aria-labelledby="tool-sources-heading">
+      <h2 id="tool-sources-heading">Tool Sources</h2>
+      <div class="subtitle" id="tool-sources-subtitle">Active source and planned tool adapters.</div>
+      <div class="tool-source-grid" id="tool-source-grid"></div>
+    </section>
 
     <!-- Chart -->
     <div class="chart-container">
-      <h2>Daily Tokens by Model</h2>
-      <div style="position:relative;height:360px;">
-        <canvas id="usage-chart"></canvas>
+      <div class="chart-header">
+        <div>
+          <h2>Daily Tokens by Model</h2>
+          <div class="chart-note" id="chart-note">Position-based categorical colors · top models by token volume · long tail grouped as Other</div>
+        </div>
+        <label class="chart-controls">
+          Show
+          <select id="top-n-select" aria-label="Number of models shown in chart">
+            <option value="5">Top 5</option>
+            <option value="6">Top 6</option>
+            <option value="8" selected>Top 8</option>
+          </select>
+        </label>
       </div>
-      <div class="chart-legend" id="chart-legend"></div>
+      <div class="chart-filter-bar" id="chart-filter-bar" aria-live="polite">
+        <span>Chart focused on <span class="chart-filter-model" id="chart-filter-model">one model</span></span>
+        <button class="chart-filter-clear" id="clear-chart-filter" type="button">Clear filter</button>
+      </div>
+      <div class="chart-layout">
+        <div class="chart-plot">
+          <canvas id="usage-chart"></canvas>
+        </div>
+        <div class="chart-legend" id="chart-legend"></div>
+      </div>
     </div>
 
     <!-- Model breakdown table -->
     <section class="table-section" id="models">
       <h2>Model Breakdown</h2>
-      <div class="subtitle">Sessions and tokens broken down by model.</div>
+      <div class="subtitle">Sessions, tokens, and estimated cost by model. Cost uses latest matched OpenRouter pricing and is approximate.</div>
       <table class="data-table">
         <thead>
           <tr>
+            <th>Tool</th>
             <th>Model</th>
             <th class="num">Sessions</th>
             <th class="num">Total Tokens</th>
             <th class="num">Input</th>
             <th class="num">Output</th>
+            <th class="num">Cache Read</th>
+            <th class="num">Est. Cost</th>
           </tr>
         </thead>
         <tbody id="model-table-body">
-          <tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
+          <tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
         </tbody>
       </table>
     </section>
@@ -450,10 +738,11 @@
     <!-- Usage History -->
     <section class="table-section" id="usage" style="margin-top:40px;">
       <h2>Usage History</h2>
-      <div class="subtitle">Recent OpenCode sessions and token usage.</div>
+      <div class="subtitle">Recent coding-agent sessions and token usage. OpenCode is the active source.</div>
       <table class="data-table">
         <thead>
           <tr>
+            <th>Tool</th>
             <th>Date</th>
             <th>Model</th>
             <th>Title</th>
@@ -463,13 +752,13 @@
           </tr>
         </thead>
         <tbody id="history-table-body">
-          <tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
+          <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
         </tbody>
       </table>
     </section>
 
     <div class="footer">
-      ◇ <span id="db-path-display">~/.local/share/opencode/opencode.db</span>
+      ◇ active source: <span id="db-path-display">OpenCode · ~/.local/share/opencode/opencode.db</span>
       ☤ last updated: <span id="last-updated">—</span>
     </div>
   </main>
@@ -478,6 +767,10 @@
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 let usageChart = null;
+let currentTopN = 8;
+let selectedChartModelId = null;
+let selectedChartModelLabel = null;
+const hiddenChartModels = new Set();
 const FORMATTER = new Intl.NumberFormat('en-US');
 function fmtNum(n) { return FORMATTER.format(n); }
 
@@ -488,11 +781,174 @@ function fmtTokens(n) {
   return String(n);
 }
 
+function fmtCost(n) {
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
+  if (n === 0) return '$0.00';
+  if (Math.abs(n) < 0.01) return `$${Number(n).toFixed(4)}`;
+  return `$${Number(n).toFixed(2)}`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"]/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+  }[char]));
+}
+
+function sanitizeColor(value, fallback = '#64748B') {
+  const raw = String(value ?? '').trim();
+  return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(raw) ? raw : fallback;
+}
+
+function clearNode(node) {
+  node.replaceChildren();
+}
+
+function makeTableEmptyState(tbody, colspan, message) {
+  clearNode(tbody);
+  const row = document.createElement('tr');
+  const cell = document.createElement('td');
+  cell.colSpan = colspan;
+  cell.style.textAlign = 'center';
+  cell.style.color = 'var(--text-tertiary)';
+  cell.style.padding = '40px';
+  cell.textContent = message;
+  row.appendChild(cell);
+  tbody.appendChild(row);
+}
+
+function createToolPill({ tool, toolColor, sourcePath }) {
+  const pill = document.createElement('span');
+  pill.className = 'tool-pill';
+  pill.style.borderColor = sanitizeColor(toolColor, '#64748B');
+  pill.style.color = sanitizeColor(toolColor, '#9aa0a6');
+  pill.title = String(sourcePath || '');
+  pill.textContent = tool || 'OpenCode';
+  return pill;
+}
+
+function createLegendDot(color) {
+  const dot = document.createElement('span');
+  dot.className = 'legend-dot';
+  dot.style.background = sanitizeColor(color, '#64748B');
+  return dot;
+}
+
+function setCardMeta(id, visible, detail = '') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const detailText = String(detail || '');
+  const tooltipId = `${id}-tooltip`;
+  el.innerHTML = `
+    <span class="meta-main">${escapeHtml(visible)}</span>
+    ${detailText ? `
+      <span class="meta-info-wrap">
+        <button
+          type="button"
+          class="meta-info"
+          aria-label="More information"
+          aria-expanded="false"
+          aria-describedby="${escapeHtml(tooltipId)}"
+        >i</button>
+        <span class="meta-tooltip" id="${escapeHtml(tooltipId)}" role="tooltip">${escapeHtml(detailText)}</span>
+      </span>
+    ` : ''}
+  `;
+  bindMetaInfoInteractions(el);
+}
+
+function closeMetaInfo(exceptWrap = null) {
+  document.querySelectorAll('.meta-info-wrap.is-open').forEach(wrap => {
+    if (wrap === exceptWrap) return;
+    wrap.classList.remove('is-open');
+    wrap.querySelector('.meta-info')?.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function bindMetaInfoInteractions(root = document) {
+  root.querySelectorAll('.meta-info-wrap .meta-info').forEach(button => {
+    if (button.dataset.bound === 'true') return;
+    button.dataset.bound = 'true';
+
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const wrap = button.closest('.meta-info-wrap');
+      const willOpen = !wrap.classList.contains('is-open');
+      closeMetaInfo(wrap);
+      wrap.classList.toggle('is-open', willOpen);
+      button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    });
+
+    button.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        const wrap = button.closest('.meta-info-wrap');
+        wrap?.classList.remove('is-open');
+        button.setAttribute('aria-expanded', 'false');
+        button.blur();
+      }
+    });
+  });
+}
+
+function renderToolSources(sources = []) {
+  const grid = document.getElementById('tool-source-grid');
+  if (!grid) return;
+  clearNode(grid);
+
+  sources.forEach(source => {
+    const active = source.status === 'active';
+    const value = active && source.tokens_total !== null ? fmtTokens(source.tokens_total || 0) : '—';
+    const color = sanitizeColor(source.color, '#64748B');
+
+    const card = document.createElement('article');
+    card.className = `tool-source-card ${active ? 'active' : 'placeholder'}`;
+    if (active) {
+      card.style.borderColor = color;
+      card.style.borderLeft = `3px solid ${color}`;
+      card.style.paddingLeft = '13px';
+    }
+
+    const head = document.createElement('div');
+    head.className = 'tool-source-head';
+
+    const name = document.createElement('span');
+    name.className = 'tool-source-name';
+    name.style.color = color;
+    name.textContent = source.label || 'Unknown';
+
+    const status = document.createElement('span');
+    status.className = 'tool-source-status';
+    status.textContent = source.status_label || '';
+
+    const valueEl = document.createElement('div');
+    valueEl.className = 'tool-source-value';
+    valueEl.textContent = value;
+
+    const meta = document.createElement('div');
+    meta.className = 'tool-source-meta';
+    meta.textContent = active ? String(source.source_path || '') : String(source.source_path || '');
+
+    head.append(name, status);
+    card.append(head, valueEl, meta);
+    grid.appendChild(card);
+  });
+}
+
 // ── Range tabs ──────────────────────────────────────────────────────────────
 let currentDays = 30;
+const pageSearch = new URLSearchParams(window.location.search);
 
 function rangeParam() {
   return currentDays === 0 ? 'all' : String(currentDays);
+}
+
+function simulateQuerySuffix() {
+  return pageSearch.get('simulate') === '1' || pageSearch.get('demo') === '1'
+    ? '&simulate=1'
+    : '';
 }
 
 document.querySelectorAll('#range-tabs .pill').forEach(btn => {
@@ -518,6 +974,16 @@ document.getElementById('custom-days').addEventListener('keydown', (event) => {
   if (event.key === 'Enter') document.getElementById('apply-custom-days').click();
 });
 
+document.getElementById('top-n-select').addEventListener('change', (event) => {
+  currentTopN = parseInt(event.target.value || '8');
+  hiddenChartModels.clear();
+  loadDaily(currentDays);
+});
+
+document.getElementById('clear-chart-filter').addEventListener('click', () => {
+  clearChartModelFilter();
+});
+
 // ── Load everything ─────────────────────────────────────────────────────────
 async function loadAll() {
   await Promise.all([loadOverview(currentDays), loadModels(currentDays), loadDaily(currentDays), loadHistory()]);
@@ -525,7 +991,7 @@ async function loadAll() {
 
 async function loadOverview(days) {
   try {
-    const r = await fetch(`/api/overview?days=${rangeParam()}`);
+    const r = await fetch(`/api/overview?days=${rangeParam()}${simulateQuerySuffix()}`);
     const d = await r.json();
 
     document.getElementById('total-sessions').textContent = fmtNum(d.total_sessions);
@@ -533,10 +999,33 @@ async function loadOverview(days) {
     document.getElementById('total-input').textContent = fmtTokens(d.total_input);
     document.getElementById('total-output').textContent = fmtTokens(d.total_output);
 
-    document.getElementById('sessions-sub').textContent = `${d.first_session || '—'} → ${d.last_session || '—'}`;
-    document.getElementById('tokens-sub').textContent = `${fmtTokens(d.total_tokens / Math.max(d.total_sessions, 1))} avg/session`;
-    document.getElementById('input-sub').textContent = `${fmtTokens(d.total_input / Math.max(d.total_sessions, 1))} avg/session`;
-    document.getElementById('output-sub').textContent = `${fmtTokens(d.total_output / Math.max(d.total_sessions, 1))} avg/session`;
+    const sourceLabel = d.active_tool_label || 'OpenCode';
+    const sourcePath = d.source_path || '~/.local/share/opencode/opencode.db';
+    const totalAvg = fmtTokens(d.total_tokens / Math.max(d.total_sessions, 1));
+    const inputAvg = fmtTokens(d.total_input / Math.max(d.total_sessions, 1));
+    const outputAvg = fmtTokens(d.total_output / Math.max(d.total_sessions, 1));
+    setCardMeta(
+      'sessions-sub',
+      `${d.first_session || '—'} → ${d.last_session || '—'}`,
+      `Source: ${sourceLabel}. Path: ${sourcePath}`,
+    );
+    setCardMeta(
+      'tokens-sub',
+      `${totalAvg} avg/session`,
+      `${d.token_total_definition || 'Total tokens are input + output.'} Source: ${sourceLabel} only. Cache read/write is shown as secondary context, not included in total tokens.`,
+    );
+    setCardMeta(
+      'input-sub',
+      `${inputAvg} avg/session`,
+      `${fmtTokens(d.cache_read || 0)} cache read. Reused context is shown separately from input tokens.`,
+    );
+    setCardMeta(
+      'output-sub',
+      `${outputAvg} avg/session`,
+      `${fmtTokens(d.cache_write || 0)} cache write. Cache created is shown separately from output tokens.`,
+    );
+    document.getElementById('tool-sources-subtitle').textContent = `Totals currently come from ${sourceLabel} (${sourcePath}). ${d.token_total_definition || 'Total tokens are input + output.'}`;
+    renderToolSources(d.tool_sources || []);
   } catch(e) {
     console.error('overview', e);
   }
@@ -544,27 +1033,90 @@ async function loadOverview(days) {
 
 async function loadModels(days) {
   try {
-    const r = await fetch(`/api/models?days=${rangeParam()}`);
+    const r = await fetch(`/api/models?days=${rangeParam()}${simulateQuerySuffix()}`);
     const models = await r.json();
 
     const tbody = document.getElementById('model-table-body');
     if (!models.length) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:40px;">No data</td></tr>';
+      makeTableEmptyState(tbody, 8, 'No data');
       return;
     }
 
-    tbody.innerHTML = models.map(m => `
-      <tr>
-        <td class="model-cell">
-          <span class="legend-dot" style="background:${m.color};display:inline-block;vertical-align:middle;margin-right:6px;"></span>
-          ${m.label}
-        </td>
-        <td class="num">${fmtNum(m.sessions)}</td>
-        <td class="num">${fmtTokens(m.tokens_total)}</td>
-        <td class="num">${fmtTokens(m.tokens_input)}</td>
-        <td class="num">${fmtTokens(m.tokens_output)}</td>
-      </tr>
-    `).join('');
+    const priced = models.filter(m => m.estimated_cost !== null && m.estimated_cost !== undefined);
+    const estimatedTotal = priced.reduce((sum, m) => sum + (m.estimated_cost || 0), 0);
+    const unpricedCount = models.length - priced.length;
+    document.getElementById('estimated-cost').textContent = priced.length ? fmtCost(estimatedTotal) : '—';
+    setCardMeta(
+      'estimated-cost-sub',
+      priced.length ? `${priced.length}/${models.length} priced` : 'No matched pricing',
+      priced.length
+        ? `${unpricedCount} unmatched models. Cost uses live OpenRouter pricing first, then hardcoded fallback pricing for known OpenAI and opencode/go models.`
+        : 'No OpenRouter or hardcoded pricing matched the active models.',
+    );
+
+    clearNode(tbody);
+    models.forEach(m => {
+      const row = document.createElement('tr');
+      row.className = 'model-filter-row';
+      row.dataset.chartModelId = m.chart_model_id || '';
+      row.dataset.chartModelLabel = m.label || '';
+      row.classList.toggle('active', selectedChartModelId === m.chart_model_id);
+
+      const toolCell = document.createElement('td');
+      toolCell.appendChild(createToolPill({
+        tool: m.tool,
+        toolColor: m.tool_color,
+        sourcePath: m.source_path,
+      }));
+
+      const modelCell = document.createElement('td');
+      modelCell.className = 'model-cell';
+      modelCell.appendChild(createLegendDot(m.color));
+      modelCell.append(document.createTextNode(` ${m.rank}. ${m.label}`));
+
+      const focusButton = document.createElement('button');
+      focusButton.type = 'button';
+      focusButton.className = 'chart-focus-button';
+      focusButton.dataset.chartModelId = m.chart_model_id || '';
+      focusButton.dataset.chartModelLabel = m.label || '';
+      focusButton.setAttribute('aria-label', `Focus chart on ${m.label || 'selected model'}`);
+      focusButton.setAttribute('aria-pressed', selectedChartModelId === m.chart_model_id ? 'true' : 'false');
+      focusButton.textContent = selectedChartModelId === m.chart_model_id ? 'Clear focus' : 'Focus chart';
+      modelCell.appendChild(focusButton);
+
+      const sessionsCell = document.createElement('td');
+      sessionsCell.className = 'num';
+      sessionsCell.textContent = fmtNum(m.sessions);
+
+      const totalCell = document.createElement('td');
+      totalCell.className = 'num';
+      totalCell.textContent = fmtTokens(m.tokens_total);
+
+      const inputCell = document.createElement('td');
+      inputCell.className = 'num';
+      inputCell.textContent = fmtTokens(m.tokens_input);
+
+      const outputCell = document.createElement('td');
+      outputCell.className = 'num';
+      outputCell.textContent = fmtTokens(m.tokens_output);
+
+      const cacheCell = document.createElement('td');
+      cacheCell.className = 'num';
+      cacheCell.title = `Cache write: ${fmtTokens(m.cache_write || 0)}`;
+      cacheCell.textContent = fmtTokens(m.cache_read || 0);
+
+      const costCell = document.createElement('td');
+      costCell.className = 'num';
+      costCell.title = m.pricing_status === 'priced'
+        ? `${m.pricing_source}: ${m.pricing_model_id}`
+        : `No matched pricing for ${m.pricing_model_id || m.model_id}`;
+      costCell.textContent = fmtCost(m.estimated_cost);
+
+      row.append(toolCell, modelCell, sessionsCell, totalCell, inputCell, outputCell, cacheCell, costCell);
+      tbody.appendChild(row);
+    });
+    bindModelFilterButtons(tbody);
+    updateChartFilterUi();
   } catch(e) {
     console.error('models', e);
   }
@@ -572,14 +1124,73 @@ async function loadModels(days) {
 
 async function loadDaily(days) {
   try {
-    const r = await fetch(`/api/daily?days=${rangeParam()}`);
+    const selectedParam = selectedChartModelId ? `&model_id=${encodeURIComponent(selectedChartModelId)}` : '';
+    const r = await fetch(`/api/daily?days=${rangeParam()}&top_n=${currentTopN}${selectedParam}${simulateQuerySuffix()}`);
     const data = await r.json();
 
+    syncChartModelSelection(data);
     renderChart(data);
     renderLegend(data.models);
+    updateChartFilterUi();
+    document.getElementById('chart-note').textContent = selectedChartModelId
+      ? 'Single-model focus · click Clear filter to restore Top N view'
+      : `Position-based colors · top ${data.top_n} models by token volume · ${data.other_count || 0} long-tail models grouped as Other`;
   } catch(e) {
     console.error('daily', e);
   }
+}
+
+function updateChartFilterUi() {
+  const bar = document.getElementById('chart-filter-bar');
+  const label = document.getElementById('chart-filter-model');
+  if (!bar || !label) return;
+  bar.classList.toggle('active', Boolean(selectedChartModelId));
+  label.textContent = selectedChartModelLabel || 'selected model';
+  document.querySelectorAll('.model-filter-row').forEach(row => {
+    const active = row.dataset.chartModelId === selectedChartModelId;
+    row.classList.toggle('active', active);
+    const button = row.querySelector('.chart-focus-button');
+    if (!button) return;
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    button.textContent = active ? 'Clear focus' : 'Focus chart';
+  });
+}
+
+function syncChartModelSelection(data) {
+  if (!data?.selected_model_id) {
+    selectedChartModelId = null;
+    selectedChartModelLabel = null;
+    return;
+  }
+  selectedChartModelId = data.selected_model_id;
+  const selectedMeta = (data.models || []).find(model => model.id === data.selected_model_id);
+  selectedChartModelLabel = selectedMeta?.label || selectedChartModelLabel || data.selected_model_id;
+}
+
+function setChartModelFilter(modelId, label) {
+  const sameModel = selectedChartModelId === modelId;
+  selectedChartModelId = sameModel ? null : modelId;
+  selectedChartModelLabel = sameModel ? null : label;
+  hiddenChartModels.clear();
+  loadDaily(currentDays);
+  updateChartFilterUi();
+}
+
+function clearChartModelFilter() {
+  selectedChartModelId = null;
+  selectedChartModelLabel = null;
+  hiddenChartModels.clear();
+  loadDaily(currentDays);
+  updateChartFilterUi();
+}
+
+function bindModelFilterButtons(root) {
+  root.querySelectorAll('.chart-focus-button').forEach(button => {
+    button.addEventListener('click', event => {
+      event.preventDefault();
+      setChartModelFilter(button.dataset.chartModelId, button.dataset.chartModelLabel);
+    });
+  });
 }
 
 function renderChart(data) {
@@ -589,20 +1200,22 @@ function renderChart(data) {
 
   const datasets = data.models.map(m => ({
     label: m.label,
+    modelId: m.id,
     data: data.dates.map(dt => (data.data[dt]?.[m.id]?.tokens_total ?? 0)),
     backgroundColor: m.color,
     borderColor: m.color,
-    borderWidth: 0,
+    borderWidth: m.id === 'other' ? 1 : 0,
     borderRadius: 0,
     hoverBackgroundColor: m.color,
     pointRadius: 0,
     tension: 0,
+    hidden: hiddenChartModels.has(m.id),
   }));
 
   usageChart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: data.dates.map((d, i) => i % 3 === 0 ? d : ''),
+      labels: data.dates,
       datasets,
     },
     options: {
@@ -617,6 +1230,9 @@ function renderChart(data) {
             color: '#5f6368',
             font: { family: "'JetBrains Mono', monospace", size: 11 },
             maxRotation: 0,
+            callback: function(value, index) {
+              return index % 3 === 0 ? this.getLabelForValue(value) : '';
+            },
           },
           border: { display: false },
         },
@@ -658,37 +1274,117 @@ function renderChart(data) {
   });
 }
 
+function setLegendHover(modelId) {
+  if (!usageChart) return;
+  usageChart.data.datasets.forEach(ds => {
+    const active = !modelId || ds.modelId === modelId;
+    ds.backgroundColor = active ? ds.borderColor : `${ds.borderColor}55`;
+  });
+  usageChart.update('none');
+  document.querySelectorAll('.legend-item').forEach(item => {
+    item.classList.toggle('muted', Boolean(modelId) && item.dataset.modelId !== modelId);
+  });
+}
+
+function toggleChartModel(modelId) {
+  if (!usageChart) return;
+  const index = usageChart.data.datasets.findIndex(ds => ds.modelId === modelId);
+  if (index < 0) return;
+  const visible = usageChart.isDatasetVisible(index);
+  usageChart.setDatasetVisibility(index, !visible);
+  if (visible) hiddenChartModels.add(modelId); else hiddenChartModels.delete(modelId);
+  usageChart.update();
+  const button = document.querySelector(`.legend-item[data-model-id="${CSS.escape(modelId)}"]`);
+  button?.classList.toggle('disabled', visible);
+  button?.setAttribute('aria-pressed', visible ? 'false' : 'true');
+}
+
 function renderLegend(models) {
   const el = document.getElementById('chart-legend');
-  el.innerHTML = models.map(m => `
-    <div class="legend-item">
-      <span class="legend-dot" style="background:${m.color};"></span>
-      ${m.label}
-    </div>
-  `).join('');
+  const visibleTotal = models.reduce((sum, m) => sum + (m.tokens_total || 0), 0) || 1;
+  clearNode(el);
+
+  models.forEach(m => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = `legend-item ${m.id === 'other' ? 'other' : ''} ${hiddenChartModels.has(m.id) ? 'disabled' : ''}`.trim();
+    item.dataset.modelId = m.id || '';
+    item.title = 'Click to hide/show. Hover to highlight.';
+    item.setAttribute('aria-pressed', hiddenChartModels.has(m.id) ? 'false' : 'true');
+
+    item.appendChild(createLegendDot(m.color));
+
+    const name = document.createElement('span');
+    name.className = 'legend-name';
+    name.textContent = `${m.rank ? `${m.rank}. ` : ''}${m.label}`;
+
+    const share = document.createElement('span');
+    share.className = 'legend-share';
+    share.textContent = `${Math.round(((m.tokens_total || 0) / visibleTotal) * 100)}%`;
+
+    item.append(name, share);
+    item.addEventListener('mouseenter', () => setLegendHover(item.dataset.modelId));
+    item.addEventListener('mouseleave', () => setLegendHover(null));
+    item.addEventListener('click', () => toggleChartModel(item.dataset.modelId));
+    el.appendChild(item);
+  });
 }
 
 async function loadHistory() {
   try {
-    const r = await fetch('/api/usage-history?limit=30');
+    const r = await fetch(`/api/usage-history?limit=30${simulateQuerySuffix()}`);
     const sessions = await r.json();
 
     const tbody = document.getElementById('history-table-body');
     if (!sessions.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">No sessions</td></tr>';
+      makeTableEmptyState(tbody, 7, 'No sessions');
       return;
     }
 
-    tbody.innerHTML = sessions.map(s => `
-      <tr>
-        <td style="font-family:var(--font-mono);font-size:12px;">${s.created}</td>
-        <td class="model-cell" style="font-size:12px;">${s.model}</td>
-        <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(s.title || '').replace(/"/g,'&quot;')}">${s.title || '(untitled)'}</td>
-        <td class="num">${fmtTokens(s.tokens_total)}</td>
-        <td class="num">${fmtTokens(s.tokens_input)}</td>
-        <td class="num">${fmtTokens(s.tokens_output)}</td>
-      </tr>
-    `).join('');
+    clearNode(tbody);
+    sessions.forEach(s => {
+      const row = document.createElement('tr');
+
+      const toolCell = document.createElement('td');
+      toolCell.appendChild(createToolPill({
+        tool: s.tool,
+        toolColor: s.tool_color,
+        sourcePath: s.source_path,
+      }));
+
+      const createdCell = document.createElement('td');
+      createdCell.style.fontFamily = 'var(--font-mono)';
+      createdCell.style.fontSize = '12px';
+      createdCell.textContent = s.created || '—';
+
+      const modelCell = document.createElement('td');
+      modelCell.className = 'model-cell';
+      modelCell.style.fontSize = '12px';
+      modelCell.textContent = s.model || 'Unknown';
+
+      const titleCell = document.createElement('td');
+      titleCell.style.maxWidth = '350px';
+      titleCell.style.overflow = 'hidden';
+      titleCell.style.textOverflow = 'ellipsis';
+      titleCell.style.whiteSpace = 'nowrap';
+      titleCell.title = String(s.title || '(untitled)');
+      titleCell.textContent = s.title || '(untitled)';
+
+      const totalCell = document.createElement('td');
+      totalCell.className = 'num';
+      totalCell.textContent = fmtTokens(s.tokens_total);
+
+      const inputCell = document.createElement('td');
+      inputCell.className = 'num';
+      inputCell.textContent = fmtTokens(s.tokens_input);
+
+      const outputCell = document.createElement('td');
+      outputCell.className = 'num';
+      outputCell.textContent = fmtTokens(s.tokens_output);
+
+      row.append(toolCell, createdCell, modelCell, titleCell, totalCell, inputCell, outputCell);
+      tbody.appendChild(row);
+    });
   } catch(e) {
     console.error('history', e);
   }
@@ -714,6 +1410,18 @@ const sectionObserver = new IntersectionObserver(entries => {
 }, { threshold: [0.2, 0.5, 0.8] });
 
 document.querySelectorAll('section[id]').forEach(s => sectionObserver.observe(s));
+
+document.addEventListener('click', event => {
+  if (!event.target.closest('.meta-info-wrap')) {
+    closeMetaInfo();
+  }
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    closeMetaInfo();
+  }
+});
 
 // ── Init ────────────────────────────────────────────────────────────────────
 loadAll();
