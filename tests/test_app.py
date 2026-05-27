@@ -203,8 +203,12 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(sources['opencode']['source_path'], display_like_app(self.db_path))
         self.assertEqual(sources['codex']['status'], 'placeholder')
         self.assertEqual(sources['codex']['color'], '#BA68C8')
+        self.assertEqual(sources['codex']['source_path'], 'TBD')
+        self.assertIsNone(sources['codex']['issue'])
         self.assertEqual(sources['hermes']['status'], 'placeholder')
         self.assertEqual(sources['hermes']['color'], '#EAB308')
+        self.assertEqual(sources['hermes']['source_path'], 'TBD')
+        self.assertIsNone(sources['hermes']['issue'])
 
     def test_models_and_history_include_tool_color(self):
         models_response = self.client.get('/api/models?days=30')

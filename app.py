@@ -43,9 +43,9 @@ TOOL_SOURCES = [
         "status": "placeholder",
         "status_label": "Planned",
         "source_type": "Local session/history data",
-        "source_path": "pending discovery",
+        "source_path": "TBD",
         "color": "#BA68C8",
-        "issue": "#3",
+        "issue": None,
     },
     {
         "id": "hermes",
@@ -53,9 +53,9 @@ TOOL_SOURCES = [
         "status": "placeholder",
         "status_label": "Planned",
         "source_type": "Local session/tool logs or session DB",
-        "source_path": "pending discovery",
+        "source_path": "TBD",
         "color": "#EAB308",
-        "issue": "#4",
+        "issue": None,
     },
 ]
 

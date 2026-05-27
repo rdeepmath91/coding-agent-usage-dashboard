@@ -929,7 +929,7 @@ function renderToolSources(sources = []) {
 
     const meta = document.createElement('div');
     meta.className = 'tool-source-meta';
-    meta.textContent = active ? String(source.source_path || '') : String(source.issue || '');
+    meta.textContent = active ? String(source.source_path || '') : String(source.source_path || '');
 
     head.append(name, status);
     card.append(head, valueEl, meta);
