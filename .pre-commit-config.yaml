@@ -1,0 +1,14 @@
+repos:
+  - repo: local
+    hooks:
+      - id: unit-tests
+        name: Run unit tests
+        entry: uv run python -m unittest tests.test_app tests.test_readme -v
+        language: system
+        pass_filenames: false
+
+      - id: python-compile
+        name: Compile Python files
+        entry: uv run python -m py_compile app.py scripts/snapshot_dashboard.py
+        language: system
+        pass_filenames: false
