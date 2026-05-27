@@ -11,8 +11,9 @@ getting the dashboard running locally and capturing snapshots.
 
 ### 1. Install uv
 
-This repo uses [uv](https://docs.astral.sh/uv/) for environment setup and local
-runs.
+This repo uses [uv](https://docs.astral.sh/uv/) as a proper project environment,
+so the committed `pyproject.toml` and `uv.lock` are the source of truth for a
+reproducible local setup.
 
 ```bash
 # macOS / Linux
@@ -22,13 +23,14 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 pip install uv
 ```
 
-### 2. Create the environment and install dependencies
+### 2. Sync the project environment
 
 ```bash
 cd coding-agent-usage-dashboard
-uv venv
-uv pip install -r requirements.txt
+uv sync
 ```
+
+That creates the local environment from the committed lockfile.
 
 ### 3. Run the dashboard
 
@@ -90,6 +92,6 @@ review what the dashboard actually showed at capture time.
 ## Local verification
 
 ```bash
-python -m unittest tests.test_app tests.test_readme -v
-python -m py_compile app.py scripts/snapshot_dashboard.py
+uv run python -m unittest tests.test_app tests.test_readme -v
+uv run python -m py_compile app.py scripts/snapshot_dashboard.py
 ```
