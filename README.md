@@ -1,67 +1,82 @@
 # Coding Agent Usage Dashboard
 
-Local session and token usage viewer for coding agents. The first source adapter
-reads directly from your local OpenCode SQLite database and renders a dark-themed
-web dashboard; Codex and Hermes sources are tracked as follow-up work.
+Local dashboard for inspecting coding-agent usage from your machine.
+
+Right now the active source is OpenCode via its local SQLite database at
+`~/.local/share/opencode/opencode.db`. The UI already leaves room for future
+Codex CLI and Hermes adapters, but this README is intentionally about one thing:
+getting the dashboard running locally and capturing snapshots.
 
 ## Setup
 
-### Prerequisites
+### 1. Install uv
 
-Requires [uv](https://docs.astral.sh/uv/) as the Python project/package manager.
-Install it first if needed:
+This repo uses [uv](https://docs.astral.sh/uv/) for environment setup and local
+runs.
 
 ```bash
 # macOS / Linux
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Alternative
+# alternative
 pip install uv
 ```
 
-### Install and run
+### 2. Create the environment and install dependencies
 
 ```bash
 cd coding-agent-usage-dashboard
 uv venv
 uv pip install -r requirements.txt
+```
+
+### 3. Run the dashboard
+
+```bash
 uv run python app.py
 ```
 
-Open http://localhost:8321 in your browser.
+Then open:
 
-The dashboard auto-detects your OpenCode database at
-`~/.local/share/opencode/opencode.db`.
+```text
+http://localhost:8321
+```
 
-## Overview
+## Snapshots
 
-- **Daily token chart** — daily stacked bar chart by model, with 7/30/90/all/custom ranges
-- **Model breakdown** — each model's session count, total tokens, input tokens, output tokens, and secondary cache-read context
-- **Usage history** — recent session feed with model, title, and token totals
-- **Tool source scaffolding** — active OpenCode totals plus placeholders for Codex CLI and Hermes
-- **Dark theme** — optimized for dense coding-agent usage data
-
-## Data Source
-
-Currently pulls from OpenCode's local SQLite database with read-only access. The
-dashboard is structured to add more coding-agent sources without changing the UI
-model. Total tokens are defined as input + output assistant-message tokens.
-Cached tokens are shown only as secondary context, separate from input/output
-totals.
-
-## Cost estimates
-
-Estimated costs use the latest public pricing fetched from OpenRouter's
-`/api/v1/models` endpoint when a local model ID can be matched. Unmatched models
-are shown as unpriced instead of guessed. Estimates combine input, output,
-cache-read, and cache-write prices when those prices are available.
-
-## Local QA
-
-Capture a rendered localhost snapshot with Playwright:
+Capture a localhost snapshot with Playwright:
 
 ```bash
 uv run --with playwright python scripts/snapshot_dashboard.py --url http://localhost:8321
 ```
 
-Screenshots and DOM summaries are written to `dashboard-snapshots/`.
+Outputs are written to:
+
+```text
+dashboard-snapshots/
+```
+
+That snapshot run produces a rendered screenshot plus a DOM summary so you can
+review what the dashboard actually showed at capture time.
+
+## What the dashboard shows
+
+- daily usage by model
+- model breakdown with token totals
+- recent usage history
+- estimated cost when a model can be matched to public OpenRouter pricing
+- explicit tool/source labeling so the current OpenCode-backed totals are not ambiguous
+
+## Current data rules
+
+- active source: OpenCode local SQLite DB
+- total tokens = input + output assistant-message tokens
+- cache read/write tokens are shown separately and excluded from total tokens
+- unmatched model pricing stays unpriced instead of guessed
+
+## Local verification
+
+```bash
+python -m unittest tests.test_app tests.test_readme -v
+python -m py_compile app.py scripts/snapshot_dashboard.py
+```
