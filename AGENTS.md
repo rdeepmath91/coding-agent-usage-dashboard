@@ -58,6 +58,35 @@ Guidance for agents working in this repo.
   - `uv run python -m py_compile app.py scripts/snapshot_dashboard.py`
 - For UI-affecting changes, also verify the rendered dashboard locally, and use simulated mode when deterministic output helps.
 
+## Review workflow
+
+- Before opening or updating a PR, review the diff for scope creep, duplicated logic, wording drift, and source-provenance regressions.
+- For AGENTS.md, README, and other instruction/docs edits, check that the guidance matches the real repo commands and current file structure.
+- If an instruction references a command, make sure that command actually works in this repo.
+
+Simple local review pass:
+
+```bash
+git diff --stat origin/main...HEAD
+git diff --check origin/main...HEAD
+uv run python -m unittest tests.test_app tests.test_readme -v
+uv run python -m py_compile app.py scripts/snapshot_dashboard.py
+```
+
+For docs-only or AGENTS.md-only PRs, use this lightweight check:
+
+```bash
+git diff --stat origin/main...HEAD
+git diff --check origin/main...HEAD
+```
+
+Review focus for this repo:
+
+- Does the change keep token definitions, cost wording, and source labels consistent across backend, templates, tests, and README?
+- Does it reduce clarity by hiding provenance or by mixing active data with planned adapters?
+- Does it add file length or inline-script complexity without a good reason?
+- If behavior changed, were tests updated to prove it?
+
 ## Repo conventions
 
 - Keep secrets and machine-specific credentials out of the repo.
