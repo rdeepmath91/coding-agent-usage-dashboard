@@ -393,8 +393,11 @@
     white-space: nowrap;
     cursor: pointer;
     transition: opacity 0.12s, border-color 0.12s, background 0.12s;
+    appearance: none;
+    text-align: left;
   }
   .legend-item:hover { border-color: var(--accent); background: var(--bg-tertiary); }
+  .legend-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .legend-item.muted { opacity: 0.35; }
   .legend-item.disabled { opacity: 0.42; text-decoration: line-through; }
   .legend-name { overflow: hidden; text-overflow: ellipsis; }
@@ -450,12 +453,6 @@
     font-variant-numeric: tabular-nums;
   }
   .data-table tr:hover td { background: var(--bg-tertiary); }
-  .data-table tr.model-filter-row { cursor: pointer; }
-  .data-table tr.model-filter-row:focus-visible td {
-    outline: 2px solid var(--accent);
-    outline-offset: -2px;
-    background: var(--bg-tertiary);
-  }
   .data-table tr.model-filter-row.active td {
     background: rgb(33 150 243 / 0.1);
     border-bottom-color: rgb(33 150 243 / 0.35);
@@ -463,6 +460,32 @@
   .data-table .model-cell { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
   .data-table .num { text-align: right; font-family: var(--font-mono); }
   .data-table .token-cell { color: var(--accent); font-weight: 600; }
+  .chart-focus-button {
+    margin-left: 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: border-color 0.12s, color 0.12s, background 0.12s;
+  }
+  .chart-focus-button:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+  }
+  .chart-focus-button[aria-pressed="true"] {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: rgb(33 150 243 / 0.12);
+  }
+  .chart-focus-button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 
   .model-badge {
     display: inline-block;
@@ -774,6 +797,45 @@ function escapeHtml(value) {
   }[char]));
 }
 
+function sanitizeColor(value, fallback = '#64748B') {
+  const raw = String(value ?? '').trim();
+  return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(raw) ? raw : fallback;
+}
+
+function clearNode(node) {
+  node.replaceChildren();
+}
+
+function makeTableEmptyState(tbody, colspan, message) {
+  clearNode(tbody);
+  const row = document.createElement('tr');
+  const cell = document.createElement('td');
+  cell.colSpan = colspan;
+  cell.style.textAlign = 'center';
+  cell.style.color = 'var(--text-tertiary)';
+  cell.style.padding = '40px';
+  cell.textContent = message;
+  row.appendChild(cell);
+  tbody.appendChild(row);
+}
+
+function createToolPill({ tool, toolColor, sourcePath }) {
+  const pill = document.createElement('span');
+  pill.className = 'tool-pill';
+  pill.style.borderColor = sanitizeColor(toolColor, '#64748B');
+  pill.style.color = sanitizeColor(toolColor, '#9aa0a6');
+  pill.title = String(sourcePath || '');
+  pill.textContent = tool || 'OpenCode';
+  return pill;
+}
+
+function createLegendDot(color) {
+  const dot = document.createElement('span');
+  dot.className = 'legend-dot';
+  dot.style.background = sanitizeColor(color, '#64748B');
+  return dot;
+}
+
 function setCardMeta(id, visible, detail = '') {
   const el = document.getElementById(id);
   if (!el) return;
@@ -834,22 +896,45 @@ function bindMetaInfoInteractions(root = document) {
 function renderToolSources(sources = []) {
   const grid = document.getElementById('tool-source-grid');
   if (!grid) return;
-  grid.innerHTML = sources.map(source => {
+  clearNode(grid);
+
+  sources.forEach(source => {
     const active = source.status === 'active';
     const value = active && source.tokens_total !== null ? fmtTokens(source.tokens_total || 0) : '—';
-    const color = source.color || '#64748B';
-    const border = active ? `border-color:${color};border-left:3px solid ${color};padding-left:13px;` : '';
-    return `
-      <article class="tool-source-card ${active ? 'active' : 'placeholder'}" style="${border}">
-        <div class="tool-source-head">
-          <span class="tool-source-name" style="color:${color}">${source.label}</span>
-          <span class="tool-source-status">${source.status_label}</span>
-        </div>
-        <div class="tool-source-value">${value}</div>
-        <div class="tool-source-meta">${active ? source.source_path : (source.issue || '')}</div>
-      </article>
-    `;
-  }).join('');
+    const color = sanitizeColor(source.color, '#64748B');
+
+    const card = document.createElement('article');
+    card.className = `tool-source-card ${active ? 'active' : 'placeholder'}`;
+    if (active) {
+      card.style.borderColor = color;
+      card.style.borderLeft = `3px solid ${color}`;
+      card.style.paddingLeft = '13px';
+    }
+
+    const head = document.createElement('div');
+    head.className = 'tool-source-head';
+
+    const name = document.createElement('span');
+    name.className = 'tool-source-name';
+    name.style.color = color;
+    name.textContent = source.label || 'Unknown';
+
+    const status = document.createElement('span');
+    status.className = 'tool-source-status';
+    status.textContent = source.status_label || '';
+
+    const valueEl = document.createElement('div');
+    valueEl.className = 'tool-source-value';
+    valueEl.textContent = value;
+
+    const meta = document.createElement('div');
+    meta.className = 'tool-source-meta';
+    meta.textContent = active ? String(source.source_path || '') : String(source.issue || '');
+
+    head.append(name, status);
+    card.append(head, valueEl, meta);
+    grid.appendChild(card);
+  });
 }
 
 // ── Range tabs ──────────────────────────────────────────────────────────────
@@ -953,7 +1038,7 @@ async function loadModels(days) {
 
     const tbody = document.getElementById('model-table-body');
     if (!models.length) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:40px;">No data</td></tr>';
+      makeTableEmptyState(tbody, 8, 'No data');
       return;
     }
 
@@ -969,22 +1054,69 @@ async function loadModels(days) {
         : 'No OpenRouter or hardcoded pricing matched the active models.',
     );
 
-    tbody.innerHTML = models.map(m => `
-      <tr class="model-filter-row ${selectedChartModelId === m.chart_model_id ? 'active' : ''}" tabindex="0" role="button" data-chart-model-id="${escapeHtml(m.chart_model_id)}" data-chart-model-label="${escapeHtml(m.label)}" aria-label="Focus chart on ${escapeHtml(m.label)}">
-        <td><span class="tool-pill" style="border-color:${m.tool_color || '#64748B'};color:${m.tool_color || '#9aa0a6'};" title="${m.source_path || ''}">${m.tool || 'OpenCode'}</span></td>
-        <td class="model-cell">
-          <span class="legend-dot" style="background:${m.color};display:inline-block;vertical-align:middle;margin-right:6px;"></span>
-          ${m.rank}. ${m.label}
-        </td>
-        <td class="num">${fmtNum(m.sessions)}</td>
-        <td class="num">${fmtTokens(m.tokens_total)}</td>
-        <td class="num">${fmtTokens(m.tokens_input)}</td>
-        <td class="num">${fmtTokens(m.tokens_output)}</td>
-        <td class="num" title="Cache write: ${fmtTokens(m.cache_write || 0)}">${fmtTokens(m.cache_read || 0)}</td>
-        <td class="num" title="${m.pricing_status === 'priced' ? `${m.pricing_source}: ${m.pricing_model_id}` : `No matched pricing for ${m.pricing_model_id || m.model_id}`}">${fmtCost(m.estimated_cost)}</td>
-      </tr>
-    `).join('');
-    bindModelFilterRows(tbody);
+    clearNode(tbody);
+    models.forEach(m => {
+      const row = document.createElement('tr');
+      row.className = 'model-filter-row';
+      row.dataset.chartModelId = m.chart_model_id || '';
+      row.dataset.chartModelLabel = m.label || '';
+      row.classList.toggle('active', selectedChartModelId === m.chart_model_id);
+
+      const toolCell = document.createElement('td');
+      toolCell.appendChild(createToolPill({
+        tool: m.tool,
+        toolColor: m.tool_color,
+        sourcePath: m.source_path,
+      }));
+
+      const modelCell = document.createElement('td');
+      modelCell.className = 'model-cell';
+      modelCell.appendChild(createLegendDot(m.color));
+      modelCell.append(document.createTextNode(` ${m.rank}. ${m.label}`));
+
+      const focusButton = document.createElement('button');
+      focusButton.type = 'button';
+      focusButton.className = 'chart-focus-button';
+      focusButton.dataset.chartModelId = m.chart_model_id || '';
+      focusButton.dataset.chartModelLabel = m.label || '';
+      focusButton.setAttribute('aria-label', `Focus chart on ${m.label || 'selected model'}`);
+      focusButton.setAttribute('aria-pressed', selectedChartModelId === m.chart_model_id ? 'true' : 'false');
+      focusButton.textContent = selectedChartModelId === m.chart_model_id ? 'Clear focus' : 'Focus chart';
+      modelCell.appendChild(focusButton);
+
+      const sessionsCell = document.createElement('td');
+      sessionsCell.className = 'num';
+      sessionsCell.textContent = fmtNum(m.sessions);
+
+      const totalCell = document.createElement('td');
+      totalCell.className = 'num';
+      totalCell.textContent = fmtTokens(m.tokens_total);
+
+      const inputCell = document.createElement('td');
+      inputCell.className = 'num';
+      inputCell.textContent = fmtTokens(m.tokens_input);
+
+      const outputCell = document.createElement('td');
+      outputCell.className = 'num';
+      outputCell.textContent = fmtTokens(m.tokens_output);
+
+      const cacheCell = document.createElement('td');
+      cacheCell.className = 'num';
+      cacheCell.title = `Cache write: ${fmtTokens(m.cache_write || 0)}`;
+      cacheCell.textContent = fmtTokens(m.cache_read || 0);
+
+      const costCell = document.createElement('td');
+      costCell.className = 'num';
+      costCell.title = m.pricing_status === 'priced'
+        ? `${m.pricing_source}: ${m.pricing_model_id}`
+        : `No matched pricing for ${m.pricing_model_id || m.model_id}`;
+      costCell.textContent = fmtCost(m.estimated_cost);
+
+      row.append(toolCell, modelCell, sessionsCell, totalCell, inputCell, outputCell, cacheCell, costCell);
+      tbody.appendChild(row);
+    });
+    bindModelFilterButtons(tbody);
+    updateChartFilterUi();
   } catch(e) {
     console.error('models', e);
   }
@@ -996,6 +1128,7 @@ async function loadDaily(days) {
     const r = await fetch(`/api/daily?days=${rangeParam()}&top_n=${currentTopN}${selectedParam}${simulateQuerySuffix()}`);
     const data = await r.json();
 
+    syncChartModelSelection(data);
     renderChart(data);
     renderLegend(data.models);
     updateChartFilterUi();
@@ -1014,8 +1147,24 @@ function updateChartFilterUi() {
   bar.classList.toggle('active', Boolean(selectedChartModelId));
   label.textContent = selectedChartModelLabel || 'selected model';
   document.querySelectorAll('.model-filter-row').forEach(row => {
-    row.classList.toggle('active', row.dataset.chartModelId === selectedChartModelId);
+    const active = row.dataset.chartModelId === selectedChartModelId;
+    row.classList.toggle('active', active);
+    const button = row.querySelector('.chart-focus-button');
+    if (!button) return;
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    button.textContent = active ? 'Clear focus' : 'Focus chart';
   });
+}
+
+function syncChartModelSelection(data) {
+  if (!data?.selected_model_id) {
+    selectedChartModelId = null;
+    selectedChartModelLabel = null;
+    return;
+  }
+  selectedChartModelId = data.selected_model_id;
+  const selectedMeta = (data.models || []).find(model => model.id === data.selected_model_id);
+  selectedChartModelLabel = selectedMeta?.label || selectedChartModelLabel || data.selected_model_id;
 }
 
 function setChartModelFilter(modelId, label) {
@@ -1035,13 +1184,11 @@ function clearChartModelFilter() {
   updateChartFilterUi();
 }
 
-function bindModelFilterRows(root) {
-  root.querySelectorAll('.model-filter-row').forEach(row => {
-    row.addEventListener('click', () => setChartModelFilter(row.dataset.chartModelId, row.dataset.chartModelLabel));
-    row.addEventListener('keydown', event => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
+function bindModelFilterButtons(root) {
+  root.querySelectorAll('.chart-focus-button').forEach(button => {
+    button.addEventListener('click', event => {
       event.preventDefault();
-      setChartModelFilter(row.dataset.chartModelId, row.dataset.chartModelLabel);
+      setChartModelFilter(button.dataset.chartModelId, button.dataset.chartModelLabel);
     });
   });
 }
@@ -1147,23 +1294,39 @@ function toggleChartModel(modelId) {
   usageChart.setDatasetVisibility(index, !visible);
   if (visible) hiddenChartModels.add(modelId); else hiddenChartModels.delete(modelId);
   usageChart.update();
-  document.querySelector(`.legend-item[data-model-id="${CSS.escape(modelId)}"]`)?.classList.toggle('disabled', visible);
+  const button = document.querySelector(`.legend-item[data-model-id="${CSS.escape(modelId)}"]`);
+  button?.classList.toggle('disabled', visible);
+  button?.setAttribute('aria-pressed', visible ? 'false' : 'true');
 }
 
 function renderLegend(models) {
   const el = document.getElementById('chart-legend');
   const visibleTotal = models.reduce((sum, m) => sum + (m.tokens_total || 0), 0) || 1;
-  el.innerHTML = models.map(m => `
-    <div class="legend-item ${m.id === 'other' ? 'other' : ''} ${hiddenChartModels.has(m.id) ? 'disabled' : ''}" data-model-id="${m.id}" title="Click to hide/show. Hover to highlight.">
-      <span class="legend-dot" style="background:${m.color};"></span>
-      <span class="legend-name">${m.rank ? `${m.rank}. ` : ''}${m.label}</span>
-      <span class="legend-share">${Math.round(((m.tokens_total || 0) / visibleTotal) * 100)}%</span>
-    </div>
-  `).join('');
-  el.querySelectorAll('.legend-item').forEach(item => {
+  clearNode(el);
+
+  models.forEach(m => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = `legend-item ${m.id === 'other' ? 'other' : ''} ${hiddenChartModels.has(m.id) ? 'disabled' : ''}`.trim();
+    item.dataset.modelId = m.id || '';
+    item.title = 'Click to hide/show. Hover to highlight.';
+    item.setAttribute('aria-pressed', hiddenChartModels.has(m.id) ? 'false' : 'true');
+
+    item.appendChild(createLegendDot(m.color));
+
+    const name = document.createElement('span');
+    name.className = 'legend-name';
+    name.textContent = `${m.rank ? `${m.rank}. ` : ''}${m.label}`;
+
+    const share = document.createElement('span');
+    share.className = 'legend-share';
+    share.textContent = `${Math.round(((m.tokens_total || 0) / visibleTotal) * 100)}%`;
+
+    item.append(name, share);
     item.addEventListener('mouseenter', () => setLegendHover(item.dataset.modelId));
     item.addEventListener('mouseleave', () => setLegendHover(null));
     item.addEventListener('click', () => toggleChartModel(item.dataset.modelId));
+    el.appendChild(item);
   });
 }
 
@@ -1174,21 +1337,54 @@ async function loadHistory() {
 
     const tbody = document.getElementById('history-table-body');
     if (!sessions.length) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">No sessions</td></tr>';
+      makeTableEmptyState(tbody, 7, 'No sessions');
       return;
     }
 
-    tbody.innerHTML = sessions.map(s => `
-      <tr>
-        <td><span class="tool-pill" style="border-color:${s.tool_color || '#64748B'};color:${s.tool_color || '#9aa0a6'};" title="${s.source_path || ''}">${s.tool || 'OpenCode'}</span></td>
-        <td style="font-family:var(--font-mono);font-size:12px;">${s.created}</td>
-        <td class="model-cell" style="font-size:12px;">${s.model}</td>
-        <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(s.title || '').replace(/"/g,'&quot;')}">${s.title || '(untitled)'}</td>
-        <td class="num">${fmtTokens(s.tokens_total)}</td>
-        <td class="num">${fmtTokens(s.tokens_input)}</td>
-        <td class="num">${fmtTokens(s.tokens_output)}</td>
-      </tr>
-    `).join('');
+    clearNode(tbody);
+    sessions.forEach(s => {
+      const row = document.createElement('tr');
+
+      const toolCell = document.createElement('td');
+      toolCell.appendChild(createToolPill({
+        tool: s.tool,
+        toolColor: s.tool_color,
+        sourcePath: s.source_path,
+      }));
+
+      const createdCell = document.createElement('td');
+      createdCell.style.fontFamily = 'var(--font-mono)';
+      createdCell.style.fontSize = '12px';
+      createdCell.textContent = s.created || '—';
+
+      const modelCell = document.createElement('td');
+      modelCell.className = 'model-cell';
+      modelCell.style.fontSize = '12px';
+      modelCell.textContent = s.model || 'Unknown';
+
+      const titleCell = document.createElement('td');
+      titleCell.style.maxWidth = '350px';
+      titleCell.style.overflow = 'hidden';
+      titleCell.style.textOverflow = 'ellipsis';
+      titleCell.style.whiteSpace = 'nowrap';
+      titleCell.title = String(s.title || '(untitled)');
+      titleCell.textContent = s.title || '(untitled)';
+
+      const totalCell = document.createElement('td');
+      totalCell.className = 'num';
+      totalCell.textContent = fmtTokens(s.tokens_total);
+
+      const inputCell = document.createElement('td');
+      inputCell.className = 'num';
+      inputCell.textContent = fmtTokens(s.tokens_input);
+
+      const outputCell = document.createElement('td');
+      outputCell.className = 'num';
+      outputCell.textContent = fmtTokens(s.tokens_output);
+
+      row.append(toolCell, createdCell, modelCell, titleCell, totalCell, inputCell, outputCell);
+      tbody.appendChild(row);
+    });
   } catch(e) {
     console.error('history', e);
   }

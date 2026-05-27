@@ -61,6 +61,18 @@ TOOL_SOURCES = [
 
 TOOL_COLOR_MAP = {t["id"]: t["color"] for t in TOOL_SOURCES}
 
+
+def current_tool_sources() -> list[dict]:
+    """Return tool source metadata with the active DB path baked in."""
+    sources = []
+    for source in TOOL_SOURCES:
+        item = dict(source)
+        if item["id"] == "opencode":
+            item["source_path"] = display_path(DB_PATH)
+        sources.append(item)
+    return sources
+
+
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 PRICING_CACHE = {"fetched_at": 0.0, "prices": {}}
 
@@ -128,7 +140,6 @@ def get_db():
     """Return a read-only connection to the OpenCode SQLite DB."""
     conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=wal")
     return conn
 
 
@@ -369,7 +380,7 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
         "tool_sources": [],
     }
 
-    for source in TOOL_SOURCES:
+    for source in current_tool_sources():
         item = dict(source)
         if item["id"] == "opencode":
             item.update({
@@ -537,7 +548,7 @@ def api_overview():
     row["source_path"] = display_path(DB_PATH)
     row["token_total_definition"] = "input + output assistant-message tokens; cache read/write excluded"
     row["tool_sources"] = []
-    for source in TOOL_SOURCES:
+    for source in current_tool_sources():
         item = dict(source)
         if item["id"] == "opencode":
             item.update({
