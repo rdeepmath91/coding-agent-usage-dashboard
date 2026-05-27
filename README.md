@@ -42,12 +42,25 @@ Then open:
 http://localhost:8321
 ```
 
+For a deterministic fake dataset that is useful for screenshots and UI checks,
+open:
+
+```text
+http://localhost:8321/?simulate=1
+```
+
 ## Snapshots
 
 Capture a localhost snapshot with Playwright:
 
 ```bash
 uv run --with playwright python scripts/snapshot_dashboard.py --url http://localhost:8321
+```
+
+To snapshot the simulated dataset instead of your live local usage:
+
+```bash
+uv run --with playwright python scripts/snapshot_dashboard.py --url http://localhost:8321/?simulate=1
 ```
 
 Outputs are written to:

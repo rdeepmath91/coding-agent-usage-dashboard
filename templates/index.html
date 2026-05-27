@@ -328,6 +328,39 @@
     white-space: nowrap;
   }
   .chart-controls select { min-width: 92px; padding: 6px 28px 6px 10px; font-size: 12px; }
+  .chart-filter-bar {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: -4px 0 16px;
+    padding: 9px 12px;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    background: rgb(33 150 243 / 0.08);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .chart-filter-bar.active { display: flex; }
+  .chart-filter-model { color: var(--text-primary); font-weight: 600; }
+  .chart-filter-clear {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font: inherit;
+    padding: 4px 10px;
+    transition: color 0.12s, border-color 0.12s, background-color 0.12s;
+  }
+  .chart-filter-clear:hover,
+  .chart-filter-clear:focus-visible {
+    outline: none;
+    color: var(--text-primary);
+    border-color: var(--accent);
+    background: var(--bg-tertiary);
+  }
   .chart-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 260px;
@@ -417,6 +450,16 @@
     font-variant-numeric: tabular-nums;
   }
   .data-table tr:hover td { background: var(--bg-tertiary); }
+  .data-table tr.model-filter-row { cursor: pointer; }
+  .data-table tr.model-filter-row:focus-visible td {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    background: var(--bg-tertiary);
+  }
+  .data-table tr.model-filter-row.active td {
+    background: rgb(33 150 243 / 0.1);
+    border-bottom-color: rgb(33 150 243 / 0.35);
+  }
   .data-table .model-cell { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
   .data-table .num { text-align: right; font-family: var(--font-mono); }
   .data-table .token-cell { color: var(--accent); font-weight: 600; }
@@ -634,6 +677,10 @@
           </select>
         </label>
       </div>
+      <div class="chart-filter-bar" id="chart-filter-bar" aria-live="polite">
+        <span>Chart focused on <span class="chart-filter-model" id="chart-filter-model">one model</span></span>
+        <button class="chart-filter-clear" id="clear-chart-filter" type="button">Clear filter</button>
+      </div>
       <div class="chart-layout">
         <div class="chart-plot">
           <canvas id="usage-chart"></canvas>
@@ -698,6 +745,8 @@
 // ── State ──────────────────────────────────────────────────────────────────
 let usageChart = null;
 let currentTopN = 8;
+let selectedChartModelId = null;
+let selectedChartModelLabel = null;
 const hiddenChartModels = new Set();
 const FORMATTER = new Intl.NumberFormat('en-US');
 function fmtNum(n) { return FORMATTER.format(n); }
@@ -805,9 +854,16 @@ function renderToolSources(sources = []) {
 
 // ── Range tabs ──────────────────────────────────────────────────────────────
 let currentDays = 30;
+const pageSearch = new URLSearchParams(window.location.search);
 
 function rangeParam() {
   return currentDays === 0 ? 'all' : String(currentDays);
+}
+
+function simulateQuerySuffix() {
+  return pageSearch.get('simulate') === '1' || pageSearch.get('demo') === '1'
+    ? '&simulate=1'
+    : '';
 }
 
 document.querySelectorAll('#range-tabs .pill').forEach(btn => {
@@ -839,6 +895,10 @@ document.getElementById('top-n-select').addEventListener('change', (event) => {
   loadDaily(currentDays);
 });
 
+document.getElementById('clear-chart-filter').addEventListener('click', () => {
+  clearChartModelFilter();
+});
+
 // ── Load everything ─────────────────────────────────────────────────────────
 async function loadAll() {
   await Promise.all([loadOverview(currentDays), loadModels(currentDays), loadDaily(currentDays), loadHistory()]);
@@ -846,7 +906,7 @@ async function loadAll() {
 
 async function loadOverview(days) {
   try {
-    const r = await fetch(`/api/overview?days=${rangeParam()}`);
+    const r = await fetch(`/api/overview?days=${rangeParam()}${simulateQuerySuffix()}`);
     const d = await r.json();
 
     document.getElementById('total-sessions').textContent = fmtNum(d.total_sessions);
@@ -888,7 +948,7 @@ async function loadOverview(days) {
 
 async function loadModels(days) {
   try {
-    const r = await fetch(`/api/models?days=${rangeParam()}`);
+    const r = await fetch(`/api/models?days=${rangeParam()}${simulateQuerySuffix()}`);
     const models = await r.json();
 
     const tbody = document.getElementById('model-table-body');
@@ -910,7 +970,7 @@ async function loadModels(days) {
     );
 
     tbody.innerHTML = models.map(m => `
-      <tr>
+      <tr class="model-filter-row ${selectedChartModelId === m.chart_model_id ? 'active' : ''}" tabindex="0" role="button" data-chart-model-id="${escapeHtml(m.chart_model_id)}" data-chart-model-label="${escapeHtml(m.label)}" aria-label="Focus chart on ${escapeHtml(m.label)}">
         <td><span class="tool-pill" style="border-color:${m.tool_color || '#64748B'};color:${m.tool_color || '#9aa0a6'};" title="${m.source_path || ''}">${m.tool || 'OpenCode'}</span></td>
         <td class="model-cell">
           <span class="legend-dot" style="background:${m.color};display:inline-block;vertical-align:middle;margin-right:6px;"></span>
@@ -924,6 +984,7 @@ async function loadModels(days) {
         <td class="num" title="${m.pricing_status === 'priced' ? `${m.pricing_source}: ${m.pricing_model_id}` : `No matched pricing for ${m.pricing_model_id || m.model_id}`}">${fmtCost(m.estimated_cost)}</td>
       </tr>
     `).join('');
+    bindModelFilterRows(tbody);
   } catch(e) {
     console.error('models', e);
   }
@@ -931,15 +992,58 @@ async function loadModels(days) {
 
 async function loadDaily(days) {
   try {
-    const r = await fetch(`/api/daily?days=${rangeParam()}&top_n=${currentTopN}`);
+    const selectedParam = selectedChartModelId ? `&model_id=${encodeURIComponent(selectedChartModelId)}` : '';
+    const r = await fetch(`/api/daily?days=${rangeParam()}&top_n=${currentTopN}${selectedParam}${simulateQuerySuffix()}`);
     const data = await r.json();
 
     renderChart(data);
     renderLegend(data.models);
-    document.getElementById('chart-note').textContent = `Position-based colors · top ${data.top_n} models by token volume · ${data.other_count || 0} long-tail models grouped as Other`;
+    updateChartFilterUi();
+    document.getElementById('chart-note').textContent = selectedChartModelId
+      ? 'Single-model focus · click Clear filter to restore Top N view'
+      : `Position-based colors · top ${data.top_n} models by token volume · ${data.other_count || 0} long-tail models grouped as Other`;
   } catch(e) {
     console.error('daily', e);
   }
+}
+
+function updateChartFilterUi() {
+  const bar = document.getElementById('chart-filter-bar');
+  const label = document.getElementById('chart-filter-model');
+  if (!bar || !label) return;
+  bar.classList.toggle('active', Boolean(selectedChartModelId));
+  label.textContent = selectedChartModelLabel || 'selected model';
+  document.querySelectorAll('.model-filter-row').forEach(row => {
+    row.classList.toggle('active', row.dataset.chartModelId === selectedChartModelId);
+  });
+}
+
+function setChartModelFilter(modelId, label) {
+  const sameModel = selectedChartModelId === modelId;
+  selectedChartModelId = sameModel ? null : modelId;
+  selectedChartModelLabel = sameModel ? null : label;
+  hiddenChartModels.clear();
+  loadDaily(currentDays);
+  updateChartFilterUi();
+}
+
+function clearChartModelFilter() {
+  selectedChartModelId = null;
+  selectedChartModelLabel = null;
+  hiddenChartModels.clear();
+  loadDaily(currentDays);
+  updateChartFilterUi();
+}
+
+function bindModelFilterRows(root) {
+  root.querySelectorAll('.model-filter-row').forEach(row => {
+    row.addEventListener('click', () => setChartModelFilter(row.dataset.chartModelId, row.dataset.chartModelLabel));
+    row.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      setChartModelFilter(row.dataset.chartModelId, row.dataset.chartModelLabel);
+    });
+  });
 }
 
 function renderChart(data) {
@@ -1065,7 +1169,7 @@ function renderLegend(models) {
 
 async function loadHistory() {
   try {
-    const r = await fetch('/api/usage-history?limit=30');
+    const r = await fetch(`/api/usage-history?limit=30${simulateQuerySuffix()}`);
     const sessions = await r.json();
 
     const tbody = document.getElementById('history-table-body');
