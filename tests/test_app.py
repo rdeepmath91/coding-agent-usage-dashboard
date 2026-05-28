@@ -225,6 +225,18 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(payload['selected_tool_label'], 'Codex CLI')
         self.assertEqual(payload['models'], [])
         self.assertEqual(payload['data'], {})
+        self.assertEqual(payload['error'], 'Codex CLI is planned and not connected yet.')
+
+    def test_unknown_tool_source_filter_returns_empty_error_contract(self):
+        response = self.client.get('/api/daily?days=30&tool_id=unknown')
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+
+        self.assertIsNone(payload['selected_tool_id'])
+        self.assertIsNone(payload['selected_tool_label'])
+        self.assertEqual(payload['models'], [])
+        self.assertEqual(payload['data'], {})
+        self.assertEqual(payload['error'], 'Unsupported tool_id: unknown.')
 
     def test_models_and_history_include_tool_color(self):
         models_response = self.client.get('/api/models?days=30')
@@ -268,6 +280,13 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('item.className = `legend-item', html)
         self.assertIn("button.textContent = active ? 'Clear focus' : 'Focus chart'", html)
         self.assertNotIn('role="button" data-chart-model-id', html)
+
+    def test_tool_source_render_includes_path_handling(self):
+        response = self.client.get('/')
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('const sourcePath = source.source_path || \'Unknown\'', html)
+        self.assertIn('Source: ${sourcePath}', html)
 
     def test_simulated_mode_returns_synthetic_dashboard_data(self):
         overview = self.client.get('/api/overview?simulate=1&days=31')

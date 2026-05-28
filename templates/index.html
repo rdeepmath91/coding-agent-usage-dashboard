@@ -954,7 +954,9 @@ function renderToolSources(sources = []) {
 
     const meta = document.createElement('div');
     meta.className = 'tool-source-meta';
-    meta.textContent = source.source_type || 'Source type unknown';
+    const sourceType = source.source_type || 'Source type unknown';
+    const sourcePath = source.source_path || 'Unknown';
+    meta.textContent = `${sourceType} · Source: ${sourcePath}`;
 
     const actions = document.createElement('div');
     actions.className = 'tool-source-actions';
@@ -1178,7 +1180,9 @@ async function loadDaily(days) {
     renderChart(data);
     renderLegend(data.models);
     updateChartFilterUi();
-    document.getElementById('chart-note').textContent = selectedChartToolId && !data.models.length
+    document.getElementById('chart-note').textContent = data.error
+      ? data.error
+      : selectedChartToolId && !data.models.length
       ? `No connected ${selectedChartToolLabel || 'source'} data for this range`
       : selectedChartModelId
       ? 'Single-model focus · click Clear filter to restore Top N view'

@@ -63,6 +63,7 @@ TOOL_SOURCES = [
 ]
 
 TOOL_COLOR_MAP = {t["id"]: t["color"] for t in TOOL_SOURCES}
+KNOWN_TOOL_IDS = {t["id"] for t in TOOL_SOURCES}
 
 
 def current_tool_sources() -> list[dict]:
@@ -233,7 +234,7 @@ def tool_source_label(tool_id: str | None) -> str | None:
     return tool_id
 
 
-def empty_daily_response(top_n: int, selected_tool_id: str | None):
+def empty_daily_response(top_n: int, selected_tool_id: str | None, error_message: str | None = None):
     return jsonify({
         "dates": [],
         "models": [],
@@ -243,6 +244,7 @@ def empty_daily_response(top_n: int, selected_tool_id: str | None):
         "selected_model_id": None,
         "selected_tool_id": selected_tool_id,
         "selected_tool_label": tool_source_label(selected_tool_id),
+        "error": error_message,
     })
 
 
@@ -669,7 +671,18 @@ def api_daily():
     selected_model_id = request.args.get("model_id") or None
     selected_tool_id = request.args.get("tool_id") or None
     if selected_tool_id and selected_tool_id != "opencode":
-        return empty_daily_response(top_n, selected_tool_id)
+        if selected_tool_id in KNOWN_TOOL_IDS:
+            source_label = tool_source_label(selected_tool_id) or selected_tool_id
+            return empty_daily_response(
+                top_n,
+                selected_tool_id,
+                error_message=f"{source_label} is planned and not connected yet.",
+            )
+        return empty_daily_response(
+            top_n,
+            None,
+            error_message=f"Unsupported tool_id: {selected_tool_id}.",
+        )
     if simulate_enabled():
         simulated = build_simulated_dataset(days)
         daily_data = simulated["daily"]
