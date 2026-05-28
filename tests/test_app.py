@@ -227,13 +227,11 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(payload['data'], {})
         self.assertEqual(payload['error'], 'Codex CLI is planned and not connected yet.')
 
-    def test_unknown_tool_source_filter_returns_empty_error_contract(self):
+    def test_unknown_tool_source_filter_returns_http_400(self):
         response = self.client.get('/api/daily?days=30&tool_id=unknown')
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 400)
         payload = response.get_json()
 
-        self.assertIsNone(payload['selected_tool_id'])
-        self.assertIsNone(payload['selected_tool_label'])
         self.assertEqual(payload['models'], [])
         self.assertEqual(payload['data'], {})
         self.assertEqual(payload['error'], 'Unsupported tool_id: unknown.')

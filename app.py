@@ -678,10 +678,19 @@ def api_daily():
                 selected_tool_id,
                 error_message=f"{source_label} is planned and not connected yet.",
             )
-        return empty_daily_response(
-            top_n,
-            None,
-            error_message=f"Unsupported tool_id: {selected_tool_id}.",
+        return (
+            jsonify({
+                "error": f"Unsupported tool_id: {selected_tool_id}.",
+                "dates": [],
+                "models": [],
+                "data": {},
+                "top_n": top_n,
+                "other_count": 0,
+                "selected_model_id": None,
+                "selected_tool_id": None,
+                "selected_tool_label": None,
+            }),
+            400,
         )
     if simulate_enabled():
         simulated = build_simulated_dataset(days)
