@@ -67,6 +67,12 @@ Guidance for agents working in this repo.
 Simple local review pass:
 
 ```bash
+scripts/review.sh
+```
+
+Equivalent manual commands:
+
+```bash
 git diff --stat origin/main...HEAD
 git diff --check origin/main...HEAD
 uv run python -m unittest tests.test_app tests.test_readme -v
@@ -76,8 +82,7 @@ uv run python -m py_compile app.py scripts/snapshot_dashboard.py
 For docs-only or AGENTS.md-only PRs, use this lightweight check:
 
 ```bash
-git diff --stat origin/main...HEAD
-git diff --check origin/main...HEAD
+REVIEW_MODE=docs scripts/review.sh
 ```
 
 Review focus for this repo:
