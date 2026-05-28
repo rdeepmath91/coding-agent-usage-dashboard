@@ -31,9 +31,10 @@ TOOL_SOURCES = [
         "id": "opencode",
         "label": "OpenCode",
         "status": "active",
-        "status_label": "Active",
+        "status_label": "Active source",
         "source_type": "SQLite database",
         "source_path": display_path(DB_PATH),
+        "repo_url": "https://github.com/anomalyco/opencode/",
         "color": "#3B82F6",
         "issue": None,
     },
@@ -41,9 +42,10 @@ TOOL_SOURCES = [
         "id": "codex",
         "label": "Codex CLI",
         "status": "placeholder",
-        "status_label": "Planned",
+        "status_label": "Planned adapter",
         "source_type": "Local session/history data",
         "source_path": "TBD",
+        "repo_url": "https://github.com/openai/codex/",
         "color": "#BA68C8",
         "issue": None,
     },
@@ -51,9 +53,10 @@ TOOL_SOURCES = [
         "id": "hermes",
         "label": "Hermes",
         "status": "placeholder",
-        "status_label": "Planned",
+        "status_label": "Planned adapter",
         "source_type": "Local session/tool logs or session DB",
         "source_path": "TBD",
+        "repo_url": "https://github.com/NousResearch/hermes-agent/",
         "color": "#EAB308",
         "issue": None,
     },
@@ -219,6 +222,28 @@ def parse_top_n(default: int = 8) -> int:
     """Top N visible chart models; remaining models are folded into Other."""
     raw = request.args.get("top_n", default, type=int)
     return max(3, min(raw or default, len(QUALITATIVE_COLORS)))
+
+
+def tool_source_label(tool_id: str | None) -> str | None:
+    if not tool_id:
+        return None
+    for source in current_tool_sources():
+        if source["id"] == tool_id:
+            return source["label"]
+    return tool_id
+
+
+def empty_daily_response(top_n: int, selected_tool_id: str | None):
+    return jsonify({
+        "dates": [],
+        "models": [],
+        "data": {},
+        "top_n": top_n,
+        "other_count": 0,
+        "selected_model_id": None,
+        "selected_tool_id": selected_tool_id,
+        "selected_tool_label": tool_source_label(selected_tool_id),
+    })
 
 
 def simulate_enabled() -> bool:
@@ -642,6 +667,9 @@ def api_daily():
     days = parse_days(default=31)
     top_n = parse_top_n(default=8)
     selected_model_id = request.args.get("model_id") or None
+    selected_tool_id = request.args.get("tool_id") or None
+    if selected_tool_id and selected_tool_id != "opencode":
+        return empty_daily_response(top_n, selected_tool_id)
     if simulate_enabled():
         simulated = build_simulated_dataset(days)
         daily_data = simulated["daily"]
@@ -716,6 +744,8 @@ def api_daily():
             "top_n": top_n,
             "other_count": 0 if selected_model_id else len(other_models),
             "selected_model_id": selected_model_id if selected_model_id in active_models else None,
+            "selected_tool_id": selected_tool_id,
+            "selected_tool_label": tool_source_label(selected_tool_id),
         })
     where, params = since_clause(days)
     msg_where = where.replace("time_created", "m.time_created")
@@ -860,6 +890,8 @@ def api_daily():
         "top_n": top_n,
         "other_count": 0 if selected_model_id else len(other_models),
         "selected_model_id": selected_model_id if selected_model_id in active_models else None,
+        "selected_tool_id": selected_tool_id,
+        "selected_tool_label": tool_source_label(selected_tool_id),
     })
 
 
