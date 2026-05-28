@@ -278,6 +278,8 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('item.className = `legend-item', html)
         self.assertIn("button.textContent = active ? 'Clear focus' : 'Focus chart'", html)
         self.assertNotIn('role="button" data-chart-model-id', html)
+        self.assertIn('if (!r.ok)', html)
+        self.assertIn("document.getElementById('chart-note').textContent = chartData.error", html)
 
     def test_tool_source_render_includes_path_handling(self):
         response = self.client.get('/')

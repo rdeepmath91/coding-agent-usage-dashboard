@@ -1174,23 +1174,58 @@ async function loadDaily(days) {
     const selectedModelParam = selectedChartModelId ? `&model_id=${encodeURIComponent(selectedChartModelId)}` : '';
     const selectedToolParam = selectedChartToolId ? `&tool_id=${encodeURIComponent(selectedChartToolId)}` : '';
     const r = await fetch(`/api/daily?days=${rangeParam()}&top_n=${currentTopN}${selectedModelParam}${selectedToolParam}${simulateQuerySuffix()}`);
-    const data = await r.json();
+    const data = await r.json().catch(() => null);
 
-    syncChartSelection(data);
-    renderChart(data);
-    renderLegend(data.models);
+    if (!r.ok) {
+      const fallback = {
+        dates: [],
+        models: [],
+        data: {},
+        top_n: currentTopN,
+        other_count: 0,
+      };
+      const chartData = data && typeof data === 'object' ? data : fallback;
+      syncChartSelection(chartData);
+      renderChart(fallback);
+      renderLegend([]);
+      updateChartFilterUi();
+      document.getElementById('chart-note').textContent = chartData.error
+        ? chartData.error
+        : `Request failed with ${r.status} ${r.statusText || ''}`.trim();
+      return;
+    }
+
+    const safeData = data || {
+      dates: [],
+      models: [],
+      data: {},
+      top_n: currentTopN,
+      other_count: 0,
+      selected_model_id: null,
+      selected_tool_id: null,
+      selected_tool_label: null,
+      error: null,
+    };
+
+    syncChartSelection(safeData);
+    renderChart(safeData);
+    renderLegend(safeData.models);
     updateChartFilterUi();
-    document.getElementById('chart-note').textContent = data.error
-      ? data.error
-      : selectedChartToolId && !data.models.length
+    document.getElementById('chart-note').textContent = safeData.error
+      ? safeData.error
+      : selectedChartToolId && !safeData.models.length
       ? `No connected ${selectedChartToolLabel || 'source'} data for this range`
       : selectedChartModelId
       ? 'Single-model focus · click Clear filter to restore Top N view'
       : selectedChartToolId
       ? `Source focus: ${selectedChartToolLabel || selectedChartToolId} · click Clear filter to restore all sources`
-      : `Position-based colors · top ${data.top_n} models by token volume · ${data.other_count || 0} long-tail models grouped as Other`;
+      : `Position-based colors · top ${safeData.top_n} models by token volume · ${safeData.other_count || 0} long-tail models grouped as Other`;
   } catch(e) {
     console.error('daily', e);
+    renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });
+    renderLegend([]);
+    updateChartFilterUi();
+    document.getElementById('chart-note').textContent = 'Failed to load chart data.';
   }
 }
 
