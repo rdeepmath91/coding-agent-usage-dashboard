@@ -199,16 +199,42 @@ class DashboardApiTests(unittest.TestCase):
 
         sources = {item['id']: item for item in payload['tool_sources']}
         self.assertEqual(sources['opencode']['status'], 'active')
+        self.assertEqual(sources['opencode']['status_label'], 'Active source')
         self.assertEqual(sources['opencode']['color'], '#3B82F6')
         self.assertEqual(sources['opencode']['source_path'], display_like_app(self.db_path))
+        self.assertEqual(sources['opencode']['repo_url'], 'https://github.com/anomalyco/opencode/')
         self.assertEqual(sources['codex']['status'], 'placeholder')
+        self.assertEqual(sources['codex']['status_label'], 'Planned adapter')
         self.assertEqual(sources['codex']['color'], '#BA68C8')
         self.assertEqual(sources['codex']['source_path'], 'TBD')
+        self.assertEqual(sources['codex']['repo_url'], 'https://github.com/openai/codex/')
         self.assertIsNone(sources['codex']['issue'])
         self.assertEqual(sources['hermes']['status'], 'placeholder')
+        self.assertEqual(sources['hermes']['status_label'], 'Planned adapter')
         self.assertEqual(sources['hermes']['color'], '#EAB308')
         self.assertEqual(sources['hermes']['source_path'], 'TBD')
+        self.assertEqual(sources['hermes']['repo_url'], 'https://github.com/NousResearch/hermes-agent/')
         self.assertIsNone(sources['hermes']['issue'])
+
+    def test_planned_tool_source_filter_returns_empty_daily_result(self):
+        response = self.client.get('/api/daily?days=30&tool_id=codex')
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+
+        self.assertEqual(payload['selected_tool_id'], 'codex')
+        self.assertEqual(payload['selected_tool_label'], 'Codex CLI')
+        self.assertEqual(payload['models'], [])
+        self.assertEqual(payload['data'], {})
+        self.assertEqual(payload['error'], 'Codex CLI is planned and not connected yet.')
+
+    def test_unknown_tool_source_filter_returns_http_400(self):
+        response = self.client.get('/api/daily?days=30&tool_id=unknown')
+        self.assertEqual(response.status_code, 400)
+        payload = response.get_json()
+
+        self.assertEqual(payload['models'], [])
+        self.assertEqual(payload['data'], {})
+        self.assertEqual(payload['error'], 'Unsupported tool_id: unknown.')
 
     def test_models_and_history_include_tool_color(self):
         models_response = self.client.get('/api/models?days=30')
@@ -252,6 +278,15 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('item.className = `legend-item', html)
         self.assertIn("button.textContent = active ? 'Clear focus' : 'Focus chart'", html)
         self.assertNotIn('role="button" data-chart-model-id', html)
+        self.assertIn('if (!r.ok)', html)
+        self.assertIn("document.getElementById('chart-note').textContent = chartData.error", html)
+
+    def test_tool_source_render_includes_path_handling(self):
+        response = self.client.get('/')
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn('const sourcePath = source.source_path || \'Unknown\'', html)
+        self.assertIn('Source: ${sourcePath}', html)
 
     def test_simulated_mode_returns_synthetic_dashboard_data(self):
         overview = self.client.get('/api/overview?simulate=1&days=31')

@@ -273,23 +273,41 @@
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 14px 16px;
-    min-height: 118px;
+    min-height: 104px;
+    cursor: pointer;
   }
   .tool-source-card.placeholder {
     border-style: dashed;
     opacity: 0.78;
   }
+  .tool-source-card.active-filter {
+    background: rgb(33 150 243 / 0.08);
+  }
   .tool-source-head {
     display: flex;
     justify-content: space-between;
     gap: 10px;
-    align-items: baseline;
+    align-items: flex-start;
     margin-bottom: 8px;
   }
-  .tool-source-name { font-weight: 600; }
+  .tool-source-name {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+  }
+  .tool-source-name:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .tool-source-name:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
   .tool-source-status { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.4px; }
-  .tool-source-value { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .tool-source-meta { margin-top: 6px; color: var(--text-secondary); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; }
+  .tool-source-actions { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 12px; }
+  .tool-source-filter-state { color: var(--text-tertiary); }
+  .tool-source-repo { color: var(--accent); text-decoration: none; }
+  .tool-source-repo:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 3px; }
   .tool-pill {
     display: inline-flex;
     align-items: center;
@@ -634,7 +652,7 @@
   <main class="main-area">
     <section id="cost" class="page-header">
       <h1>Overview</h1>
-      <div class="subtitle">Sessions and tokens broken down by model. Cache is shown as secondary context.</div>
+      <div class="subtitle">Primary totals use assistant-message input + output tokens. Cache read/write is tracked separately.</div>
     </section>
 
     <!-- Pill tabs -->
@@ -701,7 +719,7 @@
         </label>
       </div>
       <div class="chart-filter-bar" id="chart-filter-bar" aria-live="polite">
-        <span>Chart focused on <span class="chart-filter-model" id="chart-filter-model">one model</span></span>
+        <span>Chart focused on <span class="chart-filter-model" id="chart-filter-model">one selection</span></span>
         <button class="chart-filter-clear" id="clear-chart-filter" type="button">Clear filter</button>
       </div>
       <div class="chart-layout">
@@ -770,6 +788,8 @@ let usageChart = null;
 let currentTopN = 8;
 let selectedChartModelId = null;
 let selectedChartModelLabel = null;
+let selectedChartToolId = null;
+let selectedChartToolLabel = null;
 const hiddenChartModels = new Set();
 const FORMATTER = new Intl.NumberFormat('en-US');
 function fmtNum(n) { return FORMATTER.format(n); }
@@ -848,7 +868,7 @@ function setCardMeta(id, visible, detail = '') {
         <button
           type="button"
           class="meta-info"
-          aria-label="More information"
+          aria-label="More information: ${escapeHtml(visible)}"
           aria-expanded="false"
           aria-describedby="${escapeHtml(tooltipId)}"
         >i</button>
@@ -900,11 +920,16 @@ function renderToolSources(sources = []) {
 
   sources.forEach(source => {
     const active = source.status === 'active';
-    const value = active && source.tokens_total !== null ? fmtTokens(source.tokens_total || 0) : '—';
     const color = sanitizeColor(source.color, '#64748B');
 
     const card = document.createElement('article');
     card.className = `tool-source-card ${active ? 'active' : 'placeholder'}`;
+    card.dataset.toolId = source.id || '';
+    card.title = source.repo_url ? `Repo: ${source.repo_url}` : '';
+    card.addEventListener('click', event => {
+      if (event.target.closest('a, button')) return;
+      setChartToolFilter(source.id, source.label || source.id);
+    });
     if (active) {
       card.style.borderColor = color;
       card.style.borderLeft = `3px solid ${color}`;
@@ -914,25 +939,47 @@ function renderToolSources(sources = []) {
     const head = document.createElement('div');
     head.className = 'tool-source-head';
 
-    const name = document.createElement('span');
+    const name = document.createElement('button');
+    name.type = 'button';
     name.className = 'tool-source-name';
     name.style.color = color;
     name.textContent = source.label || 'Unknown';
+    name.setAttribute('aria-pressed', selectedChartToolId === source.id ? 'true' : 'false');
+    name.setAttribute('aria-label', `Focus chart on ${source.label || 'selected source'} source`);
+    name.addEventListener('click', () => setChartToolFilter(source.id, source.label || source.id));
 
     const status = document.createElement('span');
     status.className = 'tool-source-status';
     status.textContent = source.status_label || '';
 
-    const valueEl = document.createElement('div');
-    valueEl.className = 'tool-source-value';
-    valueEl.textContent = value;
-
     const meta = document.createElement('div');
     meta.className = 'tool-source-meta';
-    meta.textContent = active ? String(source.source_path || '') : String(source.source_path || '');
+    const sourceType = source.source_type || 'Source type unknown';
+    const sourcePath = source.source_path || 'Unknown';
+    meta.textContent = `${sourceType} · Source: ${sourcePath}`;
+
+    const actions = document.createElement('div');
+    actions.className = 'tool-source-actions';
+
+    const filterState = document.createElement('span');
+    filterState.className = 'tool-source-filter-state';
+    filterState.textContent = selectedChartToolId === source.id ? 'chart focused' : 'click name to filter';
+    actions.appendChild(filterState);
+
+    if (source.repo_url) {
+      const repo = document.createElement('a');
+      repo.className = 'tool-source-repo';
+      repo.href = source.repo_url;
+      repo.target = '_blank';
+      repo.rel = 'noopener noreferrer';
+      repo.textContent = 'repo';
+      repo.title = source.repo_url;
+      repo.setAttribute('aria-label', `${source.label || 'Tool'} upstream repository`);
+      actions.appendChild(repo);
+    }
 
     head.append(name, status);
-    card.append(head, valueEl, meta);
+    card.append(head, meta, actions);
     grid.appendChild(card);
   });
 }
@@ -1011,20 +1058,20 @@ async function loadOverview(days) {
     );
     setCardMeta(
       'tokens-sub',
-      `${totalAvg} avg/session`,
-      `${d.token_total_definition || 'Total tokens are input + output.'} Source: ${sourceLabel} only. Cache read/write is shown as secondary context, not included in total tokens.`,
+      `${fmtTokens(d.cache_read || 0)} read / ${fmtTokens(d.cache_write || 0)} write cache`,
+      `${d.token_total_definition || 'Total tokens are input + output.'} ${totalAvg} avg/session. Source: ${sourceLabel} only.`,
     );
     setCardMeta(
       'input-sub',
-      `${inputAvg} avg/session`,
-      `${fmtTokens(d.cache_read || 0)} cache read. Reused context is shown separately from input tokens.`,
+      `${fmtTokens(d.cache_read || 0)} cache read`,
+      `Input tokens are prompt/context tokens sent to the model. Cache read is reused context and is excluded from input totals. ${inputAvg} input avg/session.`,
     );
     setCardMeta(
       'output-sub',
-      `${outputAvg} avg/session`,
-      `${fmtTokens(d.cache_write || 0)} cache write. Cache created is shown separately from output tokens.`,
+      `${fmtTokens(d.cache_write || 0)} cache write`,
+      `Output tokens are assistant response tokens. Cache write is newly cached context and is excluded from output totals. ${outputAvg} output avg/session.`,
     );
-    document.getElementById('tool-sources-subtitle').textContent = `Totals currently come from ${sourceLabel} (${sourcePath}). ${d.token_total_definition || 'Total tokens are input + output.'}`;
+    document.getElementById('tool-sources-subtitle').textContent = `Click a source to focus the chart. Totals currently come from ${sourceLabel}.`;
     renderToolSources(d.tool_sources || []);
   } catch(e) {
     console.error('overview', e);
@@ -1048,9 +1095,9 @@ async function loadModels(days) {
     document.getElementById('estimated-cost').textContent = priced.length ? fmtCost(estimatedTotal) : '—';
     setCardMeta(
       'estimated-cost-sub',
-      priced.length ? `${priced.length}/${models.length} priced` : 'No matched pricing',
+      priced.length ? `approx · ${priced.length}/${models.length} priced` : 'No matched pricing',
       priced.length
-        ? `${unpricedCount} unmatched models. Cost uses live OpenRouter pricing first, then hardcoded fallback pricing for known OpenAI and opencode/go models.`
+        ? `${unpricedCount} unmatched models. Estimate uses live OpenRouter pricing first, then fallback pricing for known OpenAI and opencode/go models.`
         : 'No OpenRouter or hardcoded pricing matched the active models.',
     );
 
@@ -1124,19 +1171,61 @@ async function loadModels(days) {
 
 async function loadDaily(days) {
   try {
-    const selectedParam = selectedChartModelId ? `&model_id=${encodeURIComponent(selectedChartModelId)}` : '';
-    const r = await fetch(`/api/daily?days=${rangeParam()}&top_n=${currentTopN}${selectedParam}${simulateQuerySuffix()}`);
-    const data = await r.json();
+    const selectedModelParam = selectedChartModelId ? `&model_id=${encodeURIComponent(selectedChartModelId)}` : '';
+    const selectedToolParam = selectedChartToolId ? `&tool_id=${encodeURIComponent(selectedChartToolId)}` : '';
+    const r = await fetch(`/api/daily?days=${rangeParam()}&top_n=${currentTopN}${selectedModelParam}${selectedToolParam}${simulateQuerySuffix()}`);
+    const data = await r.json().catch(() => null);
 
-    syncChartModelSelection(data);
-    renderChart(data);
-    renderLegend(data.models);
+    if (!r.ok) {
+      const fallback = {
+        dates: [],
+        models: [],
+        data: {},
+        top_n: currentTopN,
+        other_count: 0,
+      };
+      const chartData = data && typeof data === 'object' ? data : fallback;
+      syncChartSelection(chartData);
+      renderChart(fallback);
+      renderLegend([]);
+      updateChartFilterUi();
+      document.getElementById('chart-note').textContent = chartData.error
+        ? chartData.error
+        : `Request failed with ${r.status} ${r.statusText || ''}`.trim();
+      return;
+    }
+
+    const safeData = data || {
+      dates: [],
+      models: [],
+      data: {},
+      top_n: currentTopN,
+      other_count: 0,
+      selected_model_id: null,
+      selected_tool_id: null,
+      selected_tool_label: null,
+      error: null,
+    };
+
+    syncChartSelection(safeData);
+    renderChart(safeData);
+    renderLegend(safeData.models);
     updateChartFilterUi();
-    document.getElementById('chart-note').textContent = selectedChartModelId
+    document.getElementById('chart-note').textContent = safeData.error
+      ? safeData.error
+      : selectedChartToolId && !safeData.models.length
+      ? `No connected ${selectedChartToolLabel || 'source'} data for this range`
+      : selectedChartModelId
       ? 'Single-model focus · click Clear filter to restore Top N view'
-      : `Position-based colors · top ${data.top_n} models by token volume · ${data.other_count || 0} long-tail models grouped as Other`;
+      : selectedChartToolId
+      ? `Source focus: ${selectedChartToolLabel || selectedChartToolId} · click Clear filter to restore all sources`
+      : `Position-based colors · top ${safeData.top_n} models by token volume · ${safeData.other_count || 0} long-tail models grouped as Other`;
   } catch(e) {
     console.error('daily', e);
+    renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });
+    renderLegend([]);
+    updateChartFilterUi();
+    document.getElementById('chart-note').textContent = 'Failed to load chart data.';
   }
 }
 
@@ -1144,8 +1233,8 @@ function updateChartFilterUi() {
   const bar = document.getElementById('chart-filter-bar');
   const label = document.getElementById('chart-filter-model');
   if (!bar || !label) return;
-  bar.classList.toggle('active', Boolean(selectedChartModelId));
-  label.textContent = selectedChartModelLabel || 'selected model';
+  bar.classList.toggle('active', Boolean(selectedChartModelId || selectedChartToolId));
+  label.textContent = selectedChartModelLabel || selectedChartToolLabel || 'selection';
   document.querySelectorAll('.model-filter-row').forEach(row => {
     const active = row.dataset.chartModelId === selectedChartModelId;
     row.classList.toggle('active', active);
@@ -1154,23 +1243,51 @@ function updateChartFilterUi() {
     button.setAttribute('aria-pressed', active ? 'true' : 'false');
     button.textContent = active ? 'Clear focus' : 'Focus chart';
   });
+  document.querySelectorAll('.tool-source-card').forEach(card => {
+    const active = card.dataset.toolId === selectedChartToolId;
+    card.classList.toggle('active-filter', active);
+    const button = card.querySelector('.tool-source-name');
+    button?.setAttribute('aria-pressed', active ? 'true' : 'false');
+    const state = card.querySelector('.tool-source-filter-state');
+    if (state) state.textContent = active ? 'chart focused' : 'click name to filter';
+  });
 }
 
-function syncChartModelSelection(data) {
+function syncChartSelection(data) {
   if (!data?.selected_model_id) {
     selectedChartModelId = null;
     selectedChartModelLabel = null;
-    return;
+  } else {
+    selectedChartModelId = data.selected_model_id;
+    const selectedMeta = (data.models || []).find(model => model.id === data.selected_model_id);
+    selectedChartModelLabel = selectedMeta?.label || selectedChartModelLabel || data.selected_model_id;
   }
-  selectedChartModelId = data.selected_model_id;
-  const selectedMeta = (data.models || []).find(model => model.id === data.selected_model_id);
-  selectedChartModelLabel = selectedMeta?.label || selectedChartModelLabel || data.selected_model_id;
+  if (!data?.selected_tool_id) {
+    selectedChartToolId = null;
+    selectedChartToolLabel = null;
+  } else {
+    selectedChartToolId = data.selected_tool_id;
+    selectedChartToolLabel = data.selected_tool_label || selectedChartToolLabel || data.selected_tool_id;
+  }
 }
 
 function setChartModelFilter(modelId, label) {
   const sameModel = selectedChartModelId === modelId;
   selectedChartModelId = sameModel ? null : modelId;
   selectedChartModelLabel = sameModel ? null : label;
+  selectedChartToolId = null;
+  selectedChartToolLabel = null;
+  hiddenChartModels.clear();
+  loadDaily(currentDays);
+  updateChartFilterUi();
+}
+
+function setChartToolFilter(toolId, label) {
+  const sameTool = selectedChartToolId === toolId;
+  selectedChartToolId = sameTool ? null : toolId;
+  selectedChartToolLabel = sameTool ? null : label;
+  selectedChartModelId = null;
+  selectedChartModelLabel = null;
   hiddenChartModels.clear();
   loadDaily(currentDays);
   updateChartFilterUi();
@@ -1179,6 +1296,8 @@ function setChartModelFilter(modelId, label) {
 function clearChartModelFilter() {
   selectedChartModelId = null;
   selectedChartModelLabel = null;
+  selectedChartToolId = null;
+  selectedChartToolLabel = null;
   hiddenChartModels.clear();
   loadDaily(currentDays);
   updateChartFilterUi();
