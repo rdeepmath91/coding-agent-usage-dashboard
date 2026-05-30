@@ -471,6 +471,7 @@ def api_daily():
             bucket["tokens_output"] += record.get("tokens_output") or 0
             bucket["tokens_total"] += record.get("tokens_total") or 0
             bucket["cache_read"] += record.get("cache_read") or 0
+            bucket["cache_write"] += record.get("cache_write") or 0
 
     dates = sorted(daily_data.keys())
     for dt in dates:

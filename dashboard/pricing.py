@@ -8,20 +8,65 @@ OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 PRICING_CACHE = {"fetched_at": 0, "prices": {}}
 
 HARDCODED_MODEL_PRICES = {
-    "moonshotai/kimi-k2.5": {"prompt": 0.0000006, "completion": 0.0000025},
-    "moonshotai/kimi-k2.6": {"prompt": 0.0000006, "completion": 0.0000025},
-    "deepseek/deepseek-v4-flash": {"prompt": 0.00000025, "completion": 0.000001},
-    "deepseek/deepseek-v4-flash:free": {"prompt": 0, "completion": 0},
-    "deepseek/deepseek-v4-pro": {"prompt": 0.0000005, "completion": 0.000002},
-    "qwen/qwen3.6-plus": {"prompt": 0.0000004, "completion": 0.0000012},
-    "qwen/qwen3.6-plus:free": {"prompt": 0, "completion": 0},
-    "minimax/minimax-m2.7": {"prompt": 0.0000003, "completion": 0.0000012},
-    "minimax/minimax-m2.7:free": {"prompt": 0, "completion": 0},
-    "minimax/minimax-m2.5:free": {"prompt": 0, "completion": 0},
-    "openai/gpt-5.5": {"prompt": 0.000005, "completion": 0.00003, "input_cache_read": 0.0000005},
-    "openai/gpt-5.4": {"prompt": 0.000005, "completion": 0.00002, "input_cache_read": 0.0000005},
-    "openai/gpt-5.4-mini": {"prompt": 0.000001, "completion": 0.000004, "input_cache_read": 0.0000001},
-    "anthropic/claude-sonnet-4": {"prompt": 0.000003, "completion": 0.000015, "input_cache_read": 0.0000003, "input_cache_write": 0.00000375},
+    "openai/gpt-5.5": {
+        "prompt": "0.000005",
+        "completion": "0.00003",
+        "input_cache_read": "0.0000005",
+    },
+    "openai/gpt-5.4": {
+        "prompt": "0.0000025",
+        "completion": "0.000015",
+        "input_cache_read": "0.00000025",
+    },
+    "openai/gpt-5.4-mini": {
+        "prompt": "0.00000075",
+        "completion": "0.0000045",
+        "input_cache_read": "0.000000075",
+    },
+    "openai/gpt-5.3-codex": {
+        "prompt": "0.00000175",
+        "completion": "0.000014",
+        "input_cache_read": "0.000000175",
+    },
+    "deepseek/deepseek-v4-flash:free": {
+        "prompt": "0",
+        "completion": "0",
+    },
+    "deepseek/deepseek-v4-flash": {
+        "prompt": "0.0000001",
+        "completion": "0.0000002",
+        "input_cache_read": "0.00000002",
+    },
+    "deepseek/deepseek-v4-pro": {
+        "prompt": "0.000000435",
+        "completion": "0.00000087",
+        "input_cache_read": "0.000000003625",
+    },
+    "moonshotai/kimi-k2.6": {
+        "prompt": "0.00000073",
+        "completion": "0.00000349",
+        "input_cache_read": "0.00000025",
+    },
+    "qwen/qwen3.6-plus": {
+        "prompt": "0.000000325",
+        "completion": "0.00000195",
+        "input_cache_write": "0.00000040625",
+    },
+    "minimax/minimax-m2.5:free": {
+        "prompt": "0",
+        "completion": "0",
+    },
+    "inclusionai/ling-2.6-flash": {
+        "prompt": "0.00000001",
+        "completion": "0.00000003",
+        "input_cache_read": "0.000000002",
+    },
+    "anthropic/claude-sonnet-4": {
+        "prompt": "0.000003",
+        "completion": "0.000015",
+        "input_cache_read": "0.0000003",
+        "input_cache_write": "0.00000375",
+    },
 }
 
 
@@ -50,8 +95,8 @@ def normalize_model(raw: str) -> dict:
         label = model_id
     elif provider == "openai":
         label = f"{model_id} (openai)"
-    elif provider:
-        label = f"{model_id}"
+    elif provider and provider != "unknown":
+        label = f"{model_id} ({provider})"
 
     return {"id": model_id, "provider": provider, "label": label, "variant": variant}
 

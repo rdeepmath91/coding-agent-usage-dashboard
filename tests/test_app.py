@@ -481,9 +481,11 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(hermes_model['chart_model_id'], 'openai-codex/gpt-5.5')
         self.assertEqual(hermes_model['tokens_input'], 2000)
         self.assertEqual(hermes_model['tokens_total'], 2500)
-        self.assertEqual(hermes_model['pricing_model_id'], 'openai/gpt-5.5')
+        self.assertEqual(hermes_model['pricing_model_id'], 'openai-codex/gpt-5.5')
         self.assertEqual(hermes_model['pricing_status'], 'priced')
-        self.assertIsNotNone(hermes_model['estimated_cost'])
+        self.assertEqual(hermes_model['pricing_source'], 'Hermes session accounting')
+        self.assertEqual(hermes_model['estimated_cost'], 0.42)
+        self.assertEqual(hermes_model['label'], 'gpt-5.5 (openai-codex)')
         self.assertTrue(hermes_model['cache_write_available'])
 
         daily = self.client.get('/api/daily?days=30&tool_id=hermes').get_json()
@@ -491,6 +493,10 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(daily['models'][0]['id'], 'openai-codex/gpt-5.5')
         first_day = daily['dates'][0]
         self.assertEqual(daily['data'][first_day]['openai-codex/gpt-5.5']['tokens_total'], 2500)
+        self.assertEqual(daily['data'][first_day]['openai-codex/gpt-5.5']['cache_write'], 125)
+
+        all_daily = self.client.get('/api/daily?days=30').get_json()
+        self.assertEqual(all_daily['data'][first_day]['openai-codex/gpt-5.5']['cache_write'], 125)
 
         history = self.client.get('/api/usage-history?limit=20').get_json()
         hermes_history = next(item for item in history if item['tool_id'] == 'hermes')
@@ -550,12 +556,15 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn("document.getElementById('db-path-display').textContent = `${sourceLabel} · ${sourcePath}`", html)
         self.assertNotIn('OpenCode · ~/.local/share/opencode/opencode.db</span>', html)
 
-    def test_tool_source_render_includes_path_handling(self):
+    def test_tool_source_render_moves_source_path_into_info_tooltip(self):
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        self.assertIn('const sourcePath = source.source_path || \'Unknown\'', html)
-        self.assertIn('Source: ${sourcePath}', html)
+        self.assertIn('className = \'tool-source-summary\'', html)
+        self.assertIn('source details', html)
+        self.assertIn('tooltip.textContent = `${sourceType} · Source: ${sourcePath}`', html)
+        self.assertNotIn('meta.textContent = `${sourceType} · Source: ${sourcePath}`', html)
+        self.assertNotIn('card.addEventListener(\'click\'', html)
 
     def test_simulated_mode_returns_synthetic_dashboard_data(self):
         overview = self.client.get('/api/overview?simulate=1&days=31')

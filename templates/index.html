@@ -273,9 +273,8 @@
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 14px 16px;
-    min-height: 104px;
-    cursor: pointer;
+    padding: 16px 18px;
+    min-height: 96px;
   }
   .tool-source-card.placeholder {
     border-style: dashed;
@@ -298,14 +297,71 @@
     color: inherit;
     cursor: pointer;
     font: inherit;
-    font-weight: 600;
+    font-size: 19px;
+    line-height: 1.15;
+    font-weight: 700;
     text-align: left;
   }
   .tool-source-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   .tool-source-name:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
   .tool-source-status { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.4px; }
-  .tool-source-meta { margin-top: 6px; color: var(--text-secondary); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; }
-  .tool-source-actions { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 12px; }
+  .tool-source-meta { margin-top: 10px; color: var(--text-secondary); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; }
+  .tool-source-summary { color: var(--text-secondary); }
+  .tool-source-detail { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; }
+  .tool-source-card .meta-info-wrap { position: relative; display: inline-flex; align-items: center; }
+  .tool-source-card .meta-info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-tertiary);
+    background: var(--bg-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 0;
+  }
+  .tool-source-card .meta-info:hover,
+  .tool-source-card .meta-info:focus-visible,
+  .tool-source-card .meta-info-wrap.is-open .meta-info {
+    outline: none;
+    color: var(--text-primary);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgb(33 150 243 / 0.18);
+  }
+  .tool-source-card .meta-tooltip {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    transform: translateX(-50%) translateY(4px);
+    width: min(320px, calc(100vw - 48px));
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    box-shadow: 0 12px 30px rgb(0 0 0 / 0.35);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+    z-index: 20;
+  }
+  .tool-source-card .meta-info-wrap:hover .meta-tooltip,
+  .tool-source-card .meta-info-wrap:focus-within .meta-tooltip,
+  .tool-source-card .meta-info-wrap.is-open .meta-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+  }
+  .tool-source-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 12px; }
   .tool-source-filter-state { color: var(--text-tertiary); }
   .tool-source-repo { color: var(--accent); text-decoration: none; }
   .tool-source-repo:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 3px; }
@@ -928,10 +984,6 @@ function renderToolSources(sources = []) {
     card.className = `tool-source-card ${active ? 'active' : 'placeholder'}`;
     card.dataset.toolId = source.id || '';
     card.title = source.repo_url ? `Repo: ${source.repo_url}` : '';
-    card.addEventListener('click', event => {
-      if (event.target.closest('a, button')) return;
-      setChartToolFilter(source.id, source.label || source.id);
-    });
     if (active) {
       card.style.borderColor = color;
       card.style.borderLeft = `3px solid ${color}`;
@@ -958,7 +1010,25 @@ function renderToolSources(sources = []) {
     meta.className = 'tool-source-meta';
     const sourceType = source.source_type || 'Source type unknown';
     const sourcePath = source.source_path || 'Unknown';
-    meta.textContent = `${sourceType} · Source: ${sourcePath}`;
+    const summary = document.createElement('span');
+    summary.className = 'tool-source-summary';
+    summary.textContent = source.sessions !== null && source.sessions !== undefined
+      ? `${fmtNum(source.sessions)} sessions · ${fmtTokens(source.tokens_total || 0)} tokens`
+      : (source.status_label || source.status || 'source');
+    const detail = document.createElement('span');
+    detail.className = 'tool-source-detail meta-info-wrap';
+    const detailButton = document.createElement('button');
+    detailButton.className = 'meta-info';
+    detailButton.type = 'button';
+    detailButton.setAttribute('aria-label', `${source.label || 'Tool'} source details`);
+    detailButton.setAttribute('aria-expanded', 'false');
+    detailButton.textContent = 'i';
+    const tooltip = document.createElement('span');
+    tooltip.className = 'meta-tooltip';
+    tooltip.setAttribute('role', 'tooltip');
+    tooltip.textContent = `${sourceType} · Source: ${sourcePath}`;
+    detail.append(detailButton, tooltip);
+    meta.append(summary, detail);
 
     const actions = document.createElement('div');
     actions.className = 'tool-source-actions';
@@ -982,6 +1052,7 @@ function renderToolSources(sources = []) {
 
     head.append(name, status);
     card.append(head, meta, actions);
+    bindMetaInfoInteractions(card);
     grid.appendChild(card);
   });
 }
@@ -1074,7 +1145,7 @@ async function loadOverview(days) {
       `${fmtTokens(d.cache_write)} cache write`,
       `Output tokens are assistant response tokens. Cache write is newly cached context and is excluded from output totals. ${outputAvg} output avg/session.`,
     );
-    document.getElementById('tool-sources-subtitle').textContent = `Click a source to focus the chart. Totals currently come from ${sourceLabel}.`;
+    document.getElementById('tool-sources-subtitle').textContent = `Click a source name to focus the chart. Totals currently come from ${sourceLabel}.`;
     renderToolSources(d.tool_sources || []);
   } catch(e) {
     console.error('overview', e);

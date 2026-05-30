@@ -321,6 +321,8 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
             "cache_read": 0,
             "cache_write": 0,
             "cache_write_available": True,
+            "accounted_cost": 0.0,
+            "accounted_cost_count": 0,
         })
         agg["sessions"] += 1
         agg["messages"] += record.get("messages") or 0
@@ -329,16 +331,31 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
         agg["tokens_total"] += record.get("tokens_total") or 0
         agg["cache_read"] += record.get("cache_read") or 0
         agg["cache_write"] += record.get("cache_write") or 0
+        accounted_cost = record.get("actual_cost") if record.get("actual_cost") is not None else record.get("estimated_cost")
+        if accounted_cost is not None:
+            agg["accounted_cost"] += float(accounted_cost)
+            agg["accounted_cost_count"] += 1
     models = sorted(grouped.values(), key=lambda item: item["tokens_total"], reverse=True)
     for item in models:
-        item.update(estimate_cost(
-            item["provider"],
-            item["model_id"],
-            item["tokens_input"],
-            item["tokens_output"],
-            item["cache_read"],
-            item["cache_write"],
-        ))
+        if item.pop("accounted_cost_count", 0):
+            accounted_cost = item.pop("accounted_cost")
+            item.update({
+                "estimated_cost": accounted_cost,
+                "pricing_status": "priced",
+                "pricing_source": "Hermes session accounting",
+                "pricing_model_id": item["chart_model_id"],
+                "cost_basis": "actual_or_session_estimate",
+            })
+        else:
+            item.pop("accounted_cost", None)
+            item.update(estimate_cost(
+                item["provider"],
+                item["model_id"],
+                item["tokens_input"],
+                item["tokens_output"],
+                item["cache_read"],
+                item["cache_write"],
+            ))
     return models
 
 def aggregate_codex_models(days: int | None = 30) -> list[dict]:
