@@ -106,6 +106,8 @@ referenced rollout JSONL file. The trusted token fields are:
 - `input_tokens - cached_input_tokens` → dashboard input, to match OpenCode's non-cache input semantics
 - `output_tokens` → output tokens
 
+The adapter filters, groups, sorts, and displays Codex records by thread `updated_at`, not `created_at`, because token metrics are latest cumulative rollout usage for the thread. This keeps long-lived threads updated inside the selected range from appearing on out-of-range created dates.
+
 Total tokens remain dashboard non-cache input + output. Cache read/write tokens are shown
 separately and excluded from total tokens. Codex local JSONL does not expose
 cache-write tokens, so the dashboard shows cache write as unavailable for Codex

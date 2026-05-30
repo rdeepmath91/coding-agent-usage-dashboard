@@ -266,15 +266,31 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(history[0]['tool'], 'OpenCode')
         self.assertEqual(history[0]['tool_id'], 'opencode')
         self.assertEqual(history[0]['tool_color'], '#3B82F6')
+    def test_usage_history_applies_offset_after_merging_sources(self):
+        response = self.client.get('/api/usage-history?limit=1&offset=1')
+        self.assertEqual(response.status_code, 200)
+        history = response.get_json()
+
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]['id'], 'sess-1')
 
 
-    def _write_codex_fixture(self) -> None:
+    def _write_codex_fixture(
+        self,
+        *,
+        created_ms: int | None = None,
+        updated_ms: int | None = None,
+        thread_id: str = "codex-1",
+    ) -> None:
         state = Path(self.tmpdir.name) / "codex-state.sqlite"
-        rollout = Path(self.tmpdir.name) / "codex-rollout.jsonl"
-        created_ms = int(time.time() * 1000) - 3600000
+        if state.exists():
+            state.unlink()
+        rollout = Path(self.tmpdir.name) / f"{thread_id}-rollout.jsonl"
+        created_ms = created_ms if created_ms is not None else int(time.time() * 1000) - 3600000
+        updated_ms = updated_ms if updated_ms is not None else created_ms + 120000
         rollout.write_text(
             '\n'.join([
-                json.dumps({"timestamp": "2026-05-30T00:00:00Z", "type": "session_meta", "payload": {"id": "codex-1"}}),
+                json.dumps({"timestamp": "2026-05-30T00:00:00Z", "type": "session_meta", "payload": {"id": thread_id}}),
                 json.dumps({"timestamp": "2026-05-30T00:01:00Z", "type": "event_msg", "payload": {"type": "task_complete", "info": {"total_token_usage": {"input_tokens": 1000, "cached_input_tokens": 250, "output_tokens": 125, "reasoning_output_tokens": 25, "total_tokens": 1125}}}}),
                 json.dumps({"timestamp": "2026-05-30T00:02:00Z", "type": "event_msg", "payload": {"type": "task_complete", "info": {"total_token_usage": {"input_tokens": 1500, "cached_input_tokens": 400, "output_tokens": 225, "reasoning_output_tokens": 40, "total_tokens": 1725}}}}),
             ]) + '\n'
@@ -307,7 +323,7 @@ class DashboardApiTests(unittest.TestCase):
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                "codex-1", str(rollout), created_ms // 1000, created_ms // 1000, created_ms, created_ms + 120000,
+                thread_id, str(rollout), created_ms // 1000, updated_ms // 1000, created_ms, updated_ms,
                 "cli", "openai", "/tmp/codex-project", "Codex adapter spike", 1725, "Codex adapter spike", "gpt-5.5",
             ),
         )
@@ -351,6 +367,25 @@ class DashboardApiTests(unittest.TestCase):
         codex_history = next(item for item in history if item['tool_id'] == 'codex')
         self.assertEqual(codex_history['tokens_input'], 1100)
         self.assertIsNone(codex_history['cache_write'])
+
+    def test_codex_records_use_updated_timestamp_for_window_and_display_date(self):
+        now_ms = int(time.time() * 1000)
+        created_ms = now_ms - 40 * 86400000
+        updated_ms = now_ms - 3600000
+        self._write_codex_fixture(created_ms=created_ms, updated_ms=updated_ms, thread_id="codex-long-lived")
+
+        records = dashboard_app.codex_records(days=30)
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        expected_updated_date = time.strftime('%Y-%m-%d', time.localtime(updated_ms / 1000))
+        old_created_date = time.strftime('%Y-%m-%d', time.localtime(created_ms / 1000))
+
+        self.assertEqual(record['id'], 'codex-long-lived')
+        self.assertEqual(record['timestamp'], updated_ms)
+        self.assertEqual(record['date'], expected_updated_date)
+        self.assertTrue(record['created'].startswith(expected_updated_date))
+        self.assertNotEqual(record['date'], old_created_date)
+
 
     def test_settings_page_describes_current_cost_and_token_rules(self):
         response = self.client.get('/settings')

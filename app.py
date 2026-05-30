@@ -205,10 +205,12 @@ def codex_records(days: int | None = None) -> list[dict]:
 
     Trust boundary: ~/.codex/state_5.sqlite is used for session metadata, while
     the latest cumulative `total_token_usage` in each rollout JSONL is used for
-    token metrics. Codex reports cached tokens inside `input_tokens`; the
-    dashboard subtracts `cached_input_tokens` so the public input column is
-    comparable with OpenCode's non-cache input. Codex does not expose
-    cache-write tokens in this local format, so cache_write remains None.
+    token metrics. Codex records are windowed, grouped, sorted, and displayed by
+    updated_at so a long-lived thread updated inside the selected range does not
+    render on an out-of-range created_at date. Codex reports cached tokens inside
+    `input_tokens`; the dashboard subtracts `cached_input_tokens` so the public
+    input column is comparable with OpenCode's non-cache input. Codex does not
+    expose cache-write tokens in this local format, so cache_write remains None.
     """
     if not codex_source_available():
         return []
@@ -265,10 +267,11 @@ def codex_records(days: int | None = None) -> list[dict]:
             "source_path": display_path(CODEX_SOURCE_PATH),
             "id": row["id"],
             "session_id": row["id"],
-            "timestamp": created_ms,
-            "created": created_dt.strftime("%Y-%m-%d %H:%M:%S") if created_dt else None,
+            "timestamp": updated_ms,
+            "created": updated_dt.strftime("%Y-%m-%d %H:%M:%S") if updated_dt else None,
+            "created_at": created_dt.strftime("%Y-%m-%d %H:%M:%S") if created_dt else None,
             "updated": updated_dt.strftime("%Y-%m-%d %H:%M:%S") if updated_dt else None,
-            "date": created_dt.date().isoformat() if created_dt else None,
+            "date": updated_dt.date().isoformat() if updated_dt else None,
             "title": row["title"] or row["preview"] or row["id"],
             "directory": row["cwd"],
             "provider": provider,
@@ -1308,6 +1311,7 @@ def api_usage_history():
             GROUP BY session_id
         )
         SELECT
+            s.time_created,
             datetime(s.time_created / 1000, 'unixepoch', 'localtime') as created,
             datetime(s.time_updated / 1000, 'unixepoch', 'localtime') as updated,
             s.id,
@@ -1325,8 +1329,7 @@ def api_usage_history():
         LEFT JOIN session_models sm ON sm.session_id = s.id
         WHERE s.model IS NOT NULL AND s.model != ''
         ORDER BY s.time_created DESC
-        LIMIT ? OFFSET ?
-    """, (limit, offset))
+    """)
 
     sessions = []
     for row in cur.fetchall():
@@ -1341,6 +1344,7 @@ def api_usage_history():
             "title": row["title"],
             "created": row["created"],
             "updated": row["updated"],
+            "timestamp": row["time_created"],
             "directory": row["directory"],
             "model": model_label,
             "messages": row["messages"] or 0,
@@ -1362,6 +1366,7 @@ def api_usage_history():
             "title": record["title"],
             "created": record["created"],
             "updated": record["updated"],
+            "timestamp": record["timestamp"],
             "directory": record["directory"],
             "model": record["model"],
             "messages": record["messages"],
@@ -1375,7 +1380,7 @@ def api_usage_history():
             "additions": None,
             "deletions": None,
         })
-    sessions.sort(key=lambda item: item.get("created") or "", reverse=True)
+    sessions.sort(key=lambda item: item.get("timestamp") or 0, reverse=True)
     start = int(offset or 0)
     count = int(limit or 50)
     return jsonify(sessions[start: start + count])
