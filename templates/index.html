@@ -776,7 +776,7 @@
     </section>
 
     <div class="footer">
-      ◇ active source: <span id="db-path-display">OpenCode · ~/.local/share/opencode/opencode.db</span>
+      ◇ active sources: <span id="db-path-display">Loading...</span>
       ☤ last updated: <span id="last-updated">—</span>
     </div>
   </main>
@@ -1049,6 +1049,7 @@ async function loadOverview(days) {
 
     const sourceLabel = d.active_tool_label || 'OpenCode';
     const sourcePath = d.source_path || '~/.local/share/opencode/opencode.db';
+    document.getElementById('db-path-display').textContent = `${sourceLabel} · ${sourcePath}`;
     const totalAvg = fmtTokens(d.total_tokens / Math.max(d.total_sessions, 1));
     const inputAvg = fmtTokens(d.total_input / Math.max(d.total_sessions, 1));
     const outputAvg = fmtTokens(d.total_output / Math.max(d.total_sessions, 1));
@@ -1060,7 +1061,7 @@ async function loadOverview(days) {
     setCardMeta(
       'tokens-sub',
       `${fmtTokens(d.cache_read)} read / ${fmtTokens(d.cache_write)} write cache`,
-      `${d.token_total_definition || 'Total tokens are non-cache input + output.'} ${totalAvg} avg/session. Source: ${sourceLabel} only.`,
+      `${d.token_total_definition || 'Total tokens are non-cache input + output.'} ${totalAvg} avg/session. Active sources: ${sourceLabel}.`,
     );
     setCardMeta(
       'input-sub',

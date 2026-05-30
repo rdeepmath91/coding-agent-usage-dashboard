@@ -419,6 +419,9 @@ class DashboardApiTests(unittest.TestCase):
         self.assertNotIn('role="button" data-chart-model-id', html)
         self.assertIn('if (!r.ok)', html)
         self.assertIn("document.getElementById('chart-note').textContent = chartData.error", html)
+        self.assertIn('active sources:', html)
+        self.assertIn("document.getElementById('db-path-display').textContent = `${sourceLabel} · ${sourcePath}`", html)
+        self.assertNotIn('OpenCode · ~/.local/share/opencode/opencode.db</span>', html)
 
     def test_tool_source_render_includes_path_handling(self):
         response = self.client.get('/')
