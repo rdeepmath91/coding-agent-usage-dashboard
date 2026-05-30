@@ -795,6 +795,7 @@ const FORMATTER = new Intl.NumberFormat('en-US');
 function fmtNum(n) { return FORMATTER.format(n); }
 
 function fmtTokens(n) {
+  if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
   if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B';
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
@@ -1058,17 +1059,17 @@ async function loadOverview(days) {
     );
     setCardMeta(
       'tokens-sub',
-      `${fmtTokens(d.cache_read || 0)} read / ${fmtTokens(d.cache_write || 0)} write cache`,
+      `${fmtTokens(d.cache_read)} read / ${fmtTokens(d.cache_write)} write cache`,
       `${d.token_total_definition || 'Total tokens are input + output.'} ${totalAvg} avg/session. Source: ${sourceLabel} only.`,
     );
     setCardMeta(
       'input-sub',
-      `${fmtTokens(d.cache_read || 0)} cache read`,
+      `${fmtTokens(d.cache_read)} cache read`,
       `Input tokens are prompt/context tokens sent to the model. Cache read is reused context and is excluded from input totals. ${inputAvg} input avg/session.`,
     );
     setCardMeta(
       'output-sub',
-      `${fmtTokens(d.cache_write || 0)} cache write`,
+      `${fmtTokens(d.cache_write)} cache write`,
       `Output tokens are assistant response tokens. Cache write is newly cached context and is excluded from output totals. ${outputAvg} output avg/session.`,
     );
     document.getElementById('tool-sources-subtitle').textContent = `Click a source to focus the chart. Totals currently come from ${sourceLabel}.`;

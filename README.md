@@ -2,10 +2,12 @@
 
 Local dashboard for inspecting coding-agent usage from your machine.
 
-Right now the active source is OpenCode via its local SQLite database at
-`~/.local/share/opencode/opencode.db`. The UI already leaves room for future
-Codex CLI and Hermes adapters, but this README is intentionally about one thing:
-getting the dashboard running locally and capturing snapshots.
+Right now the active sources are:
+
+- OpenCode via `~/.local/share/opencode/opencode.db`
+- Codex CLI via `~/.codex/state_5.sqlite` plus rollout JSONL files referenced by that state DB
+
+Hermes remains a planned adapter placeholder.
 
 ## Setup
 
@@ -84,10 +86,27 @@ review what the dashboard actually showed at capture time.
 
 ## Current data rules
 
-- active source: OpenCode local SQLite DB
+- active sources: OpenCode local SQLite DB; Codex local state DB plus rollout JSONL
 - total tokens = input + output assistant-message tokens
 - cache read/write tokens are shown separately and excluded from total tokens
 - unmatched model pricing stays unpriced instead of guessed
+
+### Codex source contract
+
+The Codex adapter reads session metadata from `~/.codex/state_5.sqlite`, table
+`threads`. The trusted metadata fields are session id, rollout path, created and
+updated timestamps, title/preview, cwd, provider, and model.
+
+Token metrics come from the latest cumulative `total_token_usage` object in each
+referenced rollout JSONL file. The trusted token fields are:
+
+- `input_tokens` → input tokens
+- `output_tokens` → output tokens
+- `cached_input_tokens` → cache read tokens
+
+Codex local JSONL does not expose cache-write tokens, so the dashboard shows
+cache write as unavailable for Codex instead of treating it as zero. The adapter
+does not infer token counts from transcript text.
 
 ## Local verification
 
