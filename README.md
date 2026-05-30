@@ -87,8 +87,9 @@ review what the dashboard actually showed at capture time.
 ## Current data rules
 
 - active sources: OpenCode local SQLite DB; Codex local state DB plus rollout JSONL
-- total tokens = input + output assistant-message tokens
+- total tokens = non-cache input + output assistant-message tokens
 - cache read/write tokens are shown separately and excluded from total tokens
+- raw provider input can include cached tokens; adapters subtract cache read where needed before reporting dashboard input
 - unmatched model pricing stays unpriced instead of guessed
 
 ### Codex source contract
@@ -105,7 +106,7 @@ referenced rollout JSONL file. The trusted token fields are:
 - `input_tokens - cached_input_tokens` → dashboard input, to match OpenCode's non-cache input semantics
 - `output_tokens` → output tokens
 
-Total tokens remain dashboard input + output. Cache read/write tokens are shown
+Total tokens remain dashboard non-cache input + output. Cache read/write tokens are shown
 separately and excluded from total tokens. Codex local JSONL does not expose
 cache-write tokens, so the dashboard shows cache write as unavailable for Codex
 instead of treating it as zero. The adapter does not infer token counts from

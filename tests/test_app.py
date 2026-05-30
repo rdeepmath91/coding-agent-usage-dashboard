@@ -205,7 +205,7 @@ class DashboardApiTests(unittest.TestCase):
 
         self.assertEqual(
             payload['token_total_definition'],
-            'input + output assistant-message tokens; cache read/write excluded',
+            'non-cache input + output assistant-message tokens; cache read/write separate',
         )
         self.assertEqual(payload['active_tool'], 'opencode')
         self.assertEqual(payload['active_tool_label'], 'OpenCode')
@@ -356,7 +356,8 @@ class DashboardApiTests(unittest.TestCase):
         response = self.client.get('/settings')
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        self.assertIn('Total tokens are defined as input + output assistant-message tokens.', html)
+        self.assertIn('Total tokens are defined as non-cache input + output assistant-message tokens.', html)
+        self.assertIn('this dashboard subtracts cache read where needed', html)
         self.assertIn('Cost is estimated from matched OpenRouter pricing when available.', html)
 
     def test_overview_page_includes_clickable_metric_tooltips(self):
@@ -366,6 +367,8 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('class="meta-info-wrap"', html)
         self.assertIn('class="meta-tooltip"', html)
         self.assertIn('aria-expanded="false"', html)
+        self.assertIn('Non-cache Input', html)
+        self.assertIn('Raw provider usage may include cache reads', html)
         self.assertIn('bindMetaInfoInteractions', html)
 
     def test_dashboard_template_uses_button_based_accessible_controls(self):

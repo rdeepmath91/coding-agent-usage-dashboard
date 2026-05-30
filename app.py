@@ -709,7 +709,7 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
         "active_tool": "opencode",
         "active_tool_label": "OpenCode (simulated)",
         "source_path": "simulated dataset",
-        "token_total_definition": "input + output assistant-message tokens; cache read/write excluded",
+        "token_total_definition": "non-cache input + output assistant-message tokens; cache read/write separate",
         "tool_sources": [],
     }
 
@@ -880,7 +880,7 @@ def api_overview():
     row["active_tool"] = "multiple" if codex else "opencode"
     row["active_tool_label"] = "OpenCode + Codex CLI" if codex else "OpenCode"
     row["source_path"] = f"{display_path(DB_PATH)} + {display_path(CODEX_SOURCE_PATH)}" if codex else display_path(DB_PATH)
-    row["token_total_definition"] = "input + output assistant-message tokens; cache read/write excluded"
+    row["token_total_definition"] = "non-cache input + output assistant-message tokens; cache read/write separate"
 
     opencode_totals = {
         "sessions": row["total_sessions"],

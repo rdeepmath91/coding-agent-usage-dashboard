@@ -71,7 +71,7 @@
 
 <div class="card">
   <h2>Source</h2>
-  <p>Built from normalized local session data — model, session timestamps, input tokens, and output tokens per session/message. Total tokens are defined as input + output assistant-message tokens. Cached tokens are shown only as secondary context, separate from input/output totals. Cost is estimated from matched OpenRouter pricing when available.</p>
+  <p>Built from normalized local session data — model, session timestamps, non-cache input tokens, output tokens, and separate cache read/write metrics where a source exposes them. Total tokens are defined as non-cache input + output assistant-message tokens. Raw provider usage can include cached tokens in input; this dashboard subtracts cache read where needed for source-to-source consistency. Cost is estimated from matched OpenRouter pricing when available.</p>
 </div>
 </body>
 </html>
