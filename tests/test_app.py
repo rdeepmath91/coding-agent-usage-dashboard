@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 import app as dashboard_app
+from dashboard import config as dashboard_config
 
 
 HOME_PREFIX = f"{Path.home()}/"
@@ -55,28 +56,28 @@ class DashboardApiTests(unittest.TestCase):
     def setUpClass(cls):
         cls.tmpdir = tempfile.TemporaryDirectory()
         cls.db_path = Path(cls.tmpdir.name) / "opencode-test.db"
-        cls.original_db_path = dashboard_app.DB_PATH
-        cls.original_codex_state_path = dashboard_app.CODEX_STATE_PATH
-        cls.original_codex_sessions_dir = dashboard_app.CODEX_SESSIONS_DIR
-        cls.original_codex_source_path = dashboard_app.CODEX_SOURCE_PATH
-        cls.original_hermes_state_path = dashboard_app.HERMES_STATE_PATH
+        cls.original_db_path = dashboard_config.DB_PATH
+        cls.original_codex_state_path = dashboard_config.CODEX_STATE_PATH
+        cls.original_codex_sessions_dir = dashboard_config.CODEX_SESSIONS_DIR
+        cls.original_codex_source_path = dashboard_config.CODEX_SOURCE_PATH
+        cls.original_hermes_state_path = dashboard_config.HERMES_STATE_PATH
         cls.codex_state_path = Path(cls.tmpdir.name) / "missing-codex-state.sqlite"
         cls.hermes_state_path = Path(cls.tmpdir.name) / "missing-hermes-state.db"
         cls.codex_sessions_dir = Path(cls.tmpdir.name) / "codex-sessions"
         cls._build_test_db(cls.db_path)
-        dashboard_app.DB_PATH = str(cls.db_path)
-        dashboard_app.CODEX_STATE_PATH = str(cls.codex_state_path)
-        dashboard_app.CODEX_SESSIONS_DIR = str(cls.codex_sessions_dir)
-        dashboard_app.CODEX_SOURCE_PATH = str(cls.codex_state_path)
-        dashboard_app.HERMES_STATE_PATH = str(cls.hermes_state_path)
+        dashboard_config.DB_PATH = str(cls.db_path)
+        dashboard_config.CODEX_STATE_PATH = str(cls.codex_state_path)
+        dashboard_config.CODEX_SESSIONS_DIR = str(cls.codex_sessions_dir)
+        dashboard_config.CODEX_SOURCE_PATH = str(cls.codex_state_path)
+        dashboard_config.HERMES_STATE_PATH = str(cls.hermes_state_path)
 
     @classmethod
     def tearDownClass(cls):
-        dashboard_app.DB_PATH = cls.original_db_path
-        dashboard_app.CODEX_STATE_PATH = cls.original_codex_state_path
-        dashboard_app.CODEX_SESSIONS_DIR = cls.original_codex_sessions_dir
-        dashboard_app.CODEX_SOURCE_PATH = cls.original_codex_source_path
-        dashboard_app.HERMES_STATE_PATH = cls.original_hermes_state_path
+        dashboard_config.DB_PATH = cls.original_db_path
+        dashboard_config.CODEX_STATE_PATH = cls.original_codex_state_path
+        dashboard_config.CODEX_SESSIONS_DIR = cls.original_codex_sessions_dir
+        dashboard_config.CODEX_SOURCE_PATH = cls.original_codex_source_path
+        dashboard_config.HERMES_STATE_PATH = cls.original_hermes_state_path
         cls.tmpdir.cleanup()
 
     @classmethod
@@ -197,10 +198,10 @@ class DashboardApiTests(unittest.TestCase):
         conn.close()
 
     def setUp(self):
-        dashboard_app.CODEX_STATE_PATH = str(self.codex_state_path)
-        dashboard_app.CODEX_SESSIONS_DIR = str(self.codex_sessions_dir)
-        dashboard_app.CODEX_SOURCE_PATH = str(self.codex_state_path)
-        dashboard_app.HERMES_STATE_PATH = str(self.hermes_state_path)
+        dashboard_config.CODEX_STATE_PATH = str(self.codex_state_path)
+        dashboard_config.CODEX_SESSIONS_DIR = str(self.codex_sessions_dir)
+        dashboard_config.CODEX_SOURCE_PATH = str(self.codex_state_path)
+        dashboard_config.HERMES_STATE_PATH = str(self.hermes_state_path)
         self.client = dashboard_app.app.test_client()
 
     def test_overview_exposes_tool_source_metadata(self):
@@ -345,8 +346,8 @@ class DashboardApiTests(unittest.TestCase):
         )
         conn.commit()
         conn.close()
-        dashboard_app.CODEX_STATE_PATH = str(state)
-        dashboard_app.CODEX_SOURCE_PATH = str(state)
+        dashboard_config.CODEX_STATE_PATH = str(state)
+        dashboard_config.CODEX_SOURCE_PATH = str(state)
 
     def test_codex_records_flow_into_sources_models_daily_and_history(self):
         self._write_codex_fixture()
@@ -457,7 +458,7 @@ class DashboardApiTests(unittest.TestCase):
         )
         conn.commit()
         conn.close()
-        dashboard_app.HERMES_STATE_PATH = str(state)
+        dashboard_config.HERMES_STATE_PATH = str(state)
 
     def test_hermes_records_flow_into_sources_models_daily_and_history(self):
         self._write_hermes_fixture()
