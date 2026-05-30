@@ -407,6 +407,13 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('Non-cache Input', html)
         self.assertIn('Raw provider usage may include cache reads', html)
         self.assertIn('bindMetaInfoInteractions', html)
+        self.assertIn('<link rel="icon" href="/favicon.ico" type="image/svg+xml">', html)
+
+    def test_favicon_route_returns_svg_icon(self):
+        response = self.client.get('/favicon.ico')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, 'image/svg+xml')
+        self.assertIn('<svg', response.get_data(as_text=True))
 
     def test_dashboard_template_uses_button_based_accessible_controls(self):
         response = self.client.get('/')

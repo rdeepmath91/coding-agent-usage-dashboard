@@ -13,7 +13,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 
 app = Flask(__name__)
 
@@ -1411,6 +1411,14 @@ def index():
 @app.route("/settings")
 def settings():
     return render_template("settings.html")
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return Response(
+        Path(app.root_path, "static", "favicon.svg").read_text(),
+        mimetype="image/svg+xml",
+    )
 
 
 # ── Main ────────────────────────────────────────────────────────────────────
