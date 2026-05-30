@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / 'README.md'
 PYPROJECT = ROOT / 'pyproject.toml'
 UV_LOCK = ROOT / 'uv.lock'
+AGENTS = ROOT / 'AGENTS.md'
 
 
 class ReadmeTests(unittest.TestCase):
@@ -35,6 +36,13 @@ class ReadmeTests(unittest.TestCase):
         lock_text = UV_LOCK.read_text()
         self.assertIn('version = 1', lock_text)
         self.assertIn('name = "coding-agent-usage-dashboard"', lock_text)
+
+    def test_agent_guidance_matches_token_and_source_contract(self):
+        content = AGENTS.read_text()
+
+        self.assertIn('Codex CLI via `~/.codex/state_5.sqlite`', content)
+        self.assertIn('Total tokens means `non-cache input + output assistant-message tokens`', content)
+        self.assertNotIn('Total tokens means `input + output assistant-message tokens`', content)
 
 
 if __name__ == '__main__':

@@ -393,6 +393,8 @@ class DashboardApiTests(unittest.TestCase):
         html = response.get_data(as_text=True)
         self.assertIn('Total tokens are defined as non-cache input + output assistant-message tokens.', html)
         self.assertIn('this dashboard subtracts cache read where needed', html)
+        self.assertIn('Codex CLI becomes active when', html)
+        self.assertNotIn('OpenCode is the active source today', html)
         self.assertIn('Cost is estimated from matched OpenRouter pricing when available.', html)
 
     def test_overview_page_includes_clickable_metric_tooltips(self):
