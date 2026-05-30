@@ -41,6 +41,7 @@ class ReadmeTests(unittest.TestCase):
         content = AGENTS.read_text()
 
         self.assertIn('Codex CLI via `~/.codex/state_5.sqlite`', content)
+        self.assertIn('Hermes via `~/.hermes/state.db`', content)
         self.assertIn('Total tokens means `non-cache input + output assistant-message tokens`', content)
         self.assertNotIn('Total tokens means `input + output assistant-message tokens`', content)
 

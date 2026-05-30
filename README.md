@@ -6,8 +6,7 @@ Right now the active sources are:
 
 - OpenCode via `~/.local/share/opencode/opencode.db`
 - Codex CLI via `~/.codex/state_5.sqlite` plus rollout JSONL files referenced by that state DB
-
-Hermes remains a planned adapter placeholder.
+- Hermes via `~/.hermes/state.db`
 
 ## Setup
 
@@ -82,11 +81,11 @@ review what the dashboard actually showed at capture time.
 - model breakdown with token totals
 - recent usage history
 - estimated cost when a model can be matched to public OpenRouter pricing
-- explicit tool/source labeling so the current OpenCode-backed totals are not ambiguous
+- explicit tool/source labeling so multi-source totals are not ambiguous
 
 ## Current data rules
 
-- active sources: OpenCode local SQLite DB; Codex local state DB plus rollout JSONL
+- active sources: OpenCode local SQLite DB; Codex local state DB plus rollout JSONL; Hermes local session DB
 - total tokens = non-cache input + output assistant-message tokens
 - cache read/write tokens are shown separately and excluded from total tokens
 - raw provider input can include cached tokens; adapters subtract cache read where needed before reporting dashboard input
@@ -113,6 +112,25 @@ separately and excluded from total tokens. Codex local JSONL does not expose
 cache-write tokens, so the dashboard shows cache write as unavailable for Codex
 instead of treating it as zero. The adapter does not infer token counts from
 transcript text.
+
+### Hermes source contract
+
+The Hermes adapter reads session metadata and token metrics from
+`~/.hermes/state.db`, table `sessions`. The trusted metadata fields are session
+id, source, title, started/ended timestamps, message/tool-call counts, provider,
+and model.
+
+The trusted token fields are:
+
+- `input_tokens` → dashboard non-cache input tokens
+- `output_tokens` → output tokens
+- `cache_read_tokens` → cache read tokens
+- `cache_write_tokens` → cache write tokens
+
+Hermes records are filtered, grouped, sorted, and displayed by `started_at`.
+Total tokens remain dashboard input + output. Cache read/write tokens are shown
+separately and excluded from total tokens. The adapter does not infer token
+counts from message text.
 
 ## Local verification
 

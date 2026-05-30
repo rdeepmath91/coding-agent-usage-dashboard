@@ -59,13 +59,16 @@ class DashboardApiTests(unittest.TestCase):
         cls.original_codex_state_path = dashboard_app.CODEX_STATE_PATH
         cls.original_codex_sessions_dir = dashboard_app.CODEX_SESSIONS_DIR
         cls.original_codex_source_path = dashboard_app.CODEX_SOURCE_PATH
+        cls.original_hermes_state_path = dashboard_app.HERMES_STATE_PATH
         cls.codex_state_path = Path(cls.tmpdir.name) / "missing-codex-state.sqlite"
+        cls.hermes_state_path = Path(cls.tmpdir.name) / "missing-hermes-state.db"
         cls.codex_sessions_dir = Path(cls.tmpdir.name) / "codex-sessions"
         cls._build_test_db(cls.db_path)
         dashboard_app.DB_PATH = str(cls.db_path)
         dashboard_app.CODEX_STATE_PATH = str(cls.codex_state_path)
         dashboard_app.CODEX_SESSIONS_DIR = str(cls.codex_sessions_dir)
         dashboard_app.CODEX_SOURCE_PATH = str(cls.codex_state_path)
+        dashboard_app.HERMES_STATE_PATH = str(cls.hermes_state_path)
 
     @classmethod
     def tearDownClass(cls):
@@ -73,6 +76,7 @@ class DashboardApiTests(unittest.TestCase):
         dashboard_app.CODEX_STATE_PATH = cls.original_codex_state_path
         dashboard_app.CODEX_SESSIONS_DIR = cls.original_codex_sessions_dir
         dashboard_app.CODEX_SOURCE_PATH = cls.original_codex_source_path
+        dashboard_app.HERMES_STATE_PATH = cls.original_hermes_state_path
         cls.tmpdir.cleanup()
 
     @classmethod
@@ -196,6 +200,7 @@ class DashboardApiTests(unittest.TestCase):
         dashboard_app.CODEX_STATE_PATH = str(self.codex_state_path)
         dashboard_app.CODEX_SESSIONS_DIR = str(self.codex_sessions_dir)
         dashboard_app.CODEX_SOURCE_PATH = str(self.codex_state_path)
+        dashboard_app.HERMES_STATE_PATH = str(self.hermes_state_path)
         self.client = dashboard_app.app.test_client()
 
     def test_overview_exposes_tool_source_metadata(self):
@@ -240,6 +245,17 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(payload['models'], [])
         self.assertEqual(payload['data'], {})
         self.assertEqual(payload['error'], 'Codex CLI data is unavailable.')
+
+    def test_hermes_tool_source_filter_returns_empty_result_when_data_missing(self):
+        response = self.client.get('/api/daily?days=30&tool_id=hermes')
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+
+        self.assertEqual(payload['selected_tool_id'], 'hermes')
+        self.assertEqual(payload['selected_tool_label'], 'Hermes')
+        self.assertEqual(payload['models'], [])
+        self.assertEqual(payload['data'], {})
+        self.assertEqual(payload['error'], 'Hermes data is unavailable.')
 
     def test_unknown_tool_source_filter_returns_http_400(self):
         response = self.client.get('/api/daily?days=30&tool_id=unknown')
@@ -386,6 +402,108 @@ class DashboardApiTests(unittest.TestCase):
         self.assertTrue(record['created'].startswith(expected_updated_date))
         self.assertNotEqual(record['date'], old_created_date)
 
+    def _write_hermes_fixture(self, *, started_at: float | None = None, session_id: str = 'hermes-1') -> None:
+        state = Path(self.tmpdir.name) / 'hermes-state.db'
+        if state.exists():
+            state.unlink()
+        started_at = started_at if started_at is not None else time.time() - 3600
+        conn = sqlite3.connect(state)
+        conn.execute(
+            """
+            CREATE TABLE sessions (
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                user_id TEXT,
+                model TEXT,
+                model_config TEXT,
+                system_prompt TEXT,
+                parent_session_id TEXT,
+                started_at REAL NOT NULL,
+                ended_at REAL,
+                end_reason TEXT,
+                message_count INTEGER DEFAULT 0,
+                tool_call_count INTEGER DEFAULT 0,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                cache_read_tokens INTEGER DEFAULT 0,
+                cache_write_tokens INTEGER DEFAULT 0,
+                reasoning_tokens INTEGER DEFAULT 0,
+                billing_provider TEXT,
+                billing_base_url TEXT,
+                billing_mode TEXT,
+                estimated_cost_usd REAL,
+                actual_cost_usd REAL,
+                cost_status TEXT,
+                cost_source TEXT,
+                pricing_version TEXT,
+                title TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO sessions (
+                id, source, model, started_at, ended_at, message_count,
+                tool_call_count, input_tokens, output_tokens, cache_read_tokens,
+                cache_write_tokens, billing_provider, estimated_cost_usd,
+                cost_status, cost_source, title
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session_id, 'cli', 'gpt-5.5', started_at, started_at + 120,
+                7, 3, 2000, 500, 8000, 125, 'openai-codex', 0.42,
+                'estimated', 'session accounting', 'Hermes adapter implementation',
+            ),
+        )
+        conn.commit()
+        conn.close()
+        dashboard_app.HERMES_STATE_PATH = str(state)
+
+    def test_hermes_records_flow_into_sources_models_daily_and_history(self):
+        self._write_hermes_fixture()
+
+        overview = self.client.get('/api/overview?days=30').get_json()
+        self.assertEqual(overview['active_tool_label'], 'OpenCode + Hermes')
+        sources = {item['id']: item for item in overview['tool_sources']}
+        self.assertEqual(sources['hermes']['status'], 'active')
+        self.assertEqual(sources['hermes']['status_label'], 'Active source')
+        self.assertEqual(sources['hermes']['source_type'], 'Hermes session SQLite database')
+        self.assertEqual(sources['hermes']['sessions'], 1)
+        self.assertEqual(sources['hermes']['tokens_input'], 2000)
+        self.assertEqual(sources['hermes']['tokens_output'], 500)
+        self.assertEqual(sources['hermes']['tokens_total'], 2500)
+        self.assertEqual(sources['hermes']['cache_read'], 8000)
+        self.assertEqual(sources['hermes']['cache_write'], 125)
+
+        models = self.client.get('/api/models?days=30').get_json()
+        hermes_model = next(item for item in models if item['tool_id'] == 'hermes')
+        self.assertEqual(hermes_model['chart_model_id'], 'openai-codex/gpt-5.5')
+        self.assertEqual(hermes_model['tokens_input'], 2000)
+        self.assertEqual(hermes_model['tokens_total'], 2500)
+        self.assertEqual(hermes_model['pricing_model_id'], 'openai/gpt-5.5')
+        self.assertEqual(hermes_model['pricing_status'], 'priced')
+        self.assertIsNotNone(hermes_model['estimated_cost'])
+        self.assertTrue(hermes_model['cache_write_available'])
+
+        daily = self.client.get('/api/daily?days=30&tool_id=hermes').get_json()
+        self.assertEqual(daily['selected_tool_id'], 'hermes')
+        self.assertEqual(daily['models'][0]['id'], 'openai-codex/gpt-5.5')
+        first_day = daily['dates'][0]
+        self.assertEqual(daily['data'][first_day]['openai-codex/gpt-5.5']['tokens_total'], 2500)
+
+        history = self.client.get('/api/usage-history?limit=20').get_json()
+        hermes_history = next(item for item in history if item['tool_id'] == 'hermes')
+        self.assertEqual(hermes_history['tokens_input'], 2000)
+        self.assertEqual(hermes_history['cache_write'], 125)
+        self.assertIn('Hermes session totals', hermes_history['metrics_note'])
+
+    def test_hermes_records_use_started_timestamp_for_window_and_display_date(self):
+        started_at = time.time() - 40 * 86400
+        self._write_hermes_fixture(started_at=started_at, session_id='hermes-old')
+
+        records = dashboard_app.hermes_records(days=30)
+        self.assertEqual(records, [])
+
 
     def test_settings_page_describes_current_cost_and_token_rules(self):
         response = self.client.get('/settings')
@@ -394,6 +512,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('Total tokens are defined as non-cache input + output assistant-message tokens.', html)
         self.assertIn('this dashboard subtracts cache read where needed', html)
         self.assertIn('Codex CLI becomes active when', html)
+        self.assertIn('Hermes becomes active when', html)
         self.assertNotIn('OpenCode is the active source today', html)
         self.assertIn('Cost is estimated from matched OpenRouter pricing when available.', html)
 
