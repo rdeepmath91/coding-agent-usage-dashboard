@@ -100,13 +100,16 @@ updated timestamps, title/preview, cwd, provider, and model.
 Token metrics come from the latest cumulative `total_token_usage` object in each
 referenced rollout JSONL file. The trusted token fields are:
 
-- `input_tokens` → input tokens
-- `output_tokens` → output tokens
+- `input_tokens` → raw Codex input, including cached input
 - `cached_input_tokens` → cache read tokens
+- `input_tokens - cached_input_tokens` → dashboard input, to match OpenCode's non-cache input semantics
+- `output_tokens` → output tokens
 
-Codex local JSONL does not expose cache-write tokens, so the dashboard shows
-cache write as unavailable for Codex instead of treating it as zero. The adapter
-does not infer token counts from transcript text.
+Total tokens remain dashboard input + output. Cache read/write tokens are shown
+separately and excluded from total tokens. Codex local JSONL does not expose
+cache-write tokens, so the dashboard shows cache write as unavailable for Codex
+instead of treating it as zero. The adapter does not infer token counts from
+transcript text.
 
 ## Local verification
 

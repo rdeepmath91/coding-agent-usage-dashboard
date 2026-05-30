@@ -325,26 +325,31 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(sources['codex']['status_label'], 'Active source')
         self.assertEqual(sources['codex']['source_type'], 'SQLite state + JSONL rollouts')
         self.assertEqual(sources['codex']['sessions'], 1)
-        self.assertEqual(sources['codex']['tokens_input'], 1500)
+        self.assertEqual(sources['codex']['tokens_input'], 1100)
         self.assertEqual(sources['codex']['tokens_output'], 225)
+        self.assertEqual(sources['codex']['tokens_total'], 1325)
         self.assertEqual(sources['codex']['cache_read'], 400)
         self.assertIsNone(sources['codex']['cache_write'])
 
         models = self.client.get('/api/models?days=30').get_json()
         codex_model = next(item for item in models if item['tool_id'] == 'codex')
         self.assertEqual(codex_model['chart_model_id'], 'openai/gpt-5.5')
-        self.assertEqual(codex_model['tokens_total'], 1725)
+        self.assertEqual(codex_model['tokens_input'], 1100)
+        self.assertEqual(codex_model['tokens_total'], 1325)
+        self.assertEqual(codex_model['pricing_model_id'], 'openai/gpt-5.5')
+        self.assertEqual(codex_model['pricing_status'], 'priced')
+        self.assertIsNotNone(codex_model['estimated_cost'])
         self.assertFalse(codex_model['cache_write_available'])
 
         daily = self.client.get('/api/daily?days=30&tool_id=codex').get_json()
         self.assertEqual(daily['selected_tool_id'], 'codex')
         self.assertEqual(daily['models'][0]['id'], 'openai/gpt-5.5')
         first_day = daily['dates'][0]
-        self.assertEqual(daily['data'][first_day]['openai/gpt-5.5']['tokens_total'], 1725)
+        self.assertEqual(daily['data'][first_day]['openai/gpt-5.5']['tokens_total'], 1325)
 
         history = self.client.get('/api/usage-history?limit=20').get_json()
         codex_history = next(item for item in history if item['tool_id'] == 'codex')
-        self.assertEqual(codex_history['tokens_input'], 1500)
+        self.assertEqual(codex_history['tokens_input'], 1100)
         self.assertIsNone(codex_history['cache_write'])
 
     def test_settings_page_describes_current_cost_and_token_rules(self):

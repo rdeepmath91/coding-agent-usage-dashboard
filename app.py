@@ -205,8 +205,10 @@ def codex_records(days: int | None = None) -> list[dict]:
 
     Trust boundary: ~/.codex/state_5.sqlite is used for session metadata, while
     the latest cumulative `total_token_usage` in each rollout JSONL is used for
-    input/output/cache-read tokens. Codex does not expose cache-write tokens in
-    this local format, so cache_write remains None.
+    token metrics. Codex reports cached tokens inside `input_tokens`; the
+    dashboard subtracts `cached_input_tokens` so the public input column is
+    comparable with OpenCode's non-cache input. Codex does not expose
+    cache-write tokens in this local format, so cache_write remains None.
     """
     if not codex_source_available():
         return []
@@ -244,9 +246,12 @@ def codex_records(days: int | None = None) -> list[dict]:
         usage, token_events = _jsonl_latest_codex_usage(row["rollout_path"])
         if not usage:
             continue
-        input_tokens = _safe_int(usage.get("input_tokens"), None)
+        raw_input_tokens = _safe_int(usage.get("input_tokens"), None)
         output_tokens = _safe_int(usage.get("output_tokens"), None)
         cache_read = _safe_int(usage.get("cached_input_tokens"), None)
+        input_tokens = raw_input_tokens
+        if raw_input_tokens is not None and cache_read is not None:
+            input_tokens = max(0, raw_input_tokens - cache_read)
         model_id = row["model"] or "unknown"
         provider = row["model_provider"] or "unknown"
         created_ms = _safe_int(row["created_ms"], 0) or 0
@@ -274,12 +279,13 @@ def codex_records(days: int | None = None) -> list[dict]:
             "sessions": 1,
             "messages": token_events,
             "tokens_input": input_tokens,
+            "raw_tokens_input": raw_input_tokens,
             "tokens_output": output_tokens,
             "tokens_total": (input_tokens or 0) + (output_tokens or 0) if input_tokens is not None and output_tokens is not None else None,
             "cache_read": cache_read,
             "cache_write": None,
             "cache_write_available": False,
-            "metrics_note": "Codex local JSONL exposes input, output, and cached input tokens; cache write is unavailable.",
+            "metrics_note": "Codex total_token_usage.input_tokens includes cached input; dashboard input subtracts cached_input_tokens so input/cache read match OpenCode semantics. Cache write is unavailable.",
             "files_changed": None,
             "additions": None,
             "deletions": None,
@@ -356,6 +362,15 @@ def aggregate_codex_models(days: int | None = 30) -> list[dict]:
         agg["tokens_total"] += record.get("tokens_total") or 0
         agg["cache_read"] += record.get("cache_read") or 0
     models = sorted(grouped.values(), key=lambda item: item["tokens_total"], reverse=True)
+    for item in models:
+        item.update(estimate_cost(
+            item["provider"],
+            item["model_id"],
+            item["tokens_input"],
+            item["tokens_output"],
+            item["cache_read"],
+            0,
+        ))
     return models
 
 
