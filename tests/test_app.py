@@ -56,12 +56,23 @@ class DashboardApiTests(unittest.TestCase):
         cls.tmpdir = tempfile.TemporaryDirectory()
         cls.db_path = Path(cls.tmpdir.name) / "opencode-test.db"
         cls.original_db_path = dashboard_app.DB_PATH
+        cls.original_codex_state_path = dashboard_app.CODEX_STATE_PATH
+        cls.original_codex_sessions_dir = dashboard_app.CODEX_SESSIONS_DIR
+        cls.original_codex_source_path = dashboard_app.CODEX_SOURCE_PATH
+        cls.codex_state_path = Path(cls.tmpdir.name) / "missing-codex-state.sqlite"
+        cls.codex_sessions_dir = Path(cls.tmpdir.name) / "codex-sessions"
         cls._build_test_db(cls.db_path)
         dashboard_app.DB_PATH = str(cls.db_path)
+        dashboard_app.CODEX_STATE_PATH = str(cls.codex_state_path)
+        dashboard_app.CODEX_SESSIONS_DIR = str(cls.codex_sessions_dir)
+        dashboard_app.CODEX_SOURCE_PATH = str(cls.codex_state_path)
 
     @classmethod
     def tearDownClass(cls):
         dashboard_app.DB_PATH = cls.original_db_path
+        dashboard_app.CODEX_STATE_PATH = cls.original_codex_state_path
+        dashboard_app.CODEX_SESSIONS_DIR = cls.original_codex_sessions_dir
+        dashboard_app.CODEX_SOURCE_PATH = cls.original_codex_source_path
         cls.tmpdir.cleanup()
 
     @classmethod
@@ -182,6 +193,9 @@ class DashboardApiTests(unittest.TestCase):
         conn.close()
 
     def setUp(self):
+        dashboard_app.CODEX_STATE_PATH = str(self.codex_state_path)
+        dashboard_app.CODEX_SESSIONS_DIR = str(self.codex_sessions_dir)
+        dashboard_app.CODEX_SOURCE_PATH = str(self.codex_state_path)
         self.client = dashboard_app.app.test_client()
 
     def test_overview_exposes_tool_source_metadata(self):
@@ -191,7 +205,7 @@ class DashboardApiTests(unittest.TestCase):
 
         self.assertEqual(
             payload['token_total_definition'],
-            'input + output assistant-message tokens; cache read/write excluded',
+            'non-cache input + output assistant-message tokens; cache read/write separate',
         )
         self.assertEqual(payload['active_tool'], 'opencode')
         self.assertEqual(payload['active_tool_label'], 'OpenCode')
@@ -216,7 +230,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(sources['hermes']['repo_url'], 'https://github.com/NousResearch/hermes-agent/')
         self.assertIsNone(sources['hermes']['issue'])
 
-    def test_planned_tool_source_filter_returns_empty_daily_result(self):
+    def test_codex_tool_source_filter_returns_empty_result_when_data_missing(self):
         response = self.client.get('/api/daily?days=30&tool_id=codex')
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
@@ -225,7 +239,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(payload['selected_tool_label'], 'Codex CLI')
         self.assertEqual(payload['models'], [])
         self.assertEqual(payload['data'], {})
-        self.assertEqual(payload['error'], 'Codex CLI is planned and not connected yet.')
+        self.assertEqual(payload['error'], 'Codex CLI data is unavailable.')
 
     def test_unknown_tool_source_filter_returns_http_400(self):
         response = self.client.get('/api/daily?days=30&tool_id=unknown')
@@ -252,12 +266,135 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(history[0]['tool'], 'OpenCode')
         self.assertEqual(history[0]['tool_id'], 'opencode')
         self.assertEqual(history[0]['tool_color'], '#3B82F6')
+    def test_usage_history_applies_offset_after_merging_sources(self):
+        response = self.client.get('/api/usage-history?limit=1&offset=1')
+        self.assertEqual(response.status_code, 200)
+        history = response.get_json()
+
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]['id'], 'sess-1')
+
+
+    def _write_codex_fixture(
+        self,
+        *,
+        created_ms: int | None = None,
+        updated_ms: int | None = None,
+        thread_id: str = "codex-1",
+    ) -> None:
+        state = Path(self.tmpdir.name) / "codex-state.sqlite"
+        if state.exists():
+            state.unlink()
+        rollout = Path(self.tmpdir.name) / f"{thread_id}-rollout.jsonl"
+        created_ms = created_ms if created_ms is not None else int(time.time() * 1000) - 3600000
+        updated_ms = updated_ms if updated_ms is not None else created_ms + 120000
+        rollout.write_text(
+            '\n'.join([
+                json.dumps({"timestamp": "2026-05-30T00:00:00Z", "type": "session_meta", "payload": {"id": thread_id}}),
+                json.dumps({"timestamp": "2026-05-30T00:01:00Z", "type": "event_msg", "payload": {"type": "task_complete", "info": {"total_token_usage": {"input_tokens": 1000, "cached_input_tokens": 250, "output_tokens": 125, "reasoning_output_tokens": 25, "total_tokens": 1125}}}}),
+                json.dumps({"timestamp": "2026-05-30T00:02:00Z", "type": "event_msg", "payload": {"type": "task_complete", "info": {"total_token_usage": {"input_tokens": 1500, "cached_input_tokens": 400, "output_tokens": 225, "reasoning_output_tokens": 40, "total_tokens": 1725}}}}),
+            ]) + '\n'
+        )
+        conn = sqlite3.connect(state)
+        conn.execute(
+            """
+            CREATE TABLE threads (
+                id TEXT PRIMARY KEY,
+                rollout_path TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                created_at_ms INTEGER,
+                updated_at_ms INTEGER,
+                source TEXT NOT NULL,
+                model_provider TEXT NOT NULL,
+                cwd TEXT NOT NULL,
+                title TEXT NOT NULL,
+                tokens_used INTEGER NOT NULL DEFAULT 0,
+                preview TEXT NOT NULL DEFAULT '',
+                model TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO threads (
+                id, rollout_path, created_at, updated_at, created_at_ms, updated_at_ms,
+                source, model_provider, cwd, title, tokens_used, preview, model
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                thread_id, str(rollout), created_ms // 1000, updated_ms // 1000, created_ms, updated_ms,
+                "cli", "openai", "/tmp/codex-project", "Codex adapter spike", 1725, "Codex adapter spike", "gpt-5.5",
+            ),
+        )
+        conn.commit()
+        conn.close()
+        dashboard_app.CODEX_STATE_PATH = str(state)
+        dashboard_app.CODEX_SOURCE_PATH = str(state)
+
+    def test_codex_records_flow_into_sources_models_daily_and_history(self):
+        self._write_codex_fixture()
+
+        overview = self.client.get('/api/overview?days=30').get_json()
+        sources = {item['id']: item for item in overview['tool_sources']}
+        self.assertEqual(sources['codex']['status'], 'active')
+        self.assertEqual(sources['codex']['status_label'], 'Active source')
+        self.assertEqual(sources['codex']['source_type'], 'SQLite state + JSONL rollouts')
+        self.assertEqual(sources['codex']['sessions'], 1)
+        self.assertEqual(sources['codex']['tokens_input'], 1100)
+        self.assertEqual(sources['codex']['tokens_output'], 225)
+        self.assertEqual(sources['codex']['tokens_total'], 1325)
+        self.assertEqual(sources['codex']['cache_read'], 400)
+        self.assertIsNone(sources['codex']['cache_write'])
+
+        models = self.client.get('/api/models?days=30').get_json()
+        codex_model = next(item for item in models if item['tool_id'] == 'codex')
+        self.assertEqual(codex_model['chart_model_id'], 'openai/gpt-5.5')
+        self.assertEqual(codex_model['tokens_input'], 1100)
+        self.assertEqual(codex_model['tokens_total'], 1325)
+        self.assertEqual(codex_model['pricing_model_id'], 'openai/gpt-5.5')
+        self.assertEqual(codex_model['pricing_status'], 'priced')
+        self.assertIsNotNone(codex_model['estimated_cost'])
+        self.assertFalse(codex_model['cache_write_available'])
+
+        daily = self.client.get('/api/daily?days=30&tool_id=codex').get_json()
+        self.assertEqual(daily['selected_tool_id'], 'codex')
+        self.assertEqual(daily['models'][0]['id'], 'openai/gpt-5.5')
+        first_day = daily['dates'][0]
+        self.assertEqual(daily['data'][first_day]['openai/gpt-5.5']['tokens_total'], 1325)
+
+        history = self.client.get('/api/usage-history?limit=20').get_json()
+        codex_history = next(item for item in history if item['tool_id'] == 'codex')
+        self.assertEqual(codex_history['tokens_input'], 1100)
+        self.assertIsNone(codex_history['cache_write'])
+
+    def test_codex_records_use_updated_timestamp_for_window_and_display_date(self):
+        now_ms = int(time.time() * 1000)
+        created_ms = now_ms - 40 * 86400000
+        updated_ms = now_ms - 3600000
+        self._write_codex_fixture(created_ms=created_ms, updated_ms=updated_ms, thread_id="codex-long-lived")
+
+        records = dashboard_app.codex_records(days=30)
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        expected_updated_date = time.strftime('%Y-%m-%d', time.localtime(updated_ms / 1000))
+        old_created_date = time.strftime('%Y-%m-%d', time.localtime(created_ms / 1000))
+
+        self.assertEqual(record['id'], 'codex-long-lived')
+        self.assertEqual(record['timestamp'], updated_ms)
+        self.assertEqual(record['date'], expected_updated_date)
+        self.assertTrue(record['created'].startswith(expected_updated_date))
+        self.assertNotEqual(record['date'], old_created_date)
+
 
     def test_settings_page_describes_current_cost_and_token_rules(self):
         response = self.client.get('/settings')
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        self.assertIn('Total tokens are defined as input + output assistant-message tokens.', html)
+        self.assertIn('Total tokens are defined as non-cache input + output assistant-message tokens.', html)
+        self.assertIn('this dashboard subtracts cache read where needed', html)
+        self.assertIn('Codex CLI becomes active when', html)
+        self.assertNotIn('OpenCode is the active source today', html)
         self.assertIn('Cost is estimated from matched OpenRouter pricing when available.', html)
 
     def test_overview_page_includes_clickable_metric_tooltips(self):
@@ -267,7 +404,16 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('class="meta-info-wrap"', html)
         self.assertIn('class="meta-tooltip"', html)
         self.assertIn('aria-expanded="false"', html)
+        self.assertIn('Non-cache Input', html)
+        self.assertIn('Raw provider usage may include cache reads', html)
         self.assertIn('bindMetaInfoInteractions', html)
+        self.assertIn('<link rel="icon" href="/favicon.ico" type="image/svg+xml">', html)
+
+    def test_favicon_route_returns_svg_icon(self):
+        response = self.client.get('/favicon.ico')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, 'image/svg+xml')
+        self.assertIn('<svg', response.get_data(as_text=True))
 
     def test_dashboard_template_uses_button_based_accessible_controls(self):
         response = self.client.get('/')
@@ -280,6 +426,9 @@ class DashboardApiTests(unittest.TestCase):
         self.assertNotIn('role="button" data-chart-model-id', html)
         self.assertIn('if (!r.ok)', html)
         self.assertIn("document.getElementById('chart-note').textContent = chartData.error", html)
+        self.assertIn('active sources:', html)
+        self.assertIn("document.getElementById('db-path-display').textContent = `${sourceLabel} · ${sourcePath}`", html)
+        self.assertNotIn('OpenCode · ~/.local/share/opencode/opencode.db</span>', html)
 
     def test_tool_source_render_includes_path_handling(self):
         response = self.client.get('/')

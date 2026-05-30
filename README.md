@@ -2,10 +2,12 @@
 
 Local dashboard for inspecting coding-agent usage from your machine.
 
-Right now the active source is OpenCode via its local SQLite database at
-`~/.local/share/opencode/opencode.db`. The UI already leaves room for future
-Codex CLI and Hermes adapters, but this README is intentionally about one thing:
-getting the dashboard running locally and capturing snapshots.
+Right now the active sources are:
+
+- OpenCode via `~/.local/share/opencode/opencode.db`
+- Codex CLI via `~/.codex/state_5.sqlite` plus rollout JSONL files referenced by that state DB
+
+Hermes remains a planned adapter placeholder.
 
 ## Setup
 
@@ -84,10 +86,33 @@ review what the dashboard actually showed at capture time.
 
 ## Current data rules
 
-- active source: OpenCode local SQLite DB
-- total tokens = input + output assistant-message tokens
+- active sources: OpenCode local SQLite DB; Codex local state DB plus rollout JSONL
+- total tokens = non-cache input + output assistant-message tokens
 - cache read/write tokens are shown separately and excluded from total tokens
+- raw provider input can include cached tokens; adapters subtract cache read where needed before reporting dashboard input
 - unmatched model pricing stays unpriced instead of guessed
+
+### Codex source contract
+
+The Codex adapter reads session metadata from `~/.codex/state_5.sqlite`, table
+`threads`. The trusted metadata fields are session id, rollout path, created and
+updated timestamps, title/preview, cwd, provider, and model.
+
+Token metrics come from the latest cumulative `total_token_usage` object in each
+referenced rollout JSONL file. The trusted token fields are:
+
+- `input_tokens` → raw Codex input, including cached input
+- `cached_input_tokens` → cache read tokens
+- `input_tokens - cached_input_tokens` → dashboard input, to match OpenCode's non-cache input semantics
+- `output_tokens` → output tokens
+
+The adapter filters, groups, sorts, and displays Codex records by thread `updated_at`, not `created_at`, because token metrics are latest cumulative rollout usage for the thread. This keeps long-lived threads updated inside the selected range from appearing on out-of-range created dates.
+
+Total tokens remain dashboard non-cache input + output. Cache read/write tokens are shown
+separately and excluded from total tokens. Codex local JSONL does not expose
+cache-write tokens, so the dashboard shows cache write as unavailable for Codex
+instead of treating it as zero. The adapter does not infer token counts from
+transcript text.
 
 ## Local verification
 

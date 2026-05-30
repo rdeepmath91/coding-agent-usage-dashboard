@@ -13,11 +13,15 @@ import time
 import urllib.request
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request
 
 app = Flask(__name__)
 
 DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
+CODEX_STATE_PATH = os.path.expanduser("~/.codex/state_5.sqlite")
+CODEX_SESSIONS_DIR = os.path.expanduser("~/.codex/sessions")
+CODEX_SOURCE_PATH = CODEX_STATE_PATH
+
 
 
 def display_path(path: str) -> str:
@@ -73,6 +77,13 @@ def current_tool_sources() -> list[dict]:
         item = dict(source)
         if item["id"] == "opencode":
             item["source_path"] = display_path(DB_PATH)
+        elif item["id"] == "codex" and codex_source_available():
+            item.update({
+                "status": "active",
+                "status_label": "Active source",
+                "source_type": "SQLite state + JSONL rollouts",
+                "source_path": display_path(CODEX_SOURCE_PATH),
+            })
         sources.append(item)
     return sources
 
@@ -145,6 +156,304 @@ def get_db():
     conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def codex_source_available() -> bool:
+    """Return whether local Codex state exists on this machine."""
+    return Path(CODEX_STATE_PATH).exists()
+
+
+def _jsonl_latest_codex_usage(path: str | None) -> tuple[dict | None, int]:
+    """Return latest cumulative Codex token usage and count of token-bearing turns."""
+    if not path or not Path(path).exists():
+        return None, 0
+    latest = None
+    token_events = 0
+    try:
+        with Path(path).open("r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                payload = obj.get("payload") if isinstance(obj, dict) else None
+                if not isinstance(payload, dict):
+                    continue
+                info = payload.get("info")
+                if not isinstance(info, dict):
+                    continue
+                usage = info.get("total_token_usage")
+                if isinstance(usage, dict):
+                    latest = usage
+                    token_events += 1
+    except OSError:
+        return None, 0
+    return latest, token_events
+
+
+def _safe_int(value, default: int | None = 0) -> int | None:
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def codex_records(days: int | None = None) -> list[dict]:
+    """Normalize Codex CLI thread state + JSONL token events into dashboard records.
+
+    Trust boundary: ~/.codex/state_5.sqlite is used for session metadata, while
+    the latest cumulative `total_token_usage` in each rollout JSONL is used for
+    token metrics. Codex records are windowed, grouped, sorted, and displayed by
+    updated_at so a long-lived thread updated inside the selected range does not
+    render on an out-of-range created_at date. Codex reports cached tokens inside
+    `input_tokens`; the dashboard subtracts `cached_input_tokens` so the public
+    input column is comparable with OpenCode's non-cache input. Codex does not
+    expose cache-write tokens in this local format, so cache_write remains None.
+    """
+    if not codex_source_available():
+        return []
+
+    since_ms = None
+    if days is not None:
+        since_ms = int((datetime.datetime.now() - datetime.timedelta(days=days)).timestamp() * 1000)
+
+    conn = sqlite3.connect(f"file:{CODEX_STATE_PATH}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    where = "WHERE COALESCE(updated_at_ms, updated_at * 1000, created_at_ms, created_at * 1000) >= ?" if since_ms else ""
+    params = (since_ms,) if since_ms else ()
+    try:
+        rows = conn.execute(f"""
+            SELECT
+                id,
+                rollout_path,
+                COALESCE(created_at_ms, created_at * 1000) as created_ms,
+                COALESCE(updated_at_ms, updated_at * 1000) as updated_ms,
+                model_provider,
+                model,
+                title,
+                cwd,
+                preview,
+                tokens_used
+            FROM threads
+            {where}
+            ORDER BY COALESCE(updated_at_ms, updated_at * 1000, created_at_ms, created_at * 1000) DESC
+        """, params).fetchall()
+    finally:
+        conn.close()
+
+    records = []
+    for row in rows:
+        usage, token_events = _jsonl_latest_codex_usage(row["rollout_path"])
+        if not usage:
+            continue
+        raw_input_tokens = _safe_int(usage.get("input_tokens"), None)
+        output_tokens = _safe_int(usage.get("output_tokens"), None)
+        cache_read = _safe_int(usage.get("cached_input_tokens"), None)
+        input_tokens = raw_input_tokens
+        if raw_input_tokens is not None and cache_read is not None:
+            input_tokens = max(0, raw_input_tokens - cache_read)
+        model_id = row["model"] or "unknown"
+        provider = row["model_provider"] or "unknown"
+        created_ms = _safe_int(row["created_ms"], 0) or 0
+        updated_ms = _safe_int(row["updated_ms"], created_ms) or created_ms
+        created_dt = datetime.datetime.fromtimestamp(created_ms / 1000) if created_ms else None
+        updated_dt = datetime.datetime.fromtimestamp(updated_ms / 1000) if updated_ms else None
+        records.append({
+            "tool": "Codex CLI",
+            "tool_id": "codex",
+            "tool_color": TOOL_COLOR_MAP.get("codex", "#BA68C8"),
+            "source_path": display_path(CODEX_SOURCE_PATH),
+            "id": row["id"],
+            "session_id": row["id"],
+            "timestamp": updated_ms,
+            "created": updated_dt.strftime("%Y-%m-%d %H:%M:%S") if updated_dt else None,
+            "created_at": created_dt.strftime("%Y-%m-%d %H:%M:%S") if created_dt else None,
+            "updated": updated_dt.strftime("%Y-%m-%d %H:%M:%S") if updated_dt else None,
+            "date": updated_dt.date().isoformat() if updated_dt else None,
+            "title": row["title"] or row["preview"] or row["id"],
+            "directory": row["cwd"],
+            "provider": provider,
+            "model_id": model_id,
+            "model": f"{provider}/{model_id}",
+            "chart_model_id": f"{provider}/{model_id}",
+            "label": normalize_model(json.dumps({"id": model_id, "providerID": provider}))["label"],
+            "sessions": 1,
+            "messages": token_events,
+            "tokens_input": input_tokens,
+            "raw_tokens_input": raw_input_tokens,
+            "tokens_output": output_tokens,
+            "tokens_total": (input_tokens or 0) + (output_tokens or 0) if input_tokens is not None and output_tokens is not None else None,
+            "cache_read": cache_read,
+            "cache_write": None,
+            "cache_write_available": False,
+            "metrics_note": "Codex total_token_usage.input_tokens includes cached input; dashboard input subtracts cached_input_tokens so input/cache read match OpenCode semantics. Cache write is unavailable.",
+            "files_changed": None,
+            "additions": None,
+            "deletions": None,
+        })
+    return records
+
+
+def _sum_available(records: list[dict], key: str) -> int | None:
+    values = [r.get(key) for r in records if r.get(key) is not None]
+    if not values:
+        return None
+    return sum(values)
+
+
+def _record_tool_source_totals(records: list[dict], source: dict) -> dict:
+    item = dict(source)
+    matching = [r for r in records if r.get("tool_id") == item["id"]]
+    item.update({
+        "sessions": len({r.get("session_id") or r.get("id") for r in matching}),
+        "tokens_total": _sum_available(matching, "tokens_total"),
+        "tokens_input": _sum_available(matching, "tokens_input"),
+        "tokens_output": _sum_available(matching, "tokens_output"),
+        "cache_read": _sum_available(matching, "cache_read"),
+        "cache_write": _sum_available(matching, "cache_write"),
+    })
+    return item
+
+
+def codex_overview(days: int | None = None) -> dict | None:
+    records = codex_records(days)
+    if not records:
+        return None
+    dates = sorted({r["date"] for r in records if r.get("date")})
+    total_input = _sum_available(records, "tokens_input") or 0
+    total_output = _sum_available(records, "tokens_output") or 0
+    return {
+        "total_sessions": len({r["session_id"] for r in records}),
+        "total_input": total_input,
+        "total_output": total_output,
+        "total_tokens": total_input + total_output,
+        "cache_read": _sum_available(records, "cache_read") or 0,
+        "cache_write": None,
+        "first_session": dates[0] if dates else None,
+        "last_session": dates[-1] if dates else None,
+    }
+
+
+def aggregate_codex_models(days: int | None = 30) -> list[dict]:
+    grouped = {}
+    for record in codex_records(days):
+        key = (record["provider"], record["model_id"])
+        agg = grouped.setdefault(key, {
+            "tool": "Codex CLI",
+            "tool_id": "codex",
+            "tool_color": TOOL_COLOR_MAP.get("codex", "#BA68C8"),
+            "source_path": display_path(CODEX_SOURCE_PATH),
+            "provider": record["provider"],
+            "model_id": record["model_id"],
+            "label": normalize_model(json.dumps({"id": record["model_id"], "providerID": record["provider"]}))["label"],
+            "chart_model_id": record["chart_model_id"],
+            "sessions": 0,
+            "messages": 0,
+            "tokens_input": 0,
+            "tokens_output": 0,
+            "tokens_total": 0,
+            "cache_read": 0,
+            "cache_write": None,
+            "cache_write_available": False,
+        })
+        agg["sessions"] += 1
+        agg["messages"] += record.get("messages") or 0
+        agg["tokens_input"] += record.get("tokens_input") or 0
+        agg["tokens_output"] += record.get("tokens_output") or 0
+        agg["tokens_total"] += record.get("tokens_total") or 0
+        agg["cache_read"] += record.get("cache_read") or 0
+    models = sorted(grouped.values(), key=lambda item: item["tokens_total"], reverse=True)
+    for item in models:
+        item.update(estimate_cost(
+            item["provider"],
+            item["model_id"],
+            item["tokens_input"],
+            item["tokens_output"],
+            item["cache_read"],
+            0,
+        ))
+    return models
+
+
+def build_daily_from_model_records(model_records: list[dict], top_n: int, selected_model_id: str | None, selected_tool_id: str | None) -> dict:
+    daily_data = {}
+    model_map = {}
+    all_models_ordered = []
+    for row in model_records:
+        dt = row["date"]
+        mid = row["chart_model_id"]
+        if mid not in model_map:
+            model_map[mid] = {
+                "label": row["label"],
+                "model_id": row["model_id"],
+                "provider": row["provider"],
+            }
+            all_models_ordered.append(mid)
+        daily_data.setdefault(dt, {})
+        bucket = daily_data[dt].setdefault(mid, {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0})
+        bucket["sessions"] += row.get("sessions") or 0
+        bucket["messages"] += row.get("messages") or 0
+        bucket["tokens_input"] += row.get("tokens_input") or 0
+        bucket["tokens_output"] += row.get("tokens_output") or 0
+        bucket["tokens_total"] += row.get("tokens_total") or 0
+        bucket["cache_read"] += row.get("cache_read") or 0
+        bucket["cache_write"] += row.get("cache_write") or 0
+
+    dates = sorted(daily_data.keys())
+    for dt in dates:
+        for mid in all_models_ordered:
+            daily_data[dt].setdefault(mid, {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0})
+
+    model_totals = {}
+    for dt in dates:
+        for mid in all_models_ordered:
+            model_totals[mid] = model_totals.get(mid, 0) + daily_data[dt][mid]["tokens_total"]
+    all_models_ordered.sort(key=lambda m: model_totals.get(m, 0), reverse=True)
+    active_models = [m for m in all_models_ordered if model_totals.get(m, 0) > 0]
+    top_models = [selected_model_id] if selected_model_id in active_models else active_models[:top_n]
+    other_models = [m for m in all_models_ordered if m not in top_models]
+
+    chart_data = {}
+    for dt in dates:
+        chart_data[dt] = {mid: daily_data[dt][mid] for mid in top_models}
+        other = {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0}
+        for mid in other_models:
+            row = daily_data[dt].get(mid)
+            if not row:
+                continue
+            for key in other:
+                other[key] += row.get(key, 0)
+        if not selected_model_id and (other["tokens_total"] > 0 or other["sessions"] > 0):
+            chart_data[dt]["other"] = other
+
+    chart_models = []
+    for index, mid in enumerate(top_models):
+        rank = active_models.index(mid) if mid in active_models else index
+        meta = model_map[mid]
+        chart_models.append({
+            "id": mid,
+            "label": meta["label"],
+            "color": chart_color(rank, meta["model_id"], meta["provider"]),
+            "tokens_total": model_totals.get(mid, 0),
+            "rank": rank + 1,
+        })
+    if not selected_model_id and any("other" in chart_data[dt] for dt in dates):
+        chart_models.append({"id": "other", "label": f"Other ({len(other_models)} models)", "color": "#64748B", "tokens_total": sum(model_totals.get(mid, 0) for mid in other_models), "rank": None})
+        for dt in dates:
+            chart_data[dt].setdefault("other", {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0})
+
+    return {
+        "dates": dates,
+        "models": chart_models,
+        "data": chart_data,
+        "top_n": top_n,
+        "other_count": 0 if selected_model_id else len(other_models),
+        "selected_model_id": selected_model_id if selected_model_id in active_models else None,
+        "selected_tool_id": selected_tool_id,
+        "selected_tool_label": tool_source_label(selected_tool_id),
+    }
 
 
 def parse_days(default: int | None = 30) -> int | None:
@@ -403,7 +712,7 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
         "active_tool": "opencode",
         "active_tool_label": "OpenCode (simulated)",
         "source_path": "simulated dataset",
-        "token_total_definition": "input + output assistant-message tokens; cache read/write excluded",
+        "token_total_definition": "non-cache input + output assistant-message tokens; cache read/write separate",
         "tool_sources": [],
     }
 
@@ -569,22 +878,47 @@ def api_overview():
         FROM session_stats CROSS JOIN message_stats
     """, params + params)
     row = dict(cur.fetchone())
+    codex = codex_overview(days)
     row["days"] = days
-    row["active_tool"] = "opencode"
-    row["active_tool_label"] = "OpenCode"
-    row["source_path"] = display_path(DB_PATH)
-    row["token_total_definition"] = "input + output assistant-message tokens; cache read/write excluded"
+    row["active_tool"] = "multiple" if codex else "opencode"
+    row["active_tool_label"] = "OpenCode + Codex CLI" if codex else "OpenCode"
+    row["source_path"] = f"{display_path(DB_PATH)} + {display_path(CODEX_SOURCE_PATH)}" if codex else display_path(DB_PATH)
+    row["token_total_definition"] = "non-cache input + output assistant-message tokens; cache read/write separate"
+
+    opencode_totals = {
+        "sessions": row["total_sessions"],
+        "tokens_total": row["total_tokens"],
+        "tokens_input": row["total_input"],
+        "tokens_output": row["total_output"],
+        "cache_read": row["cache_read"],
+        "cache_write": row["cache_write"],
+    }
+    if codex:
+        row["total_sessions"] = (row["total_sessions"] or 0) + codex["total_sessions"]
+        row["total_input"] = (row["total_input"] or 0) + codex["total_input"]
+        row["total_output"] = (row["total_output"] or 0) + codex["total_output"]
+        row["total_tokens"] = row["total_input"] + row["total_output"]
+        row["cache_read"] = (row["cache_read"] or 0) + (codex["cache_read"] or 0)
+        row["cache_write"] = row["cache_write"] if row["cache_write"] is not None else None
+        session_dates = [d for d in [row["first_session"], row["last_session"], codex["first_session"], codex["last_session"]] if d]
+        if session_dates:
+            row["first_session"] = min(session_dates)
+            row["last_session"] = max(session_dates)
+
     row["tool_sources"] = []
     for source in current_tool_sources():
         item = dict(source)
         if item["id"] == "opencode":
+            item.update(opencode_totals)
+        elif item["id"] == "codex" and codex:
             item.update({
-                "sessions": row["total_sessions"],
-                "tokens_total": row["total_tokens"],
-                "tokens_input": row["total_input"],
-                "tokens_output": row["total_output"],
-                "cache_read": row["cache_read"],
-                "cache_write": row["cache_write"],
+                "sessions": codex["total_sessions"],
+                "tokens_total": codex["total_tokens"],
+                "tokens_input": codex["total_input"],
+                "tokens_output": codex["total_output"],
+                "cache_read": codex["cache_read"],
+                "cache_write": None,
+                "metrics_note": "Cache write unavailable in local Codex JSONL.",
             })
         else:
             item.update({
@@ -660,6 +994,11 @@ def api_models():
             **estimate_cost(info["provider"], info["id"], tokens_input, tokens_output, cache_read, cache_write),
         })
     conn.close()
+    models.extend(aggregate_codex_models(days))
+    models.sort(key=lambda item: item.get("tokens_total") or 0, reverse=True)
+    for rank, model in enumerate(models, start=1):
+        model["rank"] = rank
+        model["color"] = chart_color(rank - 1, model.get("model_id", ""), model.get("provider", ""))
     return jsonify(models)
 
 
@@ -670,7 +1009,7 @@ def api_daily():
     top_n = parse_top_n(default=8)
     selected_model_id = request.args.get("model_id") or None
     selected_tool_id = request.args.get("tool_id") or None
-    if selected_tool_id and selected_tool_id != "opencode":
+    if selected_tool_id and selected_tool_id not in {"opencode", "codex"}:
         if selected_tool_id in KNOWN_TOOL_IDS:
             source_label = tool_source_label(selected_tool_id) or selected_tool_id
             return empty_daily_response(
@@ -769,6 +1108,12 @@ def api_daily():
             "selected_tool_id": selected_tool_id,
             "selected_tool_label": tool_source_label(selected_tool_id),
         })
+    if selected_tool_id == "codex":
+        records = codex_records(days)
+        if not records:
+            return empty_daily_response(top_n, selected_tool_id, error_message="Codex CLI data is unavailable.")
+        return jsonify(build_daily_from_model_records(records, top_n, selected_model_id, selected_tool_id))
+
     where, params = since_clause(days)
     msg_where = where.replace("time_created", "m.time_created")
 
@@ -825,6 +1170,29 @@ def api_daily():
             "cache_read": row["cache_read"] or 0,
             "cache_write": row["cache_write"] or 0,
         }
+
+    if selected_tool_id is None:
+        for record in codex_records(days):
+            dt = record.get("date")
+            if not dt:
+                continue
+            mid = record["chart_model_id"]
+            if mid not in model_map:
+                model_map[mid] = {
+                    "label": record["label"],
+                    "model_id": record["model_id"],
+                    "provider": record["provider"],
+                    "color": "#64748B",
+                }
+                all_models_ordered.append(mid)
+            daily_data.setdefault(dt, {})
+            bucket = daily_data[dt].setdefault(mid, {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0})
+            bucket["sessions"] += 1
+            bucket["messages"] += record.get("messages") or 0
+            bucket["tokens_input"] += record.get("tokens_input") or 0
+            bucket["tokens_output"] += record.get("tokens_output") or 0
+            bucket["tokens_total"] += record.get("tokens_total") or 0
+            bucket["cache_read"] += record.get("cache_read") or 0
 
     dates = sorted(daily_data.keys())
     for dt in dates:
@@ -943,6 +1311,7 @@ def api_usage_history():
             GROUP BY session_id
         )
         SELECT
+            s.time_created,
             datetime(s.time_created / 1000, 'unixepoch', 'localtime') as created,
             datetime(s.time_updated / 1000, 'unixepoch', 'localtime') as updated,
             s.id,
@@ -960,8 +1329,7 @@ def api_usage_history():
         LEFT JOIN session_models sm ON sm.session_id = s.id
         WHERE s.model IS NOT NULL AND s.model != ''
         ORDER BY s.time_created DESC
-        LIMIT ? OFFSET ?
-    """, (limit, offset))
+    """)
 
     sessions = []
     for row in cur.fetchall():
@@ -976,6 +1344,7 @@ def api_usage_history():
             "title": row["title"],
             "created": row["created"],
             "updated": row["updated"],
+            "timestamp": row["time_created"],
             "directory": row["directory"],
             "model": model_label,
             "messages": row["messages"] or 0,
@@ -987,7 +1356,34 @@ def api_usage_history():
             "deletions": row["summary_deletions"],
         })
     conn.close()
-    return jsonify(sessions)
+    for record in codex_records(30):
+        sessions.append({
+            "id": record["id"],
+            "tool": record["tool"],
+            "tool_id": record["tool_id"],
+            "tool_color": record["tool_color"],
+            "source_path": record["source_path"],
+            "title": record["title"],
+            "created": record["created"],
+            "updated": record["updated"],
+            "timestamp": record["timestamp"],
+            "directory": record["directory"],
+            "model": record["model"],
+            "messages": record["messages"],
+            "tokens_input": record["tokens_input"],
+            "tokens_output": record["tokens_output"],
+            "tokens_total": record["tokens_total"],
+            "cache_read": record["cache_read"],
+            "cache_write": record["cache_write"],
+            "metrics_note": record["metrics_note"],
+            "files_changed": None,
+            "additions": None,
+            "deletions": None,
+        })
+    sessions.sort(key=lambda item: item.get("timestamp") or 0, reverse=True)
+    start = int(offset or 0)
+    count = int(limit or 50)
+    return jsonify(sessions[start: start + count])
 
 
 @app.route("/api/refresh")
@@ -1015,6 +1411,14 @@ def index():
 @app.route("/settings")
 def settings():
     return render_template("settings.html")
+
+
+@app.route("/favicon.ico")
+def favicon():
+    return Response(
+        Path(app.root_path, "static", "favicon.svg").read_text(),
+        mimetype="image/svg+xml",
+    )
 
 
 # ── Main ────────────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Settings — Coding Agent Usage Dashboard</title>
+<link rel="icon" href="/favicon.ico" type="image/svg+xml">
 <script src="/static/color-modes.js"></script>
 <style>
   :root {
@@ -60,7 +61,7 @@
 <div class="card">
   <h2>Database Location</h2>
   <div class="path">~/.local/share/opencode/opencode.db</div>
-  <p style="margin-top:8px;">Read directly from local coding-agent usage sources. OpenCode is the active source today. The dashboard uses read-only connections and does not modify source data.</p>
+  <p style="margin-top:8px;">Read directly from local coding-agent usage sources. OpenCode is always supported, and Codex CLI becomes active when <code>~/.codex/state_5.sqlite</code> is present. The dashboard uses read-only connections and does not modify source data.</p>
 </div>
 
 <div class="card">
@@ -71,7 +72,7 @@
 
 <div class="card">
   <h2>Source</h2>
-  <p>Built from normalized local session data — model, session timestamps, input tokens, and output tokens per session/message. Total tokens are defined as input + output assistant-message tokens. Cached tokens are shown only as secondary context, separate from input/output totals. Cost is estimated from matched OpenRouter pricing when available.</p>
+  <p>Built from normalized local session data — model, session timestamps, non-cache input tokens, output tokens, and separate cache read/write metrics where a source exposes them. Total tokens are defined as non-cache input + output assistant-message tokens. Raw provider usage can include cached tokens in input; this dashboard subtracts cache read where needed for source-to-source consistency. Cost is estimated from matched OpenRouter pricing when available.</p>
 </div>
 </body>
 </html>

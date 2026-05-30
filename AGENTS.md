@@ -5,7 +5,7 @@ Guidance for agents working in this repo.
 ## Scope
 
 - This repo is a local Flask dashboard for coding-agent usage data.
-- The active production data source is OpenCode at `~/.local/share/opencode/opencode.db`.
+- Active production data sources are OpenCode at `~/.local/share/opencode/opencode.db` and Codex CLI via `~/.codex/state_5.sqlite` when that local state file exists.
 - Keep the current product contract explicit: show where totals come from, avoid ambiguous labels, and do not invent data when a source is missing.
 
 ## Working style
@@ -29,7 +29,7 @@ Guidance for agents working in this repo.
 ## Data and UX rules
 
 - Source provenance must stay visible. If a chart or summary only reflects OpenCode, say so.
-- Total tokens means `input + output assistant-message tokens`. Cache read/write stays separate unless the task explicitly changes that definition.
+- Total tokens means `non-cache input + output assistant-message tokens`. Cache read/write stays separate unless the task explicitly changes that definition.
 - Unpriced or unsupported models must remain clearly labeled instead of guessed.
 - Simulated/demo mode should stay deterministic enough for screenshots, regression checks, and design review.
 - Tooltips and interactive affordances should work for hover, focus, and tap.
