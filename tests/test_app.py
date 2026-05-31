@@ -577,6 +577,33 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(hermes_model['accounted_tokens_total'], 2500)
         self.assertEqual(hermes_model['unaccounted_tokens_total'], 3700)
 
+    def test_hermes_unknown_none_zero_cost_uses_pricing_fallback(self):
+        self._write_hermes_fixture()
+        conn = sqlite3.connect(dashboard_config.HERMES_STATE_PATH)
+        conn.execute(
+            """
+            UPDATE sessions
+            SET estimated_cost_usd = 0.0,
+                actual_cost_usd = NULL,
+                cost_status = 'unknown',
+                cost_source = 'none',
+                billing_provider = 'openai-codex'
+            WHERE id = 'hermes-1'
+            """
+        )
+        conn.commit()
+        conn.close()
+
+        models = self.client.get('/api/models?days=30').get_json()
+        hermes_model = next(item for item in models if item['tool_id'] == 'hermes')
+
+        self.assertEqual(hermes_model['pricing_status'], 'priced')
+        self.assertIn(hermes_model['pricing_source'], {'Hardcoded pricing fallback', 'OpenRouter /api/v1/models'})
+        self.assertEqual(hermes_model['pricing_model_id'], 'openai/gpt-5.5')
+        self.assertEqual(hermes_model['accounted_sessions'], 0)
+        self.assertEqual(hermes_model['unaccounted_sessions'], 1)
+        self.assertGreater(hermes_model['estimated_cost'], 0)
+
     def test_hermes_records_use_started_timestamp_for_window_and_display_date(self):
         started_at = time.time() - 40 * 86400
         self._write_hermes_fixture(started_at=started_at, session_id='hermes-old')

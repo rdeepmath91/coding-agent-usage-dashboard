@@ -300,6 +300,18 @@ def hermes_overview(days: int | None = None) -> dict | None:
         "last_session": dates[-1] if dates else None,
     }
 
+def _trusted_hermes_accounting_cost(record: dict) -> float | None:
+    """Return Hermes session-accounting cost only when the row says it was actually costed."""
+    status = (record.get("cost_status") or "").strip().lower()
+    source = (record.get("cost_source") or "").strip().lower()
+    if status in {"", "unknown"} or source in {"", "none", "unknown"}:
+        return None
+    accounted_cost = record.get("actual_cost")
+    if accounted_cost is None:
+        accounted_cost = record.get("estimated_cost")
+    return accounted_cost
+
+
 def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
     grouped = {}
     for record in hermes_records(days):
@@ -334,7 +346,7 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
         agg["tokens_total"] += record.get("tokens_total") or 0
         agg["cache_read"] += record.get("cache_read") or 0
         agg["cache_write"] += record.get("cache_write") or 0
-        accounted_cost = record.get("actual_cost") if record.get("actual_cost") is not None else record.get("estimated_cost")
+        accounted_cost = _trusted_hermes_accounting_cost(record)
         record_tokens_total = record.get("tokens_total") or 0
         if accounted_cost is not None:
             agg["accounted_cost"] += float(accounted_cost)
