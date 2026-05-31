@@ -7,6 +7,7 @@ from pathlib import Path
 
 import app as dashboard_app
 from dashboard import config as dashboard_config
+from dashboard.daily import build_daily_from_model_records
 
 
 HOME_PREFIX = f"{Path.home()}/"
@@ -291,6 +292,43 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]['id'], 'sess-1')
 
+    def test_daily_other_zero_bucket_preserves_cache_fields(self):
+        payload = build_daily_from_model_records([
+            {
+                'date': '2026-05-29',
+                'chart_model_id': 'provider/top-model',
+                'label': 'top-model',
+                'model_id': 'top-model',
+                'provider': 'provider',
+                'sessions': 1,
+                'messages': 1,
+                'tokens_input': 1000,
+                'tokens_output': 500,
+                'tokens_total': 1500,
+                'cache_read': 100,
+                'cache_write': 25,
+            },
+            {
+                'date': '2026-05-30',
+                'chart_model_id': 'provider/other-model',
+                'label': 'other-model',
+                'model_id': 'other-model',
+                'provider': 'provider',
+                'sessions': 1,
+                'messages': 1,
+                'tokens_input': 100,
+                'tokens_output': 50,
+                'tokens_total': 150,
+                'cache_read': 10,
+                'cache_write': 5,
+            },
+        ], top_n=1, selected_model_id=None, selected_tool_id=None)
+        other = payload['data']['2026-05-29']['other']
+
+        self.assertEqual(other['tokens_total'], 0)
+        self.assertEqual(other['cache_read'], 0)
+        self.assertEqual(other['cache_write'], 0)
+
 
     def _write_codex_fixture(
         self,
@@ -504,6 +542,41 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(hermes_history['cache_write'], 125)
         self.assertIn('Hermes session totals', hermes_history['metrics_note'])
 
+    def test_hermes_model_cost_is_partial_when_any_grouped_session_lacks_accounting(self):
+        started_at = time.time() - 3600
+        self._write_hermes_fixture(started_at=started_at, session_id='hermes-priced')
+        conn = sqlite3.connect(dashboard_config.HERMES_STATE_PATH)
+        conn.execute(
+            """
+            INSERT INTO sessions (
+                id, source, model, started_at, ended_at, message_count,
+                tool_call_count, input_tokens, output_tokens, cache_read_tokens,
+                cache_write_tokens, billing_provider, estimated_cost_usd,
+                actual_cost_usd, cost_status, cost_source, title
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                'hermes-unpriced', 'cli', 'gpt-5.5', started_at + 60, started_at + 180,
+                4, 1, 3000, 700, 9000, 0, 'openai-codex', None, None,
+                None, None, 'Hermes session without accounting',
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        models = self.client.get('/api/models?days=30').get_json()
+        hermes_model = next(item for item in models if item['tool_id'] == 'hermes')
+
+        self.assertEqual(hermes_model['sessions'], 2)
+        self.assertEqual(hermes_model['tokens_total'], 6200)
+        self.assertEqual(hermes_model['pricing_status'], 'partial')
+        self.assertIsNone(hermes_model['estimated_cost'])
+        self.assertEqual(hermes_model['partial_cost_usd'], 0.42)
+        self.assertEqual(hermes_model['accounted_sessions'], 1)
+        self.assertEqual(hermes_model['unaccounted_sessions'], 1)
+        self.assertEqual(hermes_model['accounted_tokens_total'], 2500)
+        self.assertEqual(hermes_model['unaccounted_tokens_total'], 3700)
+
     def test_hermes_records_use_started_timestamp_for_window_and_display_date(self):
         started_at = time.time() - 40 * 86400
         self._write_hermes_fixture(started_at=started_at, session_id='hermes-old')
@@ -549,6 +622,13 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn("className = 'chart-focus-button'", html)
         self.assertIn('item.className = `legend-item', html)
         self.assertIn("button.textContent = active ? 'Clear focus' : 'Focus chart'", html)
+        self.assertIn('role="img" aria-label="Daily non-cache input plus output tokens by model"', html)
+        self.assertIn('role="group" aria-label="Usage date range"', html)
+        self.assertIn("button.setAttribute('aria-pressed', active ? 'true' : 'false')", html)
+        self.assertIn("item.addEventListener('focus', () => setLegendHover(item.dataset.modelId))", html)
+        self.assertIn('prefers-reduced-motion: reduce', html)
+        self.assertIn('class="table-scroll" role="region" aria-label="Model breakdown table"', html)
+        self.assertIn('class="table-scroll" role="region" aria-label="Usage history table"', html)
         self.assertNotIn('role="button" data-chart-model-id', html)
         self.assertIn('if (!r.ok)', html)
         self.assertIn("document.getElementById('chart-note').textContent = chartData.error", html)

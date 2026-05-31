@@ -71,7 +71,7 @@ def build_daily_from_model_records(model_records: list[dict], top_n: int, select
     if not selected_model_id and any("other" in chart_data[dt] for dt in dates):
         chart_models.append({"id": "other", "label": f"Other ({len(other_models)} models)", "color": "#64748B", "tokens_total": sum(model_totals.get(mid, 0) for mid in other_models), "rank": None})
         for dt in dates:
-            chart_data[dt].setdefault("other", {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0})
+            chart_data[dt].setdefault("other", {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0})
 
     return {
         "dates": dates,

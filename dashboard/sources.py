@@ -322,7 +322,10 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
             "cache_write": 0,
             "cache_write_available": True,
             "accounted_cost": 0.0,
-            "accounted_cost_count": 0,
+            "accounted_sessions": 0,
+            "accounted_tokens_total": 0,
+            "unaccounted_sessions": 0,
+            "unaccounted_tokens_total": 0,
         })
         agg["sessions"] += 1
         agg["messages"] += record.get("messages") or 0
@@ -332,12 +335,19 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
         agg["cache_read"] += record.get("cache_read") or 0
         agg["cache_write"] += record.get("cache_write") or 0
         accounted_cost = record.get("actual_cost") if record.get("actual_cost") is not None else record.get("estimated_cost")
+        record_tokens_total = record.get("tokens_total") or 0
         if accounted_cost is not None:
             agg["accounted_cost"] += float(accounted_cost)
-            agg["accounted_cost_count"] += 1
+            agg["accounted_sessions"] += 1
+            agg["accounted_tokens_total"] += record_tokens_total
+        else:
+            agg["unaccounted_sessions"] += 1
+            agg["unaccounted_tokens_total"] += record_tokens_total
     models = sorted(grouped.values(), key=lambda item: item["tokens_total"], reverse=True)
     for item in models:
-        if item.pop("accounted_cost_count", 0):
+        accounted_sessions = item.get("accounted_sessions", 0)
+        unaccounted_sessions = item.get("unaccounted_sessions", 0)
+        if accounted_sessions and not unaccounted_sessions:
             accounted_cost = item.pop("accounted_cost")
             item.update({
                 "estimated_cost": accounted_cost,
@@ -345,6 +355,16 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
                 "pricing_source": "Hermes session accounting",
                 "pricing_model_id": item["chart_model_id"],
                 "cost_basis": "actual_or_session_estimate",
+            })
+        elif accounted_sessions:
+            accounted_cost = item.pop("accounted_cost")
+            item.update({
+                "estimated_cost": None,
+                "pricing_status": "partial",
+                "pricing_source": f"Hermes session accounting covers {accounted_sessions}/{item['sessions']} sessions",
+                "pricing_model_id": item["chart_model_id"],
+                "cost_basis": "partial_actual_or_session_estimate",
+                "partial_cost_usd": accounted_cost,
             })
         else:
             item.pop("accounted_cost", None)

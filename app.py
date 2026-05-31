@@ -368,7 +368,7 @@ def api_daily():
             for dt in dates:
                 chart_data[dt].setdefault(
                     "other",
-                    {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0},
+                    {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0},
                 )
 
         return jsonify({
@@ -549,7 +549,7 @@ def api_daily():
         for dt in dates:
             chart_data[dt].setdefault(
                 "other",
-                {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0},
+                {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0},
             )
 
     return jsonify({

@@ -504,6 +504,11 @@
   .table-section { margin-top: 12px; }
   .table-section h2 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
   .table-section .subtitle { font-family: var(--font-mono); font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
+  .table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 
   .data-table {
     width: 100%;
@@ -662,6 +667,17 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+    .loading .spinner { animation: none; }
+  }
+
   /* Footer */
   .footer {
     margin-top: 40px;
@@ -690,6 +706,10 @@
     .main-area { padding: 24px 16px; }
     .stat-cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
     .tool-source-grid { grid-template-columns: 1fr; }
+    .data-table { min-width: 760px; }
+    .data-table th,
+    .data-table td { white-space: normal; overflow-wrap: anywhere; }
+    .data-table .num { white-space: nowrap; }
   }
 </style>
 </head>
@@ -713,11 +733,11 @@
     </section>
 
     <!-- Pill tabs -->
-    <div class="pill-tabs" id="range-tabs">
-      <button class="pill" data-days="7">7d</button>
-      <button class="pill active" data-days="30">30d</button>
-      <button class="pill" data-days="90">90d</button>
-      <button class="pill" data-days="0">All</button>
+    <div class="pill-tabs" id="range-tabs" role="group" aria-label="Usage date range">
+      <button class="pill" data-days="7" aria-pressed="false">7d</button>
+      <button class="pill active" data-days="30" aria-pressed="true">30d</button>
+      <button class="pill" data-days="90" aria-pressed="false">90d</button>
+      <button class="pill" data-days="0" aria-pressed="false">All</button>
       <span class="custom-range">
         <input id="custom-days" type="number" min="1" max="3650" placeholder="N days" aria-label="Custom number of days">
         <button id="apply-custom-days" type="button">Apply</button>
@@ -781,7 +801,7 @@
       </div>
       <div class="chart-layout">
         <div class="chart-plot">
-          <canvas id="usage-chart"></canvas>
+          <canvas id="usage-chart" role="img" aria-label="Daily non-cache input plus output tokens by model">Daily non-cache input plus output tokens by model.</canvas>
         </div>
         <div class="chart-legend" id="chart-legend"></div>
       </div>
@@ -791,45 +811,49 @@
     <section class="table-section" id="models">
       <h2>Model Breakdown</h2>
       <div class="subtitle">Sessions, non-cache input + output tokens, cache read, and estimated cost by model. Cost uses latest matched OpenRouter pricing and is approximate.</div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Tool</th>
-            <th>Model</th>
-            <th class="num">Sessions</th>
-            <th class="num" title="Non-cache input + output; cache read/write shown separately">Total Tokens</th>
-            <th class="num" title="Non-cache prompt/context input. Raw provider usage may include cache reads; this dashboard subtracts cache read when needed for consistency.">Non-cache Input</th>
-            <th class="num">Output</th>
-            <th class="num">Cache Read</th>
-            <th class="num">Est. Cost</th>
-          </tr>
-        </thead>
-        <tbody id="model-table-body">
-          <tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
-        </tbody>
-      </table>
+      <div class="table-scroll" role="region" aria-label="Model breakdown table" tabindex="0">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Model</th>
+              <th class="num">Sessions</th>
+              <th class="num" title="Non-cache input + output; cache read/write shown separately">Total Tokens</th>
+              <th class="num" title="Non-cache prompt/context input. Raw provider usage may include cache reads; this dashboard subtracts cache read when needed for consistency.">Non-cache Input</th>
+              <th class="num">Output</th>
+              <th class="num">Cache Read</th>
+              <th class="num">Est. Cost</th>
+            </tr>
+          </thead>
+          <tbody id="model-table-body">
+            <tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <!-- Usage History -->
     <section class="table-section" id="usage" style="margin-top:40px;">
       <h2>Usage History</h2>
       <div class="subtitle">Recent coding-agent sessions. Tokens = non-cache input + output; cache is tracked separately in summaries.</div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Tool</th>
-            <th>Date</th>
-            <th>Model</th>
-            <th>Title</th>
-            <th class="num" title="Non-cache input + output">Tokens</th>
-            <th class="num" title="Non-cache prompt/context input">Non-cache Input</th>
-            <th class="num">Output</th>
-          </tr>
-        </thead>
-        <tbody id="history-table-body">
-          <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
-        </tbody>
-      </table>
+      <div class="table-scroll" role="region" aria-label="Usage history table" tabindex="0">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Date</th>
+              <th>Model</th>
+              <th>Title</th>
+              <th class="num" title="Non-cache input + output">Tokens</th>
+              <th class="num" title="Non-cache prompt/context input">Non-cache Input</th>
+              <th class="num">Output</th>
+            </tr>
+          </thead>
+          <tbody id="history-table-body">
+            <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <div class="footer">
@@ -1071,10 +1095,17 @@ function simulateQuerySuffix() {
     : '';
 }
 
+function setRangeButtonState(activeButton = null) {
+  document.querySelectorAll('#range-tabs .pill').forEach(button => {
+    const active = button === activeButton;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
 document.querySelectorAll('#range-tabs .pill').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('#range-tabs .pill').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    setRangeButtonState(btn);
     currentDays = parseInt(btn.dataset.days);
     document.getElementById('custom-days').value = '';
     loadAll();
@@ -1086,7 +1117,7 @@ document.getElementById('apply-custom-days').addEventListener('click', () => {
   const days = Math.max(1, Math.min(3650, parseInt(input.value || '31')));
   currentDays = days;
   input.value = days;
-  document.querySelectorAll('#range-tabs .pill').forEach(b => b.classList.remove('active'));
+  setRangeButtonState(null);
   loadAll();
 });
 
@@ -1230,6 +1261,8 @@ async function loadModels(days) {
       costCell.className = 'num';
       costCell.title = m.pricing_status === 'priced'
         ? `${m.pricing_source}: ${m.pricing_model_id}`
+        : m.pricing_status === 'partial'
+        ? `${m.pricing_source}; accounted subtotal ${fmtCost(m.partial_cost_usd)} is excluded from total to avoid understating full cost`
         : `No matched pricing for ${m.pricing_model_id || m.model_id}`;
       costCell.textContent = fmtCost(m.estimated_cost);
 
@@ -1518,6 +1551,8 @@ function renderLegend(models) {
     item.append(name, share);
     item.addEventListener('mouseenter', () => setLegendHover(item.dataset.modelId));
     item.addEventListener('mouseleave', () => setLegendHover(null));
+    item.addEventListener('focus', () => setLegendHover(item.dataset.modelId));
+    item.addEventListener('blur', () => setLegendHover(null));
     item.addEventListener('click', () => toggleChartModel(item.dataset.modelId));
     el.appendChild(item);
   });
