@@ -367,17 +367,36 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
                 "pricing_source": "Hermes session accounting",
                 "pricing_model_id": item["chart_model_id"],
                 "cost_basis": "actual_or_session_estimate",
+                "cost_breakdown": None,
             })
         elif accounted_sessions:
             accounted_cost = item.pop("accounted_cost")
-            item.update({
-                "estimated_cost": None,
-                "pricing_status": "partial",
-                "pricing_source": f"Hermes session accounting covers {accounted_sessions}/{item['sessions']} sessions",
-                "pricing_model_id": item["chart_model_id"],
-                "cost_basis": "partial_actual_or_session_estimate",
-                "partial_cost_usd": accounted_cost,
-            })
+            provider_estimate = estimate_cost(
+                item["provider"],
+                item["model_id"],
+                item["tokens_input"],
+                item["tokens_output"],
+                item["cache_read"],
+                item["cache_write"],
+            )
+            accounting_note = f"Hermes session accounting covers {accounted_sessions}/{item['sessions']} sessions"
+            if provider_estimate.get("pricing_status") == "unpriced":
+                item.update({
+                    "estimated_cost": None,
+                    "pricing_status": "partial",
+                    "pricing_source": accounting_note,
+                    "pricing_model_id": item["chart_model_id"],
+                    "cost_basis": "partial_actual_or_session_estimate",
+                    "partial_cost_usd": accounted_cost,
+                    "cost_breakdown": None,
+                })
+            else:
+                provider_source = provider_estimate.get("pricing_source") or "provider/model pricing"
+                provider_estimate["pricing_source"] = f"{provider_source}; {accounting_note}"
+                provider_estimate["cost_basis"] = "api_equivalent_estimate_with_partial_session_accounting"
+                provider_estimate["session_accounting_partial_cost_usd"] = accounted_cost
+                provider_estimate["session_accounting_note"] = accounting_note
+                item.update(provider_estimate)
         else:
             item.pop("accounted_cost", None)
             item.update(estimate_cost(

@@ -80,7 +80,7 @@ review what the dashboard actually showed at capture time.
 - daily usage by model
 - model breakdown with token totals
 - recent usage history
-- estimated cost when a model can be matched to public OpenRouter pricing
+- API-equivalent estimated cost when a model can be matched to public provider pricing
 - explicit tool/source labeling so multi-source totals are not ambiguous
 
 ## Current data rules
@@ -88,6 +88,8 @@ review what the dashboard actually showed at capture time.
 - active sources: OpenCode local SQLite DB; Codex local state DB plus rollout JSONL; Hermes local session DB
 - total tokens = non-cache input + output assistant-message tokens
 - cache read/write tokens are shown separately and excluded from total tokens
+- API-equivalent estimated cost can include priced cache read/write tokens even though cache tokens are excluded from total tokens
+- subscription-backed tools may not bill like public API pricing, so estimated cost is not necessarily actual subscription spend
 - raw provider input can include cached tokens; adapters subtract cache read where needed before reporting dashboard input
 - unmatched model pricing stays unpriced instead of guessed
 

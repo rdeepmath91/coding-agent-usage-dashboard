@@ -769,9 +769,9 @@
         <div class="sub" id="output-sub"></div>
       </div>
       <div class="stat-card">
-        <div class="label">Est. Cost</div>
+        <div class="label">API-Equivalent Cost</div>
         <div class="value" id="estimated-cost">—</div>
-        <div class="sub" id="estimated-cost-sub">OpenRouter pricing when matched</div>
+        <div class="sub" id="estimated-cost-sub">Public provider pricing when matched</div>
       </div>
     </div>
 
@@ -812,7 +812,7 @@
     <!-- Model breakdown table -->
     <section class="table-section" id="models">
       <h2>Model Breakdown</h2>
-      <div class="subtitle">Sessions, non-cache input + output tokens, cache read, and estimated cost by model. Cost uses latest matched OpenRouter pricing and is approximate.</div>
+      <div class="subtitle">Sessions, non-cache input + output tokens, cache read, and API-equivalent estimated cost by model. Total tokens exclude cache read/write; cost includes priced cache tokens.</div>
       <div class="table-scroll" role="region" aria-label="Model breakdown table" tabindex="0">
         <table class="data-table">
           <thead>
@@ -824,7 +824,7 @@
               <th class="num" title="Non-cache prompt/context input. Raw provider usage may include cache reads; this dashboard subtracts cache read when needed for consistency.">Non-cache Input</th>
               <th class="num">Output</th>
               <th class="num">Cache Read</th>
-              <th class="num">Est. Cost</th>
+              <th class="num" title="API-equivalent estimate from matched provider/model pricing; not necessarily your subscription bill">API-Equiv. Cost</th>
             </tr>
           </thead>
           <tbody id="model-table-body">
@@ -1198,13 +1198,21 @@ async function loadModels(days) {
 
     const priced = models.filter(m => m.estimated_cost !== null && m.estimated_cost !== undefined);
     const estimatedTotal = priced.reduce((sum, m) => sum + (m.estimated_cost || 0), 0);
+    const costParts = priced.reduce((parts, m) => {
+      const breakdown = m.cost_breakdown || {};
+      parts.input += Number(breakdown.input || 0);
+      parts.output += Number(breakdown.output || 0);
+      parts.cacheRead += Number(breakdown.cache_read || 0);
+      parts.cacheWrite += Number(breakdown.cache_write || 0);
+      return parts;
+    }, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
     const unpricedCount = models.length - priced.length;
     document.getElementById('estimated-cost').textContent = priced.length ? fmtCost(estimatedTotal) : '—';
     setCardMeta(
       'estimated-cost-sub',
       priced.length ? `approx · ${priced.length}/${models.length} priced` : 'No matched pricing',
       priced.length
-        ? `${unpricedCount} unmatched models. Estimate uses live OpenRouter pricing first, then fallback pricing for known OpenAI and opencode/go models.`
+        ? `API-equivalent estimate, not actual subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}. ${unpricedCount} unmatched models.`
         : 'No OpenRouter or hardcoded pricing matched the active models.',
     );
 
@@ -1261,10 +1269,15 @@ async function loadModels(days) {
 
       const costCell = document.createElement('td');
       costCell.className = 'num';
+      const breakdown = m.cost_breakdown || {};
+      const breakdownTitle = m.cost_breakdown
+        ? `input ${fmtCost(breakdown.input)}, output ${fmtCost(breakdown.output)}, cache read ${fmtCost(breakdown.cache_read)}, cache write ${fmtCost(breakdown.cache_write)}`
+        : '';
+      const sessionAccounting = m.session_accounting_note ? `; ${m.session_accounting_note}` : '';
       costCell.title = m.pricing_status === 'priced'
-        ? `${m.pricing_source}: ${m.pricing_model_id}`
+        ? `${m.pricing_source}: ${m.pricing_model_id}${breakdownTitle ? `; ${breakdownTitle}` : ''}`
         : m.pricing_status === 'partial'
-        ? `${m.pricing_source}; accounted subtotal ${fmtCost(m.partial_cost_usd)} is excluded from total to avoid understating full cost`
+        ? `${m.pricing_source}; known subtotal ${fmtCost(m.partial_cost_usd)}${breakdownTitle ? `; ${breakdownTitle}` : ''}${sessionAccounting}`
         : `No matched pricing for ${m.pricing_model_id || m.model_id}`;
       costCell.textContent = fmtCost(m.estimated_cost);
 

@@ -203,12 +203,20 @@ def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output
         + token_buckets["input_cache_read"] * cache_read_price
         + token_buckets["input_cache_write"] * cache_write_price
     )
+    cost_breakdown = {
+        "input": token_buckets["prompt"] * input_price,
+        "output": token_buckets["completion"] * output_price,
+        "cache_read": token_buckets["input_cache_read"] * cache_read_price,
+        "cache_write": token_buckets["input_cache_write"] * cache_write_price,
+    }
     source = "OpenRouter /api/v1/models" if fetched_pricing else "Hardcoded pricing fallback"
     result = {
         "estimated_cost": estimated,
         "pricing_status": "priced",
         "pricing_source": source,
         "pricing_model_id": router_id,
+        "cost_basis": "api_equivalent_estimate",
+        "cost_breakdown": cost_breakdown,
         "input_price": input_price,
         "output_price": output_price,
         "cache_read_price": cache_read_price,
