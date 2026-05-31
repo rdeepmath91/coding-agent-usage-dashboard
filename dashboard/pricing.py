@@ -179,19 +179,47 @@ def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output
             "pricing_model_id": router_id,
         }
 
+    input_price = price("prompt")
+    output_price = price("completion")
+    cache_read_price = price("input_cache_read")
+    cache_write_price = price("input_cache_write")
+    priced_components = [input_price, output_price, cache_read_price, cache_write_price]
+    paid_model = any(component > 0 for component in priced_components)
+    token_buckets = {
+        "prompt": tokens_input or 0,
+        "completion": tokens_output or 0,
+        "input_cache_read": cache_read or 0,
+        "input_cache_write": cache_write or 0,
+    }
+    missing_price_buckets = [
+        bucket
+        for bucket, tokens in token_buckets.items()
+        if paid_model and tokens > 0 and price(bucket) <= 0
+    ]
+
     estimated = (
-        (tokens_input or 0) * price("prompt")
-        + (tokens_output or 0) * price("completion")
-        + (cache_read or 0) * price("input_cache_read")
-        + (cache_write or 0) * price("input_cache_write")
+        token_buckets["prompt"] * input_price
+        + token_buckets["completion"] * output_price
+        + token_buckets["input_cache_read"] * cache_read_price
+        + token_buckets["input_cache_write"] * cache_write_price
     )
-    return {
+    source = "OpenRouter /api/v1/models" if fetched_pricing else "Hardcoded pricing fallback"
+    result = {
         "estimated_cost": estimated,
         "pricing_status": "priced",
-        "pricing_source": "OpenRouter /api/v1/models" if fetched_pricing else "Hardcoded pricing fallback",
+        "pricing_source": source,
         "pricing_model_id": router_id,
-        "input_price": price("prompt"),
-        "output_price": price("completion"),
-        "cache_read_price": price("input_cache_read"),
-        "cache_write_price": price("input_cache_write"),
+        "input_price": input_price,
+        "output_price": output_price,
+        "cache_read_price": cache_read_price,
+        "cache_write_price": cache_write_price,
     }
+    if missing_price_buckets:
+        result.update({
+            "estimated_cost": None,
+            "pricing_status": "partial",
+            "pricing_source": f"{source}; missing prices for {', '.join(missing_price_buckets)}",
+            "partial_cost_usd": estimated,
+            "missing_price_buckets": missing_price_buckets,
+        })
+    return result

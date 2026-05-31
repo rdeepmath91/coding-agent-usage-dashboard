@@ -7,6 +7,7 @@ from pathlib import Path
 
 import app as dashboard_app
 from dashboard import config as dashboard_config
+from dashboard import pricing as dashboard_pricing
 from dashboard.daily import build_daily_from_model_records
 
 
@@ -597,12 +598,13 @@ class DashboardApiTests(unittest.TestCase):
         models = self.client.get('/api/models?days=30').get_json()
         hermes_model = next(item for item in models if item['tool_id'] == 'hermes')
 
-        self.assertEqual(hermes_model['pricing_status'], 'priced')
-        self.assertIn(hermes_model['pricing_source'], {'Hardcoded pricing fallback', 'OpenRouter /api/v1/models'})
+        self.assertEqual(hermes_model['pricing_status'], 'partial')
+        self.assertIn('missing prices for input_cache_write', hermes_model['pricing_source'])
         self.assertEqual(hermes_model['pricing_model_id'], 'openai/gpt-5.5')
         self.assertEqual(hermes_model['accounted_sessions'], 0)
         self.assertEqual(hermes_model['unaccounted_sessions'], 1)
-        self.assertGreater(hermes_model['estimated_cost'], 0)
+        self.assertIsNone(hermes_model['estimated_cost'])
+        self.assertGreater(hermes_model['partial_cost_usd'], 0)
 
     def test_hermes_records_use_started_timestamp_for_window_and_display_date(self):
         started_at = time.time() - 40 * 86400
@@ -692,6 +694,38 @@ class DashboardApiTests(unittest.TestCase):
         history = self.client.get('/api/usage-history?simulate=1&limit=5').get_json()
         self.assertEqual(len(history), 5)
         self.assertTrue(all(item['id'].startswith('sim-') for item in history))
+
+    def test_estimate_cost_marks_paid_cache_write_without_price_partial(self):
+        original_cache = dict(dashboard_pricing.PRICING_CACHE)
+        try:
+            dashboard_pricing.PRICING_CACHE.update({
+                "fetched_at": time.time(),
+                "prices": {
+                    "openai/gpt-5.5": {
+                        "prompt": "0.000005",
+                        "completion": "0.00003",
+                        "input_cache_read": "0.0000005",
+                        "input_cache_write": "0",
+                    }
+                },
+            })
+
+            result = dashboard_pricing.estimate_cost(
+                "openai-codex",
+                "gpt-5.5",
+                tokens_input=1000,
+                tokens_output=100,
+                cache_read=50,
+                cache_write=25,
+            )
+        finally:
+            dashboard_pricing.PRICING_CACHE.clear()
+            dashboard_pricing.PRICING_CACHE.update(original_cache)
+
+        self.assertEqual(result["pricing_status"], "partial")
+        self.assertIsNone(result["estimated_cost"])
+        self.assertGreater(result["partial_cost_usd"], 0)
+        self.assertIn("input_cache_write", result["missing_price_buckets"])
 
 
 if __name__ == '__main__':
