@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#08090a">
 <title>Coding Agent Usage Dashboard</title>
 <link rel="icon" href="/favicon.ico" type="image/svg+xml">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
@@ -33,6 +34,7 @@
     font-family: var(--font-mono);
     background: var(--bg-primary);
     color: var(--text-primary);
+    color-scheme: dark;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
@@ -77,7 +79,7 @@
     color: var(--text-secondary);
     text-decoration: none;
     font-size: 14px;
-    transition: all 0.15s;
+    transition: color 0.15s, background-color 0.15s;
     position: relative;
   }
   .nav-item:hover { color: var(--text-primary); background: var(--bg-tertiary); }
@@ -589,7 +591,7 @@
     color: var(--text-tertiary);
     font-size: 14px;
     border-bottom: 2px solid transparent;
-    transition: all 0.15s;
+    transition: color 0.15s, border-bottom-color 0.15s;
     background: none;
     border-top: none;
     border-left: none;
@@ -613,7 +615,7 @@
     color: var(--text-secondary);
     font-size: 13px;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: color 0.15s, background-color 0.15s, border-color 0.15s;
     font-family: var(--font-sans);
   }
   .pill:hover { border-color: var(--accent); color: var(--text-primary); }
@@ -739,7 +741,7 @@
       <button class="pill" data-days="90" aria-pressed="false">90d</button>
       <button class="pill" data-days="0" aria-pressed="false">All</button>
       <span class="custom-range">
-        <input id="custom-days" type="number" min="1" max="3650" placeholder="N days" aria-label="Custom number of days">
+        <input id="custom-days" name="custom-days" type="number" min="1" max="3650" inputmode="numeric" autocomplete="off" placeholder="e.g. 45…" aria-label="Custom number of days">
         <button id="apply-custom-days" type="button">Apply</button>
       </span>
     </div>
@@ -826,7 +828,7 @@
             </tr>
           </thead>
           <tbody id="model-table-body">
-            <tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
+            <tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -850,14 +852,14 @@
             </tr>
           </thead>
           <tbody id="history-table-body">
-            <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
+            <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading…</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
     <div class="footer">
-      ◇ active sources: <span id="db-path-display">Loading...</span>
+      ◇ active sources: <span id="db-path-display">Loading…</span>
       ☤ last updated: <span id="last-updated">—</span>
     </div>
   </main>
