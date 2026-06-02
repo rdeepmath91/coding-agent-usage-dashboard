@@ -764,6 +764,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertNotIn("setStatLoading(true);\n  document.getElementById('chart-note').textContent = 'Loading…';\n  loadDaily(currentDays).finally(() => setStatLoading(false));", html)
         self.assertIn('<meta name="theme-color" content="#08090a">', html)
         self.assertIn('color-scheme: dark', html)
+        self.assertIn('position: relative;\n    overflow: hidden;\n    background: var(--bg-card);', html)
         self.assertIn('name="custom-days" type="number"', html)
         self.assertIn('inputmode="numeric" autocomplete="off" placeholder="e.g. 45…"', html)
         self.assertNotIn('transition: all', html)
