@@ -998,20 +998,29 @@ function setCardMeta(id, visible, detail = '') {
   bindMetaInfoInteractions(el);
 }
 
-function setCostMeta(id, pricedCount, modelCount, detail = '') {
+function setCostMeta(id, fullyPricedCount, modelCount, detail = '', partialCount = 0) {
   const el = document.getElementById(id);
   if (!el) return;
-  const priced = Number(pricedCount || 0);
+  const fully = Number(fullyPricedCount || 0);
   const total = Number(modelCount || 0);
-  const partial = priced > 0 && priced < total;
-  const visible = priced
-    ? `${priced} of ${total} models priced`
-    : 'No matched pricing';
+  const partial = Number(partialCount || 0);
+  const hasFully = fully > 0;
+  const hasPartial = partial > 0;
+  let visible;
+  if (hasFully && hasPartial) {
+    visible = `${fully} fully priced, ${partial} partially priced of ${total} models`;
+  } else if (hasFully) {
+    visible = `${fully} of ${total} models priced`;
+  } else if (hasPartial) {
+    visible = `${partial} partially priced of ${total} models`;
+  } else {
+    visible = 'No matched pricing';
+  }
   const detailText = String(detail || '');
   const tooltipId = `${id}-tooltip`;
   el.innerHTML = `
     <span class="estimate-meta">
-      ${partial ? '<span class="estimate-badge">Partial estimate</span>' : ''}
+      ${hasPartial ? '<span class="estimate-badge">Partial estimate</span>' : ''}
       <span class="estimate-coverage">${escapeHtml(visible)}</span>
     </span>
     ${detailText ? `
@@ -1019,7 +1028,7 @@ function setCostMeta(id, pricedCount, modelCount, detail = '') {
         <button
           type="button"
           class="meta-info"
-          aria-label="More information: ${partial ? 'partial estimate' : escapeHtml(visible)}"
+          aria-label="More information: ${hasPartial ? 'partial estimate' : escapeHtml(visible)}"
           aria-expanded="false"
           aria-describedby="${escapeHtml(tooltipId)}"
         >i</button>
@@ -1288,11 +1297,12 @@ async function loadModels(days) {
     const partialMeta = partialTotal > 0 ? ` Includes ${fmtCost(partialTotal)} from ${partialModels.length} partially priced model(s).` : '';
     setCostMeta(
       'estimated-cost-sub',
-      counted,
+      priced.length,
       models.length,
       counted
         ? `API-equivalent estimate, not actual subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}.${partialMeta} ${unpricedCount} unmatched models.`
         : 'No OpenRouter or hardcoded pricing matched the active models.',
+      partialModels.length,
     );
 
     clearNode(tbody);
