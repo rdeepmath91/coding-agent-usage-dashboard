@@ -731,7 +731,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('role="img" aria-label="Daily effective token volume by model (input + output + cache read + cache write)"', html)
         self.assertIn('role="group" aria-label="Usage date range"', html)
         self.assertIn('API-Equivalent Cost', html)
-        self.assertIn('Total tokens exclude cache read/write; cost includes priced cache tokens.', html)
+        self.assertIn('Rows show canonical totals: non-cache input + output. Ranking and chart use effective volume including cache. API-equivalent cost is priced from matched provider rates.', html)
         self.assertIn('Breakdown: input ${fmtCost(costParts.input)}', html)
         self.assertIn('<meta name="theme-color" content="#08090a">', html)
         self.assertIn('color-scheme: dark', html)
