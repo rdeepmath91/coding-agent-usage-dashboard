@@ -173,7 +173,7 @@
     font-size: 13px;
     line-height: 1.45;
   }
-  .stat-card .meta-main { min-width: 0; overflow-wrap: anywhere; }
+  .stat-card .meta-main { min-width: 0; overflow-wrap: normal; }
   .estimate-meta {
     display: inline-flex;
     align-items: center;
@@ -773,14 +773,14 @@
     <!-- Overview cards -->
     <div class="stat-cards" id="overview-cards">
       <div class="stat-card">
-        <div class="label">Sessions</div>
-        <div class="value" id="total-sessions">—</div>
-        <div class="sub" id="sessions-sub"></div>
-      </div>
-      <div class="stat-card">
         <div class="label">Total Tokens</div>
         <div class="value" id="total-tokens">—</div>
         <div class="sub" id="tokens-sub"></div>
+      </div>
+      <div class="stat-card">
+        <div class="label">API-Equivalent Cost</div>
+        <div class="value" id="estimated-cost">—</div>
+        <div class="sub" id="estimated-cost-sub">Public provider pricing when matched</div>
       </div>
       <div class="stat-card">
         <div class="label">Input Tokens</div>
@@ -793,9 +793,9 @@
         <div class="sub" id="output-sub"></div>
       </div>
       <div class="stat-card">
-        <div class="label">API-Equivalent Cost</div>
-        <div class="value" id="estimated-cost">—</div>
-        <div class="sub" id="estimated-cost-sub">Public provider pricing when matched</div>
+        <div class="label">Sessions</div>
+        <div class="value" id="total-sessions">—</div>
+        <div class="sub" id="sessions-sub"></div>
       </div>
     </div>
 
@@ -967,8 +967,12 @@ function createLegendDot(color) {
 function cacheShare(cacheTokens, inputTokens) {
   const cache = Number(cacheTokens || 0);
   const input = Number(inputTokens || 0);
-  if (!cache || !input) return '0% cached';
-  return `${Math.round((cache / input) * 100)}% cached`;
+  if (!cache || !input) return '0%\u00a0cached';
+  return `${Math.round((cache / input) * 100)}%\u00a0cached`;
+}
+
+function keepTogether(value, label) {
+  return `${value}\u00a0${label.replaceAll(' ', '\u00a0')}`;
 }
 
 function setCardMeta(id, visible, detail = '') {
@@ -1233,12 +1237,12 @@ async function loadOverview(days) {
     );
     setCardMeta(
       'tokens-sub',
-      `${fmtTokens(sessionTokens)} session · ${fmtTokens(cacheTotal)} cached`,
-      `Total token volume = input tokens + output tokens. Includes ${fmtTokens(cacheRead)} cache read and ${fmtTokens(cacheWrite)} cache write. Session tokens = non-cache input + output. Active sources: ${sourceLabel}.`,
+      `${keepTogether(fmtTokens(sessionTokens), 'direct')} · ${keepTogether(fmtTokens(cacheTotal), 'cached')} · ${cacheShare(cacheTotal, totalTokens)}`,
+      `Total token volume = input tokens + output tokens. Includes ${fmtTokens(cacheRead)} cache read and ${fmtTokens(cacheWrite)} cache write. Direct/session tokens = non-cache input + output. Active sources: ${sourceLabel}.`,
     );
     setCardMeta(
       'input-sub',
-      `${fmtTokens(nonCacheInput)} fresh · ${fmtTokens(cacheRead)} read · ${fmtTokens(cacheWrite)} write`,
+      `${keepTogether(fmtTokens(nonCacheInput), 'fresh')} · ${keepTogether(fmtTokens(cacheRead), 'cache read')} · ${keepTogether(fmtTokens(cacheWrite), 'cache write')}`,
       `Input tokens = fresh prompt/context + cached context. ${cacheShare(cacheTotal, totalInput)} of input volume is cached.`,
     );
     setCardMeta(
