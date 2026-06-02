@@ -56,6 +56,7 @@ Guidance for agents working in this repo.
   - `uv sync`
   - `uv run python -m unittest tests.test_app tests.test_readme -v`
   - `uv run python -m py_compile app.py scripts/snapshot_dashboard.py`
+- If `uv` is not on `$PATH`, it usually lives at `~/miniconda3/bin/uv`; export `PATH="$HOME/miniconda3/bin:$PATH"` or call it directly instead of installing a second copy.
 - For UI-affecting changes, also verify the rendered dashboard locally, and use simulated mode when deterministic output helps.
 
 ## Review workflow

@@ -359,6 +359,40 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(other['cache_read'], 0)
         self.assertEqual(other['cache_write'], 0)
 
+    def test_daily_ordering_uses_effective_tokens(self):
+        payload = build_daily_from_model_records([
+            {
+                'date': '2026-05-30',
+                'chart_model_id': 'provider/high-cache',
+                'label': 'high-cache',
+                'model_id': 'high-cache',
+                'provider': 'provider',
+                'sessions': 1,
+                'messages': 1,
+                'tokens_input': 900,
+                'tokens_output': 100,
+                'tokens_total': 1000,
+                'cache_read': 7_000,
+                'cache_write': 25,
+            },
+            {
+                'date': '2026-05-30',
+                'chart_model_id': 'provider/high-total',
+                'label': 'high-total',
+                'model_id': 'high-total',
+                'provider': 'provider',
+                'sessions': 1,
+                'messages': 1,
+                'tokens_input': 6_000,
+                'tokens_output': 700,
+                'tokens_total': 6_700,
+                'cache_read': 10,
+                'cache_write': 5,
+            },
+        ], top_n=1, selected_model_id=None, selected_tool_id=None)
+
+        self.assertEqual(payload['models'][0]['id'], 'provider/high-cache')
+
 
     def _write_codex_fixture(
         self,
@@ -437,6 +471,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(codex_model['chart_model_id'], 'openai/gpt-5.5')
         self.assertEqual(codex_model['tokens_input'], 1100)
         self.assertEqual(codex_model['tokens_total'], 1325)
+        self.assertEqual(codex_model['tokens_effective_total'], 1725)
         self.assertEqual(codex_model['pricing_model_id'], 'openai/gpt-5.5')
         self.assertEqual(codex_model['pricing_status'], 'priced')
         self.assertIsNotNone(codex_model['estimated_cost'])
@@ -447,6 +482,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(daily['models'][0]['id'], 'openai/gpt-5.5')
         first_day = daily['dates'][0]
         self.assertEqual(daily['data'][first_day]['openai/gpt-5.5']['tokens_total'], 1325)
+        self.assertEqual(daily['data'][first_day]['openai/gpt-5.5']['tokens_effective_total'], 1725)
 
         history = self.client.get('/api/usage-history?limit=20').get_json()
         codex_history = next(item for item in history if item['tool_id'] == 'codex')
@@ -549,6 +585,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(hermes_model['chart_model_id'], 'openai-codex/gpt-5.5')
         self.assertEqual(hermes_model['tokens_input'], 2000)
         self.assertEqual(hermes_model['tokens_total'], 2500)
+        self.assertEqual(hermes_model['tokens_effective_total'], 10625)
         self.assertEqual(hermes_model['pricing_model_id'], 'openai-codex/gpt-5.5')
         self.assertEqual(hermes_model['pricing_status'], 'priced')
         self.assertEqual(hermes_model['pricing_source'], 'Hermes session accounting')
@@ -562,6 +599,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(daily['models'][0]['id'], 'openai-codex/gpt-5.5')
         first_day = daily['dates'][0]
         self.assertEqual(daily['data'][first_day]['openai-codex/gpt-5.5']['tokens_total'], 2500)
+        self.assertEqual(daily['data'][first_day]['openai-codex/gpt-5.5']['tokens_effective_total'], 10625)
         self.assertEqual(daily['data'][first_day]['openai-codex/gpt-5.5']['cache_write'], 125)
 
         all_daily = self.client.get('/api/daily?days=30').get_json()

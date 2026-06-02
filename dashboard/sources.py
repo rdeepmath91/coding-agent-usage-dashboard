@@ -8,6 +8,7 @@ from pathlib import Path
 from . import config
 from .config import display_path
 from .pricing import estimate_cost, normalize_model
+from .token_metrics import effective_token_total
 
 
 def get_db():
@@ -136,6 +137,11 @@ def codex_records(days: int | None = None) -> list[dict]:
             "raw_tokens_input": raw_input_tokens,
             "tokens_output": output_tokens,
             "tokens_total": (input_tokens or 0) + (output_tokens or 0) if input_tokens is not None and output_tokens is not None else None,
+            "tokens_effective_total": effective_token_total(
+                (input_tokens or 0) + (output_tokens or 0) if input_tokens is not None and output_tokens is not None else None,
+                cache_read,
+                None,
+            ),
             "cache_read": cache_read,
             "cache_write": None,
             "cache_write_available": False,
@@ -162,6 +168,13 @@ def _record_tool_source_totals(records: list[dict], source: dict) -> dict:
         "tokens_output": _sum_available(matching, "tokens_output"),
         "cache_read": _sum_available(matching, "cache_read"),
         "cache_write": _sum_available(matching, "cache_write"),
+        "tokens_effective_total": (
+            _sum_available(matching, "tokens_total") or 0
+        ) + (
+            _sum_available(matching, "cache_read") or 0
+        ) + (
+            _sum_available(matching, "cache_write") or 0
+        ),
     })
     return item
 
@@ -268,6 +281,11 @@ def hermes_records(days: int | None = None) -> list[dict]:
             "raw_tokens_input": input_tokens,
             "tokens_output": output_tokens,
             "tokens_total": (input_tokens or 0) + (output_tokens or 0) if input_tokens is not None and output_tokens is not None else None,
+            "tokens_effective_total": effective_token_total(
+                (input_tokens or 0) + (output_tokens or 0) if input_tokens is not None and output_tokens is not None else None,
+                cache_read,
+                cache_write,
+            ),
             "cache_read": cache_read,
             "cache_write": cache_write,
             "cache_write_available": cache_write is not None,
@@ -330,6 +348,7 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
             "tokens_input": 0,
             "tokens_output": 0,
             "tokens_total": 0,
+            "tokens_effective_total": 0,
             "cache_read": 0,
             "cache_write": 0,
             "cache_write_available": True,
@@ -344,6 +363,11 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
         agg["tokens_input"] += record.get("tokens_input") or 0
         agg["tokens_output"] += record.get("tokens_output") or 0
         agg["tokens_total"] += record.get("tokens_total") or 0
+        agg["tokens_effective_total"] += effective_token_total(
+            record.get("tokens_total"),
+            record.get("cache_read"),
+            record.get("cache_write"),
+        )
         agg["cache_read"] += record.get("cache_read") or 0
         agg["cache_write"] += record.get("cache_write") or 0
         accounted_cost = _trusted_hermes_accounting_cost(record)
@@ -355,7 +379,7 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
         else:
             agg["unaccounted_sessions"] += 1
             agg["unaccounted_tokens_total"] += record_tokens_total
-    models = sorted(grouped.values(), key=lambda item: item["tokens_total"], reverse=True)
+    models = sorted(grouped.values(), key=lambda item: item["tokens_effective_total"], reverse=True)
     for item in models:
         accounted_sessions = item.get("accounted_sessions", 0)
         unaccounted_sessions = item.get("unaccounted_sessions", 0)
@@ -427,6 +451,7 @@ def aggregate_codex_models(days: int | None = 30) -> list[dict]:
             "tokens_input": 0,
             "tokens_output": 0,
             "tokens_total": 0,
+            "tokens_effective_total": 0,
             "cache_read": 0,
             "cache_write": None,
             "cache_write_available": False,
@@ -436,8 +461,13 @@ def aggregate_codex_models(days: int | None = 30) -> list[dict]:
         agg["tokens_input"] += record.get("tokens_input") or 0
         agg["tokens_output"] += record.get("tokens_output") or 0
         agg["tokens_total"] += record.get("tokens_total") or 0
+        agg["tokens_effective_total"] += effective_token_total(
+            record.get("tokens_total"),
+            record.get("cache_read"),
+            record.get("cache_write"),
+        )
         agg["cache_read"] += record.get("cache_read") or 0
-    models = sorted(grouped.values(), key=lambda item: item["tokens_total"], reverse=True)
+    models = sorted(grouped.values(), key=lambda item: item["tokens_effective_total"], reverse=True)
     for item in models:
         item.update(estimate_cost(
             item["provider"],

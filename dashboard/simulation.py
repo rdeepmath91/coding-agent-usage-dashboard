@@ -6,6 +6,7 @@ import random
 
 from .config import TOOL_COLOR_MAP, current_tool_sources
 from .pricing import QUALITATIVE_COLORS, estimate_cost, normalize_model
+from .token_metrics import effective_token_total
 
 
 def build_simulated_dataset(days: int | None = 31) -> dict:
@@ -59,6 +60,7 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
             tokens_output = max(total_tokens - tokens_input, 0)
             cache_read = int(tokens_input * (0.18 + rng.random() * 0.16)) if total_tokens else 0
             cache_write = int(tokens_input * (0.04 + rng.random() * 0.05)) if total_tokens else 0
+            tokens_effective_total = effective_token_total(total_tokens, cache_read, cache_write)
             sessions = max(0, int(total_tokens / 95_000 * (0.8 + rng.random() * spec["session_ratio"]))) if total_tokens else 0
             messages = max(sessions, int(sessions * (1.6 + rng.random() * 1.7))) if total_tokens else 0
 
@@ -69,10 +71,11 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
                 "tokens_input": tokens_input,
                 "tokens_output": tokens_output,
                 "tokens_total": total_tokens,
+                "tokens_effective_total": tokens_effective_total,
                 "cache_read": cache_read,
                 "cache_write": cache_write,
             }
-            model_totals[chart_model_id] = model_totals.get(chart_model_id, 0) + total_tokens
+            model_totals[chart_model_id] = model_totals.get(chart_model_id, 0) + tokens_effective_total
 
             if total_tokens and len(history) < 40:
                 session_counter += 1
@@ -107,6 +110,7 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
             "tokens_input": 0,
             "tokens_output": 0,
             "tokens_total": 0,
+            "tokens_effective_total": 0,
             "cache_read": 0,
             "cache_write": 0,
         }
@@ -131,6 +135,7 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
             "tokens_input": aggregate["tokens_input"],
             "tokens_output": aggregate["tokens_output"],
             "tokens_total": aggregate["tokens_total"],
+            "tokens_effective_total": aggregate["tokens_effective_total"],
             "cache_read": aggregate["cache_read"],
             "cache_write": aggregate["cache_write"],
             "color": QUALITATIVE_COLORS[rank] if rank < len(QUALITATIVE_COLORS) else "#64748B",

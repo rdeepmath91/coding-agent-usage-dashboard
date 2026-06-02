@@ -23,6 +23,7 @@ from dashboard.config import (
 from dashboard.daily import build_daily_from_model_records
 from dashboard.pricing import QUALITATIVE_COLORS, chart_color, estimate_cost, normalize_model
 from dashboard.simulation import build_simulated_dataset
+from dashboard.token_metrics import effective_token_total
 from dashboard.sources import (
     aggregate_codex_models,
     aggregate_hermes_models,
@@ -221,18 +222,23 @@ def api_models():
             json_extract(m.data, '$.modelID') as model_id,
             json_extract(m.data, '$.providerID') as provider,
             COUNT(*) as messages,
-            COUNT(DISTINCT m.session_id) as sessions,
-            COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0) as tokens_input,
-            COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as tokens_output,
-            COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0) as cache_read,
-            COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0) as cache_write
+          COUNT(DISTINCT m.session_id) as sessions,
+          COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0) as tokens_input,
+          COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as tokens_output,
+          COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0) as cache_read,
+          COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0) as cache_write
         FROM message m
         {msg_where + " AND" if msg_where else "WHERE"}
           json_valid(m.data)
           AND json_extract(m.data, '$.role') = 'assistant'
           AND json_extract(m.data, '$.modelID') IS NOT NULL
         GROUP BY model_id, provider
-        ORDER BY (tokens_input + tokens_output) DESC
+        ORDER BY (
+            COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0)
+          + COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0)
+          + COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0)
+          + COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0)
+        ) DESC
     """, params)
 
     models = []
@@ -245,6 +251,7 @@ def api_models():
         tokens_output = row["tokens_output"] or 0
         cache_read = row["cache_read"] or 0
         cache_write = row["cache_write"] or 0
+        tokens_effective_total = effective_token_total(total, cache_read, cache_write)
         models.append({
             "tool": "OpenCode",
             "tool_id": "opencode",
@@ -260,6 +267,7 @@ def api_models():
             "tokens_input": tokens_input,
             "tokens_output": tokens_output,
             "tokens_total": total,
+            "tokens_effective_total": tokens_effective_total,
             "cache_read": cache_read,
             "cache_write": cache_write,
             "color": QUALITATIVE_COLORS[rank] if rank < len(QUALITATIVE_COLORS) else "#64748B",
@@ -268,7 +276,7 @@ def api_models():
     conn.close()
     models.extend(aggregate_codex_models(days))
     models.extend(aggregate_hermes_models(days))
-    models.sort(key=lambda item: item.get("tokens_total") or 0, reverse=True)
+    models.sort(key=lambda item: item.get("tokens_effective_total") or 0, reverse=True)
     for rank, model in enumerate(models, start=1):
         model["rank"] = rank
         model["color"] = chart_color(rank - 1, model.get("model_id", ""), model.get("provider", ""))
@@ -308,7 +316,14 @@ def api_daily():
         simulated = build_simulated_dataset(days)
         daily_data = simulated["daily"]
         dates = simulated["dates"]
-        all_models_ordered = [item["chart_model_id"] for item in simulated["models"]]
+        all_models_ordered = [
+            item["chart_model_id"]
+            for item in sorted(
+                simulated["models"],
+                key=lambda item: item.get("tokens_effective_total") or item.get("tokens_total") or 0,
+                reverse=True,
+            )
+        ]
         model_map = {
             item["chart_model_id"]: {
                 "label": item["label"],
@@ -318,7 +333,14 @@ def api_daily():
             }
             for item in simulated["models"]
         }
-        model_totals = {item["chart_model_id"]: item["tokens_total"] for item in simulated["models"]}
+        model_totals = {
+            item["chart_model_id"]: item.get("tokens_effective_total") or item.get("tokens_total") or 0
+            for item in simulated["models"]
+        }
+        model_total_display = {
+            item["chart_model_id"]: item.get("tokens_total", 0)
+            for item in simulated["models"]
+        }
         active_models = [m for m in all_models_ordered if model_totals.get(m, 0) > 0]
         top_models = [selected_model_id] if selected_model_id in active_models else active_models[:top_n]
         other_models = [m for m in all_models_ordered if m not in top_models]
@@ -331,12 +353,22 @@ def api_daily():
                     "tokens_input": 0,
                     "tokens_output": 0,
                     "tokens_total": 0,
+                    "tokens_effective_total": 0,
                     "cache_read": 0,
                     "cache_write": 0,
                 })
                 for mid in top_models
             }
-            other = {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0}
+            other = {
+                "sessions": 0,
+                "messages": 0,
+                "tokens_input": 0,
+                "tokens_output": 0,
+                "tokens_total": 0,
+                "tokens_effective_total": 0,
+                "cache_read": 0,
+                "cache_write": 0,
+            }
             for mid in other_models:
                 row = daily_data[dt].get(mid)
                 if not row:
@@ -354,7 +386,8 @@ def api_daily():
                 "id": mid,
                 "label": meta["label"],
                 "color": chart_color(rank, meta["model_id"], meta["provider"]),
-                "tokens_total": model_totals.get(mid, 0),
+                "tokens_total": model_total_display.get(mid, 0),
+                "tokens_effective_total": model_totals.get(mid, 0),
                 "rank": rank + 1,
             })
         if not selected_model_id and any("other" in chart_data[dt] for dt in dates):
@@ -362,13 +395,23 @@ def api_daily():
                 "id": "other",
                 "label": f"Other ({len(other_models)} models)",
                 "color": "#64748B",
-                "tokens_total": sum(model_totals.get(mid, 0) for mid in other_models),
+                "tokens_total": sum(model_total_display.get(mid, 0) for mid in other_models),
+                "tokens_effective_total": sum(model_totals.get(mid, 0) for mid in other_models),
                 "rank": None,
             })
             for dt in dates:
                 chart_data[dt].setdefault(
                     "other",
-                    {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0},
+                    {
+                        "sessions": 0,
+                        "messages": 0,
+                        "tokens_input": 0,
+                        "tokens_output": 0,
+                        "tokens_total": 0,
+                        "tokens_effective_total": 0,
+                        "cache_read": 0,
+                        "cache_write": 0,
+                    },
                 )
 
         return jsonify({
@@ -413,7 +456,12 @@ def api_daily():
           AND json_extract(m.data, '$.role') = 'assistant'
           AND json_extract(m.data, '$.modelID') IS NOT NULL
         GROUP BY dt, model_id, provider
-        ORDER BY dt, (tokens_input + tokens_output) DESC
+        ORDER BY dt, (
+          COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0)
+          + COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0)
+          + COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0)
+          + COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0)
+        ) DESC
     """, params)
 
     daily_data = {}
@@ -428,6 +476,9 @@ def api_daily():
         model_id = f"{info['provider']}/{info['id']}"
         label = info["label"]
         total = (row["tokens_input"] or 0) + (row["tokens_output"] or 0)
+        cache_read = row["cache_read"] or 0
+        cache_write = row["cache_write"] or 0
+        tokens_effective_total = effective_token_total(total, cache_read, cache_write)
 
         if model_id not in model_map:
             model_map[model_id] = {
@@ -445,8 +496,9 @@ def api_daily():
             "tokens_input": row["tokens_input"] or 0,
             "tokens_output": row["tokens_output"] or 0,
             "tokens_total": total,
-            "cache_read": row["cache_read"] or 0,
-            "cache_write": row["cache_write"] or 0,
+            "tokens_effective_total": tokens_effective_total,
+            "cache_read": cache_read,
+            "cache_write": cache_write,
         }
 
     if selected_tool_id is None:
@@ -464,12 +516,22 @@ def api_daily():
                 }
                 all_models_ordered.append(mid)
             daily_data.setdefault(dt, {})
-            bucket = daily_data[dt].setdefault(mid, {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0})
+            bucket = daily_data[dt].setdefault(mid, {
+                "sessions": 0,
+                "messages": 0,
+                "tokens_input": 0,
+                "tokens_output": 0,
+                "tokens_total": 0,
+                "tokens_effective_total": 0,
+                "cache_read": 0,
+                "cache_write": 0,
+            })
             bucket["sessions"] += 1
             bucket["messages"] += record.get("messages") or 0
             bucket["tokens_input"] += record.get("tokens_input") or 0
             bucket["tokens_output"] += record.get("tokens_output") or 0
             bucket["tokens_total"] += record.get("tokens_total") or 0
+            bucket["tokens_effective_total"] += record.get("tokens_effective_total") or 0
             bucket["cache_read"] += record.get("cache_read") or 0
             bucket["cache_write"] += record.get("cache_write") or 0
 
@@ -482,6 +544,7 @@ def api_daily():
                 "tokens_input": 0,
                 "tokens_output": 0,
                 "tokens_total": 0,
+                "tokens_effective_total": 0,
                 "cache_read": 0,
                 "cache_write": 0,
             })
@@ -489,9 +552,11 @@ def api_daily():
     conn.close()
 
     model_totals = {}
+    model_total_display = {}
     for dt in dates:
         for mid in all_models_ordered:
-            model_totals[mid] = model_totals.get(mid, 0) + daily_data[dt][mid]["tokens_total"]
+            model_totals[mid] = model_totals.get(mid, 0) + daily_data[dt][mid]["tokens_effective_total"]
+            model_total_display[mid] = model_total_display.get(mid, 0) + daily_data[dt][mid]["tokens_total"]
     all_models_ordered.sort(key=lambda m: model_totals.get(m, 0), reverse=True)
 
     active_models = [m for m in all_models_ordered if model_totals.get(m, 0) > 0]
@@ -507,12 +572,22 @@ def api_daily():
                 "tokens_input": 0,
                 "tokens_output": 0,
                 "tokens_total": 0,
+                "tokens_effective_total": 0,
                 "cache_read": 0,
                 "cache_write": 0,
             })
             for mid in top_models
         }
-        other = {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0}
+        other = {
+            "sessions": 0,
+            "messages": 0,
+            "tokens_input": 0,
+            "tokens_output": 0,
+            "tokens_total": 0,
+            "tokens_effective_total": 0,
+            "cache_read": 0,
+            "cache_write": 0,
+        }
         for mid in other_models:
             row = daily_data[dt].get(mid)
             if not row:
@@ -522,6 +597,7 @@ def api_daily():
             other["tokens_input"] += row["tokens_input"]
             other["tokens_output"] += row["tokens_output"]
             other["tokens_total"] += row["tokens_total"]
+            other["tokens_effective_total"] += row.get("tokens_effective_total", 0) if isinstance(row, dict) else row["tokens_effective_total"]
             other["cache_read"] += row.get("cache_read", 0) if isinstance(row, dict) else row["cache_read"]
             other["cache_write"] += row.get("cache_write", 0) if isinstance(row, dict) else row["cache_write"]
         if not selected_model_id and (other["tokens_total"] > 0 or other["sessions"] > 0):
@@ -535,7 +611,8 @@ def api_daily():
             "id": mid,
             "label": meta["label"],
             "color": chart_color(rank, meta["model_id"], meta["provider"]),
-            "tokens_total": model_totals.get(mid, 0),
+            "tokens_total": model_total_display.get(mid, 0),
+            "tokens_effective_total": model_totals.get(mid, 0),
             "rank": rank + 1,
         })
     if not selected_model_id and any("other" in chart_data[dt] for dt in dates):
@@ -543,14 +620,21 @@ def api_daily():
             "id": "other",
             "label": f"Other ({len(other_models)} models)",
             "color": "#64748B",
-            "tokens_total": sum(model_totals.get(mid, 0) for mid in other_models),
+            "tokens_total": sum(model_total_display.get(mid, 0) for mid in other_models),
+            "tokens_effective_total": sum(model_totals.get(mid, 0) for mid in other_models),
             "rank": None,
         })
         for dt in dates:
-            chart_data[dt].setdefault(
-                "other",
-                {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0},
-            )
+            chart_data[dt].setdefault("other", {
+                "sessions": 0,
+                "messages": 0,
+                "tokens_input": 0,
+                "tokens_output": 0,
+                "tokens_total": 0,
+                "tokens_effective_total": 0,
+                "cache_read": 0,
+                "cache_write": 0,
+            })
 
     return jsonify({
         "dates": dates,
