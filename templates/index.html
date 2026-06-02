@@ -1258,9 +1258,10 @@ document.getElementById('custom-days').addEventListener('keydown', (event) => {
 document.getElementById('top-n-select').addEventListener('change', (event) => {
   currentTopN = parseInt(event.target.value || '8');
   hiddenChartModels.clear();
-  setStatLoading(true);
   document.getElementById('chart-note').textContent = 'Loading…';
-  loadDaily(currentDays).finally(() => setStatLoading(false));
+  renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });
+  renderLegend([]);
+  loadDaily(currentDays);
 });
 
 document.getElementById('clear-chart-filter').addEventListener('click', () => {
@@ -1354,7 +1355,7 @@ async function loadModels(days) {
       priced.length,
       models.length,
       counted
-        ? `API-equivalent estimate, not subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}.`
+        ? `API-equivalent estimate, not subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}.${partialMeta}`
         : 'No matched pricing.',
       partialModels.length,
     );
