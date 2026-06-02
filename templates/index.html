@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#08090a">
 <title>Coding Agent Usage Dashboard</title>
 <link rel="icon" href="/favicon.ico" type="image/svg+xml">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
@@ -33,6 +34,7 @@
     font-family: var(--font-mono);
     background: var(--bg-primary);
     color: var(--text-primary);
+    color-scheme: dark;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
@@ -77,7 +79,7 @@
     color: var(--text-secondary);
     text-decoration: none;
     font-size: 14px;
-    transition: all 0.15s;
+    transition: color 0.15s, background-color 0.15s;
     position: relative;
   }
   .nav-item:hover { color: var(--text-primary); background: var(--bg-tertiary); }
@@ -273,9 +275,8 @@
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 14px 16px;
-    min-height: 104px;
-    cursor: pointer;
+    padding: 16px 18px;
+    min-height: 96px;
   }
   .tool-source-card.placeholder {
     border-style: dashed;
@@ -298,14 +299,71 @@
     color: inherit;
     cursor: pointer;
     font: inherit;
-    font-weight: 600;
+    font-size: 19px;
+    line-height: 1.15;
+    font-weight: 700;
     text-align: left;
   }
   .tool-source-name:hover { text-decoration: underline; text-underline-offset: 3px; }
   .tool-source-name:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
   .tool-source-status { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.4px; }
-  .tool-source-meta { margin-top: 6px; color: var(--text-secondary); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; }
-  .tool-source-actions { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 12px; }
+  .tool-source-meta { margin-top: 10px; color: var(--text-secondary); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; }
+  .tool-source-summary { color: var(--text-secondary); }
+  .tool-source-detail { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; }
+  .tool-source-card .meta-info-wrap { position: relative; display: inline-flex; align-items: center; }
+  .tool-source-card .meta-info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-tertiary);
+    background: var(--bg-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    padding: 0;
+  }
+  .tool-source-card .meta-info:hover,
+  .tool-source-card .meta-info:focus-visible,
+  .tool-source-card .meta-info-wrap.is-open .meta-info {
+    outline: none;
+    color: var(--text-primary);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgb(33 150 243 / 0.18);
+  }
+  .tool-source-card .meta-tooltip {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    transform: translateX(-50%) translateY(4px);
+    width: min(320px, calc(100vw - 48px));
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    box-shadow: 0 12px 30px rgb(0 0 0 / 0.35);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+    z-index: 20;
+  }
+  .tool-source-card .meta-info-wrap:hover .meta-tooltip,
+  .tool-source-card .meta-info-wrap:focus-within .meta-tooltip,
+  .tool-source-card .meta-info-wrap.is-open .meta-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+  }
+  .tool-source-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 12px; }
   .tool-source-filter-state { color: var(--text-tertiary); }
   .tool-source-repo { color: var(--accent); text-decoration: none; }
   .tool-source-repo:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 3px; }
@@ -448,6 +506,11 @@
   .table-section { margin-top: 12px; }
   .table-section h2 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
   .table-section .subtitle { font-family: var(--font-mono); font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
+  .table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 
   .data-table {
     width: 100%;
@@ -528,7 +591,7 @@
     color: var(--text-tertiary);
     font-size: 14px;
     border-bottom: 2px solid transparent;
-    transition: all 0.15s;
+    transition: color 0.15s, border-bottom-color 0.15s;
     background: none;
     border-top: none;
     border-left: none;
@@ -552,7 +615,7 @@
     color: var(--text-secondary);
     font-size: 13px;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: color 0.15s, background-color 0.15s, border-color 0.15s;
     font-family: var(--font-sans);
   }
   .pill:hover { border-color: var(--accent); color: var(--text-primary); }
@@ -606,6 +669,17 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.01ms !important;
+    }
+    .loading .spinner { animation: none; }
+  }
+
   /* Footer */
   .footer {
     margin-top: 40px;
@@ -634,6 +708,10 @@
     .main-area { padding: 24px 16px; }
     .stat-cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
     .tool-source-grid { grid-template-columns: 1fr; }
+    .data-table { min-width: 760px; }
+    .data-table th,
+    .data-table td { white-space: normal; overflow-wrap: anywhere; }
+    .data-table .num { white-space: nowrap; }
   }
 </style>
 </head>
@@ -657,13 +735,13 @@
     </section>
 
     <!-- Pill tabs -->
-    <div class="pill-tabs" id="range-tabs">
-      <button class="pill" data-days="7">7d</button>
-      <button class="pill active" data-days="30">30d</button>
-      <button class="pill" data-days="90">90d</button>
-      <button class="pill" data-days="0">All</button>
+    <div class="pill-tabs" id="range-tabs" role="group" aria-label="Usage date range">
+      <button class="pill" data-days="7" aria-pressed="false">7d</button>
+      <button class="pill active" data-days="30" aria-pressed="true">30d</button>
+      <button class="pill" data-days="90" aria-pressed="false">90d</button>
+      <button class="pill" data-days="0" aria-pressed="false">All</button>
       <span class="custom-range">
-        <input id="custom-days" type="number" min="1" max="3650" placeholder="N days" aria-label="Custom number of days">
+        <input id="custom-days" name="custom-days" type="number" min="1" max="3650" inputmode="numeric" autocomplete="off" placeholder="e.g. 45…" aria-label="Custom number of days">
         <button id="apply-custom-days" type="button">Apply</button>
       </span>
     </div>
@@ -691,9 +769,9 @@
         <div class="sub" id="output-sub"></div>
       </div>
       <div class="stat-card">
-        <div class="label">Est. Cost</div>
+        <div class="label">API-Equivalent Cost</div>
         <div class="value" id="estimated-cost">—</div>
-        <div class="sub" id="estimated-cost-sub">OpenRouter pricing when matched</div>
+        <div class="sub" id="estimated-cost-sub">Public provider pricing when matched</div>
       </div>
     </div>
 
@@ -725,7 +803,7 @@
       </div>
       <div class="chart-layout">
         <div class="chart-plot">
-          <canvas id="usage-chart"></canvas>
+          <canvas id="usage-chart" role="img" aria-label="Daily effective token volume by model (input + output + cache read + cache write)">Daily effective token volume by model (input + output + cache read + cache write).</canvas>
         </div>
         <div class="chart-legend" id="chart-legend"></div>
       </div>
@@ -734,50 +812,54 @@
     <!-- Model breakdown table -->
     <section class="table-section" id="models">
       <h2>Model Breakdown</h2>
-      <div class="subtitle">Sessions, non-cache input + output tokens, cache read, and estimated cost by model. Cost uses latest matched OpenRouter pricing and is approximate.</div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Tool</th>
-            <th>Model</th>
-            <th class="num">Sessions</th>
-            <th class="num" title="Non-cache input + output; cache read/write shown separately">Total Tokens</th>
-            <th class="num" title="Non-cache prompt/context input. Raw provider usage may include cache reads; this dashboard subtracts cache read when needed for consistency.">Non-cache Input</th>
-            <th class="num">Output</th>
-            <th class="num">Cache Read</th>
-            <th class="num">Est. Cost</th>
-          </tr>
-        </thead>
-        <tbody id="model-table-body">
-          <tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
-        </tbody>
-      </table>
+      <div class="subtitle">Rows show canonical totals: non-cache input + output. Ranking and chart use effective volume including cache. API-equivalent cost is priced from matched provider rates.</div>
+      <div class="table-scroll" role="region" aria-label="Model breakdown table" tabindex="0">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Model</th>
+              <th class="num">Sessions</th>
+              <th class="num" title="Non-cache input + output; cache read/write shown separately. Effective volume incl. cache drives ranking.">Total Tokens</th>
+              <th class="num" title="Non-cache prompt/context input. Raw provider usage may include cache reads; this dashboard subtracts cache read when needed for consistency. Cache read is reported in its own column.">Input</th>
+              <th class="num">Output</th>
+              <th class="num">Cache Read</th>
+              <th class="num" title="API-equivalent estimate from matched provider/model pricing; not necessarily your subscription bill">API-Equiv. Cost</th>
+            </tr>
+          </thead>
+          <tbody id="model-table-body">
+            <tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <!-- Usage History -->
     <section class="table-section" id="usage" style="margin-top:40px;">
       <h2>Usage History</h2>
       <div class="subtitle">Recent coding-agent sessions. Tokens = non-cache input + output; cache is tracked separately in summaries.</div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Tool</th>
-            <th>Date</th>
-            <th>Model</th>
-            <th>Title</th>
-            <th class="num" title="Non-cache input + output">Tokens</th>
-            <th class="num" title="Non-cache prompt/context input">Non-cache Input</th>
-            <th class="num">Output</th>
-          </tr>
-        </thead>
-        <tbody id="history-table-body">
-          <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
-        </tbody>
-      </table>
+      <div class="table-scroll" role="region" aria-label="Usage history table" tabindex="0">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Date</th>
+              <th>Model</th>
+              <th>Title</th>
+              <th class="num" title="Non-cache input + output">Tokens</th>
+              <th class="num" title="Non-cache prompt/context input">Non-cache Input</th>
+              <th class="num">Output</th>
+            </tr>
+          </thead>
+          <tbody id="history-table-body">
+            <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <div class="footer">
-      ◇ active sources: <span id="db-path-display">Loading...</span>
+      ◇ active sources: <span id="db-path-display">Loading…</span>
       ☤ last updated: <span id="last-updated">—</span>
     </div>
   </main>
@@ -928,10 +1010,6 @@ function renderToolSources(sources = []) {
     card.className = `tool-source-card ${active ? 'active' : 'placeholder'}`;
     card.dataset.toolId = source.id || '';
     card.title = source.repo_url ? `Repo: ${source.repo_url}` : '';
-    card.addEventListener('click', event => {
-      if (event.target.closest('a, button')) return;
-      setChartToolFilter(source.id, source.label || source.id);
-    });
     if (active) {
       card.style.borderColor = color;
       card.style.borderLeft = `3px solid ${color}`;
@@ -958,7 +1036,25 @@ function renderToolSources(sources = []) {
     meta.className = 'tool-source-meta';
     const sourceType = source.source_type || 'Source type unknown';
     const sourcePath = source.source_path || 'Unknown';
-    meta.textContent = `${sourceType} · Source: ${sourcePath}`;
+    const summary = document.createElement('span');
+    summary.className = 'tool-source-summary';
+    summary.textContent = source.sessions !== null && source.sessions !== undefined
+      ? `${fmtNum(source.sessions)} sessions · ${fmtTokens(source.tokens_total || 0)} tokens`
+      : (source.status_label || source.status || 'source');
+    const detail = document.createElement('span');
+    detail.className = 'tool-source-detail meta-info-wrap';
+    const detailButton = document.createElement('button');
+    detailButton.className = 'meta-info';
+    detailButton.type = 'button';
+    detailButton.setAttribute('aria-label', `${source.label || 'Tool'} source details`);
+    detailButton.setAttribute('aria-expanded', 'false');
+    detailButton.textContent = 'i';
+    const tooltip = document.createElement('span');
+    tooltip.className = 'meta-tooltip';
+    tooltip.setAttribute('role', 'tooltip');
+    tooltip.textContent = `${sourceType} · Source: ${sourcePath}`;
+    detail.append(detailButton, tooltip);
+    meta.append(summary, detail);
 
     const actions = document.createElement('div');
     actions.className = 'tool-source-actions';
@@ -982,6 +1078,7 @@ function renderToolSources(sources = []) {
 
     head.append(name, status);
     card.append(head, meta, actions);
+    bindMetaInfoInteractions(card);
     grid.appendChild(card);
   });
 }
@@ -1000,10 +1097,17 @@ function simulateQuerySuffix() {
     : '';
 }
 
+function setRangeButtonState(activeButton = null) {
+  document.querySelectorAll('#range-tabs .pill').forEach(button => {
+    const active = button === activeButton;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+}
+
 document.querySelectorAll('#range-tabs .pill').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('#range-tabs .pill').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+    setRangeButtonState(btn);
     currentDays = parseInt(btn.dataset.days);
     document.getElementById('custom-days').value = '';
     loadAll();
@@ -1015,7 +1119,7 @@ document.getElementById('apply-custom-days').addEventListener('click', () => {
   const days = Math.max(1, Math.min(3650, parseInt(input.value || '31')));
   currentDays = days;
   input.value = days;
-  document.querySelectorAll('#range-tabs .pill').forEach(b => b.classList.remove('active'));
+  setRangeButtonState(null);
   loadAll();
 });
 
@@ -1062,19 +1166,19 @@ async function loadOverview(days) {
     setCardMeta(
       'tokens-sub',
       `${fmtTokens(d.cache_read)} read / ${fmtTokens(d.cache_write)} write cache`,
-      `${d.token_total_definition || 'Total tokens are non-cache input + output.'} ${totalAvg} avg/session. Active sources: ${sourceLabel}.`,
+      `Canonical total = non-cache input + output. Ranking uses effective volume incl. cache. ${totalAvg} avg/session. Active sources: ${sourceLabel}.`,
     );
     setCardMeta(
       'input-sub',
       `${fmtTokens(d.cache_read)} cache read`,
-      `Input is non-cache prompt/context tokens. Some raw provider usage includes cache reads; the dashboard subtracts cache read where needed so sources compare consistently. ${inputAvg} non-cache input avg/session.`,
+      `Input is non-cache prompt/context tokens. Ranking uses effective volume incl. cache; canonical total stays non-cache + output. ${inputAvg} input avg/session.`,
     );
     setCardMeta(
       'output-sub',
       `${fmtTokens(d.cache_write)} cache write`,
       `Output tokens are assistant response tokens. Cache write is newly cached context and is excluded from output totals. ${outputAvg} output avg/session.`,
     );
-    document.getElementById('tool-sources-subtitle').textContent = `Click a source to focus the chart. Totals currently come from ${sourceLabel}.`;
+    document.getElementById('tool-sources-subtitle').textContent = `Click a source name to focus the chart. Totals currently come from ${sourceLabel}.`;
     renderToolSources(d.tool_sources || []);
   } catch(e) {
     console.error('overview', e);
@@ -1094,13 +1198,21 @@ async function loadModels(days) {
 
     const priced = models.filter(m => m.estimated_cost !== null && m.estimated_cost !== undefined);
     const estimatedTotal = priced.reduce((sum, m) => sum + (m.estimated_cost || 0), 0);
+    const costParts = priced.reduce((parts, m) => {
+      const breakdown = m.cost_breakdown || {};
+      parts.input += Number(breakdown.input || 0);
+      parts.output += Number(breakdown.output || 0);
+      parts.cacheRead += Number(breakdown.cache_read || 0);
+      parts.cacheWrite += Number(breakdown.cache_write || 0);
+      return parts;
+    }, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
     const unpricedCount = models.length - priced.length;
     document.getElementById('estimated-cost').textContent = priced.length ? fmtCost(estimatedTotal) : '—';
     setCardMeta(
       'estimated-cost-sub',
       priced.length ? `approx · ${priced.length}/${models.length} priced` : 'No matched pricing',
       priced.length
-        ? `${unpricedCount} unmatched models. Estimate uses live OpenRouter pricing first, then fallback pricing for known OpenAI and opencode/go models.`
+        ? `API-equivalent estimate, not actual subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}. ${unpricedCount} unmatched models.`
         : 'No OpenRouter or hardcoded pricing matched the active models.',
     );
 
@@ -1157,8 +1269,15 @@ async function loadModels(days) {
 
       const costCell = document.createElement('td');
       costCell.className = 'num';
+      const breakdown = m.cost_breakdown || {};
+      const breakdownTitle = m.cost_breakdown
+        ? `input ${fmtCost(breakdown.input)}, output ${fmtCost(breakdown.output)}, cache read ${fmtCost(breakdown.cache_read)}, cache write ${fmtCost(breakdown.cache_write)}`
+        : '';
+      const sessionAccounting = m.session_accounting_note ? `; ${m.session_accounting_note}` : '';
       costCell.title = m.pricing_status === 'priced'
-        ? `${m.pricing_source}: ${m.pricing_model_id}`
+        ? `${m.pricing_source}: ${m.pricing_model_id}${breakdownTitle ? `; ${breakdownTitle}` : ''}`
+        : m.pricing_status === 'partial'
+        ? `${m.pricing_source}; known subtotal ${fmtCost(m.partial_cost_usd)}${breakdownTitle ? `; ${breakdownTitle}` : ''}${sessionAccounting}`
         : `No matched pricing for ${m.pricing_model_id || m.model_id}`;
       costCell.textContent = fmtCost(m.estimated_cost);
 
@@ -1222,7 +1341,7 @@ async function loadDaily(days) {
       ? 'Single-model focus · click Clear filter to restore Top N view'
       : selectedChartToolId
       ? `Source focus: ${selectedChartToolLabel || selectedChartToolId} · click Clear filter to restore all sources`
-      : `Daily total = non-cache input + output · top ${safeData.top_n} models by token volume · ${safeData.other_count || 0} long-tail models grouped as Other`;
+      : `Daily volume includes cached input (top ${safeData.top_n} models by effective volume) · ${safeData.other_count || 0} long-tail models grouped as Other`;
   } catch(e) {
     console.error('daily', e);
     renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });
@@ -1323,7 +1442,7 @@ function renderChart(data) {
   const datasets = data.models.map(m => ({
     label: m.label,
     modelId: m.id,
-    data: data.dates.map(dt => (data.data[dt]?.[m.id]?.tokens_total ?? 0)),
+    data: data.dates.map(dt => (data.data[dt]?.[m.id]?.tokens_effective_total ?? data.data[dt]?.[m.id]?.tokens_total ?? 0)),
     backgroundColor: m.color,
     borderColor: m.color,
     borderWidth: m.id === 'other' ? 1 : 0,
@@ -1383,11 +1502,11 @@ function renderChart(data) {
           callbacks: {
             label: ctx => {
               if (ctx.raw <= 0) return null;
-              return ` ${ctx.dataset.label}: ${fmtTokens(ctx.raw)} non-cache input + output`;
+              return ` ${ctx.dataset.label}: ${fmtTokens(ctx.raw)} effective tokens (input + output + cache)`;
             },
             afterBody: ctxs => {
               const total = ctxs.reduce((sum, c) => sum + (c.raw || 0), 0);
-              return `\n Total: ${fmtTokens(total)} non-cache input + output`;
+              return `\n Total: ${fmtTokens(total)} effective tokens (input + output + cache)`;
             },
           },
         },
@@ -1423,7 +1542,7 @@ function toggleChartModel(modelId) {
 
 function renderLegend(models) {
   const el = document.getElementById('chart-legend');
-  const visibleTotal = models.reduce((sum, m) => sum + (m.tokens_total || 0), 0) || 1;
+  const visibleTotal = models.reduce((sum, m) => sum + (m.tokens_effective_total ?? m.tokens_total ?? 0), 0) || 1;
   clearNode(el);
 
   models.forEach(m => {
@@ -1442,11 +1561,13 @@ function renderLegend(models) {
 
     const share = document.createElement('span');
     share.className = 'legend-share';
-    share.textContent = `${Math.round(((m.tokens_total || 0) / visibleTotal) * 100)}%`;
+    share.textContent = `${Math.round(((m.tokens_effective_total ?? m.tokens_total ?? 0) / visibleTotal) * 100)}%`;
 
     item.append(name, share);
     item.addEventListener('mouseenter', () => setLegendHover(item.dataset.modelId));
     item.addEventListener('mouseleave', () => setLegendHover(null));
+    item.addEventListener('focus', () => setLegendHover(item.dataset.modelId));
+    item.addEventListener('blur', () => setLegendHover(null));
     item.addEventListener('click', () => toggleChartModel(item.dataset.modelId));
     el.appendChild(item);
   });

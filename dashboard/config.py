@@ -1,0 +1,99 @@
+"""Configuration and tool-source metadata for the dashboard."""
+
+from pathlib import Path
+import os
+
+DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
+CODEX_STATE_PATH = os.path.expanduser("~/.codex/state_5.sqlite")
+CODEX_SESSIONS_DIR = os.path.expanduser("~/.codex/sessions")
+CODEX_SOURCE_PATH = CODEX_STATE_PATH
+HERMES_STATE_PATH = os.path.expanduser("~/.hermes/state.db")
+
+
+def display_path(path: str) -> str:
+    """Return a stable, user-facing local path."""
+    home = os.path.expanduser("~")
+    return path.replace(home, "~", 1) if path.startswith(home) else path
+
+TOOL_SOURCES = [
+    {
+        "id": "opencode",
+        "label": "OpenCode",
+        "status": "active",
+        "status_label": "Active source",
+        "source_type": "SQLite database",
+        "source_path": display_path(DB_PATH),
+        "repo_url": "https://github.com/anomalyco/opencode/",
+        "color": "#3B82F6",
+        "issue": None,
+    },
+    {
+        "id": "codex",
+        "label": "Codex CLI",
+        "status": "placeholder",
+        "status_label": "Planned adapter",
+        "source_type": "SQLite state + JSONL rollouts",
+        "source_path": "TBD",
+        "repo_url": "https://github.com/openai/codex/",
+        "color": "#BA68C8",
+        "issue": None,
+    },
+    {
+        "id": "hermes",
+        "label": "Hermes",
+        "status": "placeholder",
+        "status_label": "Planned adapter",
+        "source_type": "Hermes session SQLite database",
+        "source_path": "TBD",
+        "repo_url": "https://github.com/NousResearch/hermes-agent/",
+        "color": "#EAB308",
+        "issue": None,
+    },
+]
+
+TOOL_COLOR_MAP = {item["id"]: item["color"] for item in TOOL_SOURCES}
+KNOWN_TOOL_IDS = {item["id"] for item in TOOL_SOURCES}
+
+
+def codex_source_available() -> bool:
+    """Return whether local Codex state exists on this machine."""
+    return Path(CODEX_STATE_PATH).exists()
+
+
+def hermes_source_available() -> bool:
+    """Return whether local Hermes session state exists on this machine."""
+    return Path(HERMES_STATE_PATH).exists()
+
+
+def current_tool_sources() -> list[dict]:
+    """Return tool source metadata with the active DB path baked in."""
+    sources = []
+    for source in TOOL_SOURCES:
+        item = dict(source)
+        if item["id"] == "opencode":
+            item["source_path"] = display_path(DB_PATH)
+        elif item["id"] == "codex" and codex_source_available():
+            item.update({
+                "status": "active",
+                "status_label": "Active source",
+                "source_type": "SQLite state + JSONL rollouts",
+                "source_path": display_path(CODEX_SOURCE_PATH),
+            })
+        elif item["id"] == "hermes" and hermes_source_available():
+            item.update({
+                "status": "active",
+                "status_label": "Active source",
+                "source_type": "Hermes session SQLite database",
+                "source_path": display_path(HERMES_STATE_PATH),
+            })
+        sources.append(item)
+    return sources
+
+
+def tool_source_label(tool_id: str | None) -> str | None:
+    if not tool_id:
+        return None
+    for source in current_tool_sources():
+        if source["id"] == tool_id:
+            return source["label"]
+    return tool_id
