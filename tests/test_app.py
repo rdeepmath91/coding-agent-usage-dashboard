@@ -751,7 +751,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertLess(html.index('Output Tokens'), html.index('Sessions'))
         self.assertIn('Partial estimate', html)
         self.assertIn('estimate-badge', html)
-        self.assertIn('models priced', html)
+        self.assertIn('partial', html)
         self.assertIn("keepTogether(fmtTokens(sessionTokens), 'direct')", html)
         self.assertIn('cacheShare(cacheTotal, totalTokens)', html)
         self.assertIn("keepTogether(fmtTokens(cacheRead), 'cache read')", html)

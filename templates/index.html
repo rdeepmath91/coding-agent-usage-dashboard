@@ -1037,13 +1037,13 @@ function setCostMeta(id, fullyPricedCount, modelCount, detail = '', partialCount
   const hasPartial = partial > 0;
   let visible;
   if (hasFully && hasPartial) {
-    visible = `${fully} fully priced, ${partial} partially priced of ${total} models`;
+    visible = `${fully} full · ${partial} partial`;
   } else if (hasFully) {
-    visible = `${fully} of ${total} models priced`;
+    visible = `${fully}/${total} priced`;
   } else if (hasPartial) {
-    visible = `${partial} partially priced of ${total} models`;
+    visible = `${partial} partial`;
   } else {
-    visible = 'No matched pricing';
+    visible = 'No pricing';
   }
   const detailText = String(detail || '');
   const tooltipId = `${id}-tooltip`;
