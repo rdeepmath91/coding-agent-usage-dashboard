@@ -174,32 +174,47 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
         "tool_sources": [],
     }
 
-    for source in current_tool_sources():
-        item = dict(source)
-        if item["id"] == "opencode":
-            item.update({
-                "status_label": "Simulated",
-                "source_path": "simulated dataset",
-                "sessions": total_sessions,
-                "tokens_total": overview["total_tokens"],
-                "tokens_input": total_input_with_cache,
-                "non_cache_input": total_input,
-                "tokens_output": total_output,
-                "session_tokens": session_tokens,
-                "cache_read": cache_read_total,
-                "cache_write": cache_write_total,
-                "cache_total": cache_read_total + cache_write_total,
-            })
-        else:
-            item.update({
-                "sessions": None,
-                "tokens_total": None,
-                "tokens_input": None,
-                "tokens_output": None,
-                "cache_read": None,
-                "cache_write": None,
-            })
-        overview["tool_sources"].append(item)
+    overview["active_tool_label"] = "OpenCode (simulated)"
+    overview.setdefault("tool_sources", [])
+
+    opencode_source = next((src for src in current_tool_sources() if src["id"] == "opencode"), {
+        "id": "opencode",
+        "label": "OpenCode",
+        "status": "active",
+        "status_label": "Simulated",
+        "source_type": "Synthetic dataset",
+        "source_path": "simulated dataset",
+        "repo_url": "https://github.com/anomalyco/opencode/",
+        "color": TOOL_COLOR_MAP.get("opencode", "#64748B"),
+        "issue": None,
+    })
+    opencode_item = dict(opencode_source)
+    opencode_item.update({
+        "status_label": "Simulated",
+        "source_path": "simulated dataset",
+        "sessions": total_sessions,
+        "tokens_total": overview["total_tokens"],
+        "tokens_input": total_input_with_cache,
+        "non_cache_input": total_input,
+        "tokens_output": total_output,
+        "session_tokens": session_tokens,
+        "cache_read": cache_read_total,
+        "cache_write": cache_write_total,
+        "cache_total": cache_read_total + cache_write_total,
+        "estimated_cost": None,
+        "actual_cost": None,
+        "cost_status": None,
+        "cost_source": None,
+        "estimated_cost_subtotal": None,
+        "actual_cost_subtotal": None,
+        "pricing_status": "unpriced",
+        "pricing_source": None,
+        "pricing_model_id": None,
+        "cost_basis": "simulated_no_billing",
+        "cost_breakdown": None,
+        "accounted_cost": None,
+    })
+    overview["tool_sources"] = [opencode_item]
 
     history.sort(key=lambda row: row["created"], reverse=True)
     return {

@@ -1268,8 +1268,12 @@ async function loadModels(days) {
       return;
     }
 
+    const pricedForCount = models.filter(m => (m.estimated_cost != null && m.estimated_cost !== undefined) || (m.partial_cost_usd != null && m.partial_cost_usd !== undefined));
     const priced = models.filter(m => m.estimated_cost !== null && m.estimated_cost !== undefined);
+    const partialModels = models.filter(m => (m.estimated_cost == null || m.estimated_cost === undefined) && (m.partial_cost_usd != null && m.partial_cost_usd !== undefined));
     const estimatedTotal = priced.reduce((sum, m) => sum + (m.estimated_cost || 0), 0);
+    const partialTotal = partialModels.reduce((sum, m) => sum + Number(m.partial_cost_usd || 0), 0);
+    const knownTotal = estimatedTotal + partialTotal;
     const costParts = priced.reduce((parts, m) => {
       const breakdown = m.cost_breakdown || {};
       parts.input += Number(breakdown.input || 0);
@@ -1278,14 +1282,16 @@ async function loadModels(days) {
       parts.cacheWrite += Number(breakdown.cache_write || 0);
       return parts;
     }, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
-    const unpricedCount = models.length - priced.length;
-    document.getElementById('estimated-cost').textContent = priced.length ? fmtCost(estimatedTotal) : '—';
+    const unpricedCount = models.length - pricedForCount.length;
+    document.getElementById('estimated-cost').textContent = pricedForCount.length ? fmtCost(knownTotal) : '—';
+    const counted = priced.length + partialModels.length;
+    const partialMeta = partialTotal > 0 ? ` Includes ${fmtCost(partialTotal)} from ${partialModels.length} partially priced model(s).` : '';
     setCostMeta(
       'estimated-cost-sub',
-      priced.length,
+      counted,
       models.length,
-      priced.length
-        ? `API-equivalent estimate, not actual subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}. ${unpricedCount} unmatched models.`
+      counted
+        ? `API-equivalent estimate, not actual subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}.${partialMeta} ${unpricedCount} unmatched models.`
         : 'No OpenRouter or hardcoded pricing matched the active models.',
     );
 
