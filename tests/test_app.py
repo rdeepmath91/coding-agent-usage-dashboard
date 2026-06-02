@@ -728,7 +728,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn("className = 'chart-focus-button'", html)
         self.assertIn('item.className = `legend-item', html)
         self.assertIn("button.textContent = active ? 'Clear focus' : 'Focus chart'", html)
-        self.assertIn('role="img" aria-label="Daily non-cache input plus output tokens by model"', html)
+        self.assertIn('role="img" aria-label="Daily effective token volume by model (input + output + cache read + cache write)"', html)
         self.assertIn('role="group" aria-label="Usage date range"', html)
         self.assertIn('API-Equivalent Cost', html)
         self.assertIn('Total tokens exclude cache read/write; cost includes priced cache tokens.', html)

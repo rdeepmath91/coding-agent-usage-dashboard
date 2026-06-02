@@ -803,7 +803,7 @@
       </div>
       <div class="chart-layout">
         <div class="chart-plot">
-          <canvas id="usage-chart" role="img" aria-label="Daily non-cache input plus output tokens by model">Daily non-cache input plus output tokens by model.</canvas>
+          <canvas id="usage-chart" role="img" aria-label="Daily effective token volume by model (input + output + cache read + cache write)">Daily effective token volume by model (input + output + cache read + cache write).</canvas>
         </div>
         <div class="chart-legend" id="chart-legend"></div>
       </div>
@@ -820,8 +820,8 @@
               <th>Tool</th>
               <th>Model</th>
               <th class="num">Sessions</th>
-              <th class="num" title="Non-cache input + output; cache read/write shown separately">Total Tokens</th>
-              <th class="num" title="Non-cache prompt/context input. Raw provider usage may include cache reads; this dashboard subtracts cache read when needed for consistency.">Non-cache Input</th>
+              <th class="num" title="Non-cache input + output; cache read/write shown separately. Effective volume incl. cache drives ranking.">Total Tokens</th>
+              <th class="num" title="Non-cache prompt/context input. Raw provider usage may include cache reads; this dashboard subtracts cache read when needed for consistency. Cache read is reported in its own column.">Input</th>
               <th class="num">Output</th>
               <th class="num">Cache Read</th>
               <th class="num" title="API-equivalent estimate from matched provider/model pricing; not necessarily your subscription bill">API-Equiv. Cost</th>
@@ -1166,12 +1166,12 @@ async function loadOverview(days) {
     setCardMeta(
       'tokens-sub',
       `${fmtTokens(d.cache_read)} read / ${fmtTokens(d.cache_write)} write cache`,
-      `${d.token_total_definition || 'Total tokens are non-cache input + output.'} ${totalAvg} avg/session. Active sources: ${sourceLabel}.`,
+      `Canonical total = non-cache input + output. Ranking uses effective volume incl. cache. ${totalAvg} avg/session. Active sources: ${sourceLabel}.`,
     );
     setCardMeta(
       'input-sub',
       `${fmtTokens(d.cache_read)} cache read`,
-      `Input is non-cache prompt/context tokens. Some raw provider usage includes cache reads; the dashboard subtracts cache read where needed so sources compare consistently. ${inputAvg} non-cache input avg/session.`,
+      `Input is non-cache prompt/context tokens. Ranking uses effective volume incl. cache; canonical total stays non-cache + output. ${inputAvg} input avg/session.`,
     );
     setCardMeta(
       'output-sub',
@@ -1341,7 +1341,7 @@ async function loadDaily(days) {
       ? 'Single-model focus · click Clear filter to restore Top N view'
       : selectedChartToolId
       ? `Source focus: ${selectedChartToolLabel || selectedChartToolId} · click Clear filter to restore all sources`
-      : `Daily total = non-cache input + output · top ${safeData.top_n} models by token volume · ${safeData.other_count || 0} long-tail models grouped as Other`;
+      : `Daily volume includes cached input (top ${safeData.top_n} models by effective volume) · ${safeData.other_count || 0} long-tail models grouped as Other`;
   } catch(e) {
     console.error('daily', e);
     renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });
@@ -1442,7 +1442,7 @@ function renderChart(data) {
   const datasets = data.models.map(m => ({
     label: m.label,
     modelId: m.id,
-    data: data.dates.map(dt => (data.data[dt]?.[m.id]?.tokens_total ?? 0)),
+    data: data.dates.map(dt => (data.data[dt]?.[m.id]?.tokens_effective_total ?? data.data[dt]?.[m.id]?.tokens_total ?? 0)),
     backgroundColor: m.color,
     borderColor: m.color,
     borderWidth: m.id === 'other' ? 1 : 0,
@@ -1502,11 +1502,11 @@ function renderChart(data) {
           callbacks: {
             label: ctx => {
               if (ctx.raw <= 0) return null;
-              return ` ${ctx.dataset.label}: ${fmtTokens(ctx.raw)} non-cache input + output`;
+              return ` ${ctx.dataset.label}: ${fmtTokens(ctx.raw)} effective tokens (input + output + cache)`;
             },
             afterBody: ctxs => {
               const total = ctxs.reduce((sum, c) => sum + (c.raw || 0), 0);
-              return `\n Total: ${fmtTokens(total)} non-cache input + output`;
+              return `\n Total: ${fmtTokens(total)} effective tokens (input + output + cache)`;
             },
           },
         },
@@ -1542,7 +1542,7 @@ function toggleChartModel(modelId) {
 
 function renderLegend(models) {
   const el = document.getElementById('chart-legend');
-  const visibleTotal = models.reduce((sum, m) => sum + (m.tokens_total || 0), 0) || 1;
+  const visibleTotal = models.reduce((sum, m) => sum + (m.tokens_effective_total ?? m.tokens_total ?? 0), 0) || 1;
   clearNode(el);
 
   models.forEach(m => {
@@ -1561,7 +1561,7 @@ function renderLegend(models) {
 
     const share = document.createElement('span');
     share.className = 'legend-share';
-    share.textContent = `${Math.round(((m.tokens_total || 0) / visibleTotal) * 100)}%`;
+    share.textContent = `${Math.round(((m.tokens_effective_total ?? m.tokens_total ?? 0) / visibleTotal) * 100)}%`;
 
     item.append(name, share);
     item.addEventListener('mouseenter', () => setLegendHover(item.dataset.modelId));
