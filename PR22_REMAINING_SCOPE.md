@@ -103,5 +103,5 @@ As of the latest PR 22 update:
 - Browser smoke passed on `http://127.0.0.1:8321`
 - Browser console had no JS errors
 - DOM verified range order: `3d`, `7d`, `30d`, `90d`, `All`
-- GitHub CI `test` passed at `d429b9b9e8e96b67dba2e8f0310437258a4ad7d7`
-- PR 22 is mergeable
+- GitHub CI `test` passed at `606f0792e28a2666f904da394e83becf6b562348`
+- PR 22 is mergeable at that head
