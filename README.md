@@ -86,9 +86,10 @@ review what the dashboard actually showed at capture time.
 ## Current data rules
 
 - active sources: OpenCode local SQLite DB; Codex local state DB plus rollout JSONL; Hermes local session DB
-- total tokens = non-cache input + output assistant-message tokens
-- cache read/write tokens are shown separately and excluded from total tokens
-- API-equivalent estimated cost can include priced cache read/write tokens even though cache tokens are excluded from total tokens
+- top-level Overview `Total Tokens` = non-cache input + output assistant-message tokens + cache read/write
+- top-level Overview `Input Tokens` = non-cache input + cache read/write
+- session/model-history token totals use session-token semantics: non-cache input + output assistant-message tokens
+- API-equivalent estimated cost can include priced cache read/write tokens, so cost can be driven by cached context as well as fresh input/output
 - subscription-backed tools may not bill like public API pricing, so estimated cost is not necessarily actual subscription spend
 - raw provider input can include cached tokens; adapters subtract cache read where needed before reporting dashboard input
 - unmatched model pricing stays unpriced instead of guessed
@@ -109,8 +110,7 @@ referenced rollout JSONL file. The trusted token fields are:
 
 The adapter filters, groups, sorts, and displays Codex records by thread `updated_at`, not `created_at`, because token metrics are latest cumulative rollout usage for the thread. This keeps long-lived threads updated inside the selected range from appearing on out-of-range created dates.
 
-Total tokens remain dashboard non-cache input + output. Cache read/write tokens are shown
-separately and excluded from total tokens. Codex local JSONL does not expose
+Adapter session tokens remain non-cache input + output. Cache read tokens are preserved so the Overview can add them into full `Total Tokens`. Codex local JSONL does not expose
 cache-write tokens, so the dashboard shows cache write as unavailable for Codex
 instead of treating it as zero. The adapter does not infer token counts from
 transcript text.
@@ -130,8 +130,7 @@ The trusted token fields are:
 - `cache_write_tokens` → cache write tokens
 
 Hermes records are filtered, grouped, sorted, and displayed by `started_at`.
-Total tokens remain dashboard input + output. Cache read/write tokens are shown
-separately and excluded from total tokens. The adapter does not infer token
+Adapter session tokens remain input + output. Cache read/write tokens are preserved so the Overview can add them into full `Total Tokens`. The adapter does not infer token
 counts from message text.
 
 ## Local verification

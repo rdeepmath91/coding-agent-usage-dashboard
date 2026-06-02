@@ -35,7 +35,7 @@ Guidance for agents working in this repo.
 ## Data and UX rules
 
 - Source provenance must stay visible. If a chart or summary only reflects a subset of OpenCode, Codex CLI, and Hermes, say so.
-- Total tokens means `non-cache input + output assistant-message tokens`. Cache read/write stays separate unless the task explicitly changes that definition.
+- Overview `Total Tokens` means full token volume: non-cache input + output assistant-message tokens + cache read/write. Session/model-history totals may still use `Session Tokens` semantics (`non-cache input + output`) when explicitly labeled.
 - Unpriced or unsupported models must remain clearly labeled instead of guessed.
 - Simulated/demo mode should stay deterministic enough for screenshots, regression checks, and design review.
 - Tooltips and interactive affordances should work for hover, focus, and tap.

@@ -72,7 +72,7 @@
 
 <div class="card">
   <h2>Source</h2>
-  <p>Built from normalized local session data — model, session timestamps, non-cache input tokens, output tokens, and separate cache read/write metrics where a source exposes them. Total tokens are defined as non-cache input + output assistant-message tokens. Raw provider usage can include cached tokens in input; this dashboard subtracts cache read where needed for source-to-source consistency. Cost is an API-equivalent estimate from matched provider pricing when available, not necessarily actual subscription billing.</p>
+  <p>Built from normalized local session data — model, session timestamps, non-cache input tokens, output tokens, and separate cache read/write metrics where a source exposes them. Overview Total Tokens include session tokens plus cache read/write; table/session totals use session-token semantics when labeled. Raw provider usage can include cached tokens in input; this dashboard preserves cache details for source-to-source consistency. Cost is an API-equivalent estimate from matched provider pricing when available, not necessarily actual subscription billing.</p>
 </div>
 </body>
 </html>

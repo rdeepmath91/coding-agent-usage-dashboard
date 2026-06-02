@@ -148,7 +148,7 @@
   /* Cards */
   .stat-cards {
     display: grid;
-    grid-template-columns: repeat(5, minmax(180px, 1fr));
+    grid-template-columns: repeat(5, minmax(160px, 1fr));
     gap: 16px;
     margin-bottom: 32px;
   }
@@ -731,7 +731,7 @@
   <main class="main-area">
     <section id="cost" class="page-header">
       <h1>Overview</h1>
-      <div class="subtitle">Primary totals use non-cache input + assistant output tokens. Cache read/write is tracked separately.</div>
+      <div class="subtitle">Top cards show full token volume. Session totals and cache details appear in secondary lines.</div>
     </section>
 
     <!-- Pill tabs -->
@@ -759,7 +759,7 @@
         <div class="sub" id="tokens-sub"></div>
       </div>
       <div class="stat-card">
-        <div class="label">Non-cache Input</div>
+        <div class="label">Input Tokens</div>
         <div class="value" id="total-input">—</div>
         <div class="sub" id="input-sub"></div>
       </div>
@@ -938,6 +938,13 @@ function createLegendDot(color) {
   dot.className = 'legend-dot';
   dot.style.background = sanitizeColor(color, '#64748B');
   return dot;
+}
+
+function cacheShare(cacheTokens, inputTokens) {
+  const cache = Number(cacheTokens || 0);
+  const input = Number(inputTokens || 0);
+  if (!cache || !input) return '0% cached';
+  return `${Math.round((cache / input) * 100)}% cached`;
 }
 
 function setCardMeta(id, visible, detail = '') {
@@ -1147,17 +1154,22 @@ async function loadOverview(days) {
     const r = await fetch(`/api/overview?days=${rangeParam()}${simulateQuerySuffix()}`);
     const d = await r.json();
 
+    const sessionTokens = Number(d.session_tokens ?? ((d.non_cache_input || 0) + (d.total_output || 0)));
+    const nonCacheInput = Number(d.non_cache_input ?? d.total_input ?? 0);
+    const cacheRead = Number(d.cache_read || 0);
+    const cacheWrite = Number(d.cache_write || 0);
+    const cacheTotal = Number(d.cache_total ?? (cacheRead + cacheWrite));
+    const totalInput = Number(d.total_input ?? (nonCacheInput + cacheTotal));
+    const totalTokens = Number(d.total_tokens ?? (sessionTokens + cacheTotal));
+
     document.getElementById('total-sessions').textContent = fmtNum(d.total_sessions);
-    document.getElementById('total-tokens').textContent = fmtTokens(d.total_tokens);
-    document.getElementById('total-input').textContent = fmtTokens(d.total_input);
+    document.getElementById('total-tokens').textContent = fmtTokens(totalTokens);
+    document.getElementById('total-input').textContent = fmtTokens(totalInput);
     document.getElementById('total-output').textContent = fmtTokens(d.total_output);
 
     const sourceLabel = d.active_tool_label || 'OpenCode';
     const sourcePath = d.source_path || '~/.local/share/opencode/opencode.db';
     document.getElementById('db-path-display').textContent = `${sourceLabel} · ${sourcePath}`;
-    const totalAvg = fmtTokens(d.total_tokens / Math.max(d.total_sessions, 1));
-    const inputAvg = fmtTokens(d.total_input / Math.max(d.total_sessions, 1));
-    const outputAvg = fmtTokens(d.total_output / Math.max(d.total_sessions, 1));
     setCardMeta(
       'sessions-sub',
       `${d.first_session || '—'} → ${d.last_session || '—'}`,
@@ -1165,18 +1177,18 @@ async function loadOverview(days) {
     );
     setCardMeta(
       'tokens-sub',
-      `${fmtTokens(d.cache_read)} read / ${fmtTokens(d.cache_write)} write cache`,
-      `Canonical total = non-cache input + output. Ranking uses effective volume incl. cache. ${totalAvg} avg/session. Active sources: ${sourceLabel}.`,
+      `${fmtTokens(sessionTokens)} session · ${fmtTokens(cacheTotal)} cached`,
+      `Total token volume = input tokens + output tokens. Includes ${fmtTokens(cacheRead)} cache read and ${fmtTokens(cacheWrite)} cache write. Session tokens = non-cache input + output. Active sources: ${sourceLabel}.`,
     );
     setCardMeta(
       'input-sub',
-      `${fmtTokens(d.cache_read)} cache read`,
-      `Input is non-cache prompt/context tokens. Ranking uses effective volume incl. cache; canonical total stays non-cache + output. ${inputAvg} input avg/session.`,
+      `${fmtTokens(nonCacheInput)} fresh · ${fmtTokens(cacheRead)} read · ${fmtTokens(cacheWrite)} write`,
+      `Input tokens = fresh prompt/context + cached context. ${cacheShare(cacheTotal, totalInput)} of input volume is cached.`,
     );
     setCardMeta(
       'output-sub',
-      `${fmtTokens(d.cache_write)} cache write`,
-      `Output tokens are assistant response tokens. Cache write is newly cached context and is excluded from output totals. ${outputAvg} output avg/session.`,
+      'assistant-generated',
+      `Output tokens are assistant-generated response tokens. Cache write is provider-side cached context creation, not assistant output.`,
     );
     document.getElementById('tool-sources-subtitle').textContent = `Click a source name to focus the chart. Totals currently come from ${sourceLabel}.`;
     renderToolSources(d.tool_sources || []);

@@ -148,20 +148,29 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
     cache_read_total = sum(item["cache_read"] for item in models)
     cache_write_total = sum(item["cache_write"] for item in models)
 
+    session_tokens = total_input + total_output
+    total_input_with_cache = total_input + cache_read_total + cache_write_total
+    total_token_volume = session_tokens + cache_read_total + cache_write_total
+
     overview = {
         "total_sessions": total_sessions,
-        "total_input": total_input,
+        "total_input": total_input_with_cache,
+        "non_cache_input": total_input,
         "total_output": total_output,
-        "total_tokens": total_input + total_output,
+        "total_tokens": total_token_volume,
+        "session_tokens": session_tokens,
         "cache_read": cache_read_total,
         "cache_write": cache_write_total,
+        "cache_total": cache_read_total + cache_write_total,
         "first_session": date_keys[0],
         "last_session": date_keys[-1],
         "days": days,
         "active_tool": "opencode",
         "active_tool_label": "OpenCode (simulated)",
         "source_path": "simulated dataset",
-        "token_total_definition": "non-cache input + output assistant-message tokens; cache read/write separate",
+        "token_total_definition": "total token volume = input tokens + output tokens; includes cache read/write",
+        "input_token_definition": "input tokens = non-cache input + cache read + cache write",
+        "session_token_definition": "session tokens = non-cache input + output assistant-message tokens",
         "tool_sources": [],
     }
 
@@ -173,10 +182,13 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
                 "source_path": "simulated dataset",
                 "sessions": total_sessions,
                 "tokens_total": overview["total_tokens"],
-                "tokens_input": total_input,
+                "tokens_input": total_input_with_cache,
+                "non_cache_input": total_input,
                 "tokens_output": total_output,
+                "session_tokens": session_tokens,
                 "cache_read": cache_read_total,
                 "cache_write": cache_write_total,
+                "cache_total": cache_read_total + cache_write_total,
             })
         else:
             item.update({

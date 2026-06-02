@@ -43,7 +43,8 @@ class ReadmeTests(unittest.TestCase):
 
         self.assertIn('Codex CLI via `~/.codex/state_5.sqlite`', content)
         self.assertIn('Hermes via `~/.hermes/state.db`', content)
-        self.assertIn('Total tokens means `non-cache input + output assistant-message tokens`', content)
+        self.assertIn('Overview `Total Tokens` means full token volume', content)
+        self.assertIn('Session/model-history totals may still use `Session Tokens` semantics', content)
         self.assertNotIn('Total tokens means `input + output assistant-message tokens`', content)
 
     def test_agent_guidance_requires_worktree_workflow(self):
