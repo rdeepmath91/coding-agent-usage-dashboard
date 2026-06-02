@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import subprocess
 import tempfile
 import time
 import unittest
@@ -824,6 +825,63 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIsNone(result["estimated_cost"])
         self.assertGreater(result["partial_cost_usd"], 0)
         self.assertIn("input_cache_write", result["missing_price_buckets"])
+
+
+class ReviewScriptGuardTests(unittest.TestCase):
+    def test_review_script_blocks_main_branch_in_full_mode(self):
+        import os
+        repo_root = Path(__file__).resolve().parents[1]
+        script = repo_root / 'scripts' / 'review.sh'
+        self.assertTrue(script.exists(), 'scripts/review.sh should exist')
+
+        # Exercise the guard by faking the git binary with a shim that reports
+        # the current branch as "main" no matter what. This keeps the test
+        # self-contained and avoids recursing into scripts/review.sh from inside
+        # the suite it is testing.
+        with tempfile.TemporaryDirectory() as fake_bin:
+            shim = Path(fake_bin) / 'git'
+            shim.write_text('#!/usr/bin/env bash\necho main\nexit 0\n')
+            shim.chmod(0o755)
+            env = {**os.environ, 'PATH': f"{fake_bin}:{os.environ.get('PATH', '')}", 'REVIEW_MODE': 'full'}
+
+            result = subprocess.run(
+                ['bash', str(script)],
+                cwd=str(repo_root),
+                env=env,
+                capture_output=True, text=True,
+            )
+            self.assertNotEqual(result.returncode, 0, msg=result.stdout)
+            self.assertIn('must run from a feature branch, not main', result.stderr + result.stdout)
+            self.assertIn('REVIEW_MODE=docs', result.stderr + result.stdout)
+
+    def test_review_script_allows_main_branch_in_docs_mode(self):
+        import os
+        repo_root = Path(__file__).resolve().parents[1]
+        script = repo_root / 'scripts' / 'review.sh'
+
+        with tempfile.TemporaryDirectory() as fake_bin:
+            shim = Path(fake_bin) / 'git'
+            shim.write_text('#!/usr/bin/env bash\necho main\nexit 0\n')
+            shim.chmod(0o755)
+            env = {**os.environ, 'PATH': f"{fake_bin}:{os.environ.get('PATH', '')}", 'REVIEW_MODE': 'docs'}
+
+            result = subprocess.run(
+                ['bash', str(script)],
+                cwd=str(repo_root),
+                env=env,
+                capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr or result.stdout)
+            self.assertIn('Docs-only review mode complete', result.stdout)
+
+    def test_review_script_guarding_logic_blocks_main_branch(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        script = repo_root / 'scripts' / 'review.sh'
+        content = script.read_text()
+        self.assertIn('CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)', content)
+        self.assertIn('[[ "$CURRENT_BRANCH" == "main" && "$MODE" != "docs" ]]', content)
+        self.assertIn('must run from a feature branch, not main', content)
+        self.assertIn('git worktree add ../worktrees/<branch-slug> -b <branch> origin/main', content)
 
 
 if __name__ == '__main__':

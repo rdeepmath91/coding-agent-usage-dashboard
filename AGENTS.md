@@ -11,6 +11,12 @@ Guidance for agents working in this repo.
 ## Working style
 
 - Prefer small, reviewable PRs. Do not push straight to `main`.
+- Work in a worktree, not in the `main` checkout. Default location is **outside** the repo (a sibling directory), created with:
+  ```bash
+  git worktree add ../worktrees/<branch-slug> -b <branch> origin/main
+  ```
+  The on-disk path does not need to be `../worktrees/`, but it must not be inside the repo unless it is also added to `.gitignore` (it is, as `.worktrees/`). When a worktree lives inside the repo, never stage or commit its directory.
+- Run `scripts/review.sh` from inside the worktree before pushing. The script refuses to run from `main` outside `REVIEW_MODE=docs`, which is the safety net for this rule.
 - Make the smallest change that fully solves the problem.
 - Preserve existing behavior unless the task explicitly changes it.
 - If a request expands scope, capture it as follow-up work instead of quietly folding unrelated refactors into the same PR.
@@ -99,3 +105,4 @@ Review focus for this repo:
 - Preserve concise, direct wording in UI and docs.
 - When adding planned adapters, prefer honest placeholders such as `TBD` over fake completeness.
 - If a change introduces a new source of truth, document it in README and keep the wording consistent across backend payloads, templates, and tests.
+- Keep the `main` checkout clean. It exists to receive merges and run `scripts/review.sh`, not to host in-flight work. Use `git worktree list` to see active worktrees and `git worktree remove <path>` to retire them.

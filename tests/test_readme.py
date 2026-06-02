@@ -7,6 +7,7 @@ README = ROOT / 'README.md'
 PYPROJECT = ROOT / 'pyproject.toml'
 UV_LOCK = ROOT / 'uv.lock'
 AGENTS = ROOT / 'AGENTS.md'
+GITIGNORE = ROOT / '.gitignore'
 
 
 class ReadmeTests(unittest.TestCase):
@@ -44,6 +45,24 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn('Hermes via `~/.hermes/state.db`', content)
         self.assertIn('Total tokens means `non-cache input + output assistant-message tokens`', content)
         self.assertNotIn('Total tokens means `input + output assistant-message tokens`', content)
+
+    def test_agent_guidance_requires_worktree_workflow(self):
+        content = AGENTS.read_text()
+
+        self.assertIn('Work in a worktree, not in the `main` checkout.', content)
+        self.assertIn('git worktree add ../worktrees/<branch-slug> -b <branch> origin/main', content)
+        self.assertIn('The on-disk path does not need to be `../worktrees/`, but it must not be inside the repo', content)
+        self.assertIn('When a worktree lives inside the repo, never stage or commit its directory.', content)
+        self.assertIn('The script refuses to run from `main` outside `REVIEW_MODE=docs`', content)
+        self.assertIn('Keep the `main` checkout clean.', content)
+        self.assertIn('`git worktree list`', content)
+        self.assertIn('`git worktree remove <path>`', content)
+        self.assertNotIn('Do not push straight to `main`.\n- Make the smallest change that fully solves the problem.', content)
+
+    def test_gitignore_excludes_worktree_directory(self):
+        self.assertTrue(GITIGNORE.exists(), '.gitignore should be committed')
+        content = GITIGNORE.read_text()
+        self.assertIn('.worktrees/', content)
 
 
 if __name__ == '__main__':
