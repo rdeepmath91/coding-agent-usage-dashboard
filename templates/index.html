@@ -155,7 +155,7 @@
 
   .stat-card {
     position: relative;
-    overflow: hidden;
+    overflow: visible;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -197,13 +197,14 @@
       rgba(255, 255, 255, 0.08) 50%,
       rgba(255, 255, 255, 0.04) 100%
     );
+    background-size: 200% 100%;
     border-radius: inherit;
     pointer-events: none;
     animation: shimmer 1.2s infinite linear;
   }
   @keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
   }
   .estimate-meta {
     display: inline-flex;

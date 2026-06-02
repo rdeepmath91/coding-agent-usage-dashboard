@@ -78,9 +78,16 @@ Numbers above reflect the live dashboard at verification time; they can move as 
 - Browser console had no JavaScript errors.
 - DOM verified card order: `TOTAL TOKENS`, `API-EQUIVALENT COST`, `INPUT TOKENS`, `OUTPUT TOKENS`, `SESSIONS`.
 
+## Latest update: tooltip clipping fix
+
+- Replaced `.stat-card { overflow: hidden; }` with `.stat-card { overflow: visible; }` so metric tooltips can render outside their cards again.
+- Kept the loading shimmer constrained by animating `background-position` on the card overlay instead of translating an overflowing pseudo-element.
+- Added regression assertions for visible card overflow and background-position shimmer animation.
+- Browser geometry check confirmed the cost tooltip is visible, escapes the card bounds, and remains inside the viewport.
+
 ## Latest update: 3d range filter
 
 - Added `3d` before `7d` in the top Usage date range controls.
 - Added a regression assertion that `data-days="3"` exists and appears before `data-days="7"`.
-- Pushed commit `d429b9b` (`d429b9b9e8e96b67dba2e8f0310437258a4ad7d7`).
-- GitHub CI `test` passed on the latest head.
+- Pushed commit `095a5c6` (`095a5c6e1e465b7385b56280a0aec5646826ce20`).
+- GitHub CI `test` passed on that head.
