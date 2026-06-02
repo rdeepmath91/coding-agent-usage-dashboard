@@ -148,12 +148,14 @@
   /* Cards */
   .stat-cards {
     display: grid;
-    grid-template-columns: repeat(5, minmax(180px, 1fr));
+    grid-template-columns: repeat(5, minmax(160px, 1fr));
     gap: 16px;
     margin-bottom: 32px;
   }
 
   .stat-card {
+    position: relative;
+    overflow: visible;
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -173,7 +175,61 @@
     font-size: 13px;
     line-height: 1.45;
   }
-  .stat-card .meta-main { min-width: 0; overflow-wrap: anywhere; }
+  .stat-card .sub,
+  .stat-card .meta-main,
+  .stat-card .meta-meta[data-card-sub-id] .estimate-meta,
+  .stat-card .view-currency {
+    transition: none;
+  }
+  .stat-card.loading .value,
+  .stat-card.loading .sub,
+  .stat-card.loading .estimate-meta,
+  .stat-card.loading .view-currency {
+    visibility: hidden;
+  }
+  .stat-card.loading::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.04) 100%
+    );
+    background-size: 200% 100%;
+    border-radius: inherit;
+    pointer-events: none;
+    animation: shimmer 1.2s infinite linear;
+  }
+  @keyframes shimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+  }
+  .estimate-meta {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .estimate-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 2px 7px;
+    border: 1px solid rgba(245, 158, 11, 0.55);
+    border-radius: 999px;
+    background: rgba(245, 158, 11, 0.12);
+    color: #FBBF24;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .estimate-coverage {
+    color: var(--text-secondary);
+  }
   .stat-card .meta-info-wrap {
     position: relative;
     display: inline-flex;
@@ -731,11 +787,12 @@
   <main class="main-area">
     <section id="cost" class="page-header">
       <h1>Overview</h1>
-      <div class="subtitle">Primary totals use non-cache input + assistant output tokens. Cache read/write is tracked separately.</div>
+      <div class="subtitle">Top cards show full token volume. Session totals and cache details appear in secondary lines.</div>
     </section>
 
     <!-- Pill tabs -->
     <div class="pill-tabs" id="range-tabs" role="group" aria-label="Usage date range">
+      <button class="pill" data-days="3" aria-pressed="false">3d</button>
       <button class="pill" data-days="7" aria-pressed="false">7d</button>
       <button class="pill active" data-days="30" aria-pressed="true">30d</button>
       <button class="pill" data-days="90" aria-pressed="false">90d</button>
@@ -749,17 +806,17 @@
     <!-- Overview cards -->
     <div class="stat-cards" id="overview-cards">
       <div class="stat-card">
-        <div class="label">Sessions</div>
-        <div class="value" id="total-sessions">—</div>
-        <div class="sub" id="sessions-sub"></div>
-      </div>
-      <div class="stat-card">
         <div class="label">Total Tokens</div>
         <div class="value" id="total-tokens">—</div>
         <div class="sub" id="tokens-sub"></div>
       </div>
       <div class="stat-card">
-        <div class="label">Non-cache Input</div>
+        <div class="label">API-Equivalent Cost</div>
+        <div class="value" id="estimated-cost">—</div>
+        <div class="sub" id="estimated-cost-sub">Public provider pricing when matched</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Input Tokens</div>
         <div class="value" id="total-input">—</div>
         <div class="sub" id="input-sub"></div>
       </div>
@@ -769,9 +826,9 @@
         <div class="sub" id="output-sub"></div>
       </div>
       <div class="stat-card">
-        <div class="label">API-Equivalent Cost</div>
-        <div class="value" id="estimated-cost">—</div>
-        <div class="sub" id="estimated-cost-sub">Public provider pricing when matched</div>
+        <div class="label">Sessions</div>
+        <div class="value" id="total-sessions">—</div>
+        <div class="sub" id="sessions-sub"></div>
       </div>
     </div>
 
@@ -940,6 +997,17 @@ function createLegendDot(color) {
   return dot;
 }
 
+function cacheShare(cacheTokens, inputTokens) {
+  const cache = Number(cacheTokens || 0);
+  const input = Number(inputTokens || 0);
+  if (!cache || !input) return '0%\u00a0cached';
+  return `${Math.round((cache / input) * 100)}%\u00a0cached`;
+}
+
+function keepTogether(value, label) {
+  return `${value}\u00a0${label.replaceAll(' ', '\u00a0')}`;
+}
+
 function setCardMeta(id, visible, detail = '') {
   const el = document.getElementById(id);
   if (!el) return;
@@ -953,6 +1021,47 @@ function setCardMeta(id, visible, detail = '') {
           type="button"
           class="meta-info"
           aria-label="More information: ${escapeHtml(visible)}"
+          aria-expanded="false"
+          aria-describedby="${escapeHtml(tooltipId)}"
+        >i</button>
+        <span class="meta-tooltip" id="${escapeHtml(tooltipId)}" role="tooltip">${escapeHtml(detailText)}</span>
+      </span>
+    ` : ''}
+  `;
+  bindMetaInfoInteractions(el);
+}
+
+function setCostMeta(id, fullyPricedCount, modelCount, detail = '', partialCount = 0) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const fully = Number(fullyPricedCount || 0);
+  const total = Number(modelCount || 0);
+  const partial = Number(partialCount || 0);
+  const hasFully = fully > 0;
+  const hasPartial = partial > 0;
+  let visible;
+  if (hasFully && hasPartial) {
+    visible = `${fully} full · ${partial} partial`;
+  } else if (hasFully) {
+    visible = `${fully}/${total} priced`;
+  } else if (hasPartial) {
+    visible = `${partial} partial`;
+  } else {
+    visible = 'No pricing';
+  }
+  const detailText = String(detail || '');
+  const tooltipId = `${id}-tooltip`;
+  el.innerHTML = `
+    <span class="estimate-meta">
+      ${hasPartial ? '<span class="estimate-badge">Partial estimate</span>' : ''}
+      <span class="estimate-coverage">${escapeHtml(visible)}</span>
+    </span>
+    ${detailText ? `
+      <span class="meta-info-wrap">
+        <button
+          type="button"
+          class="meta-info"
+          aria-label="More information: ${hasPartial ? 'partial estimate' : escapeHtml(visible)}"
           aria-expanded="false"
           aria-describedby="${escapeHtml(tooltipId)}"
         >i</button>
@@ -1083,6 +1192,19 @@ function renderToolSources(sources = []) {
   });
 }
 
+const statCardIds = ['total-sessions','total-tokens','total-input','total-output','estimated-cost'];
+function setStatLoading(on) {
+  statCardIds.forEach(id => {
+    document.getElementById(id)?.closest('.stat-card')?.classList.toggle('loading', on);
+  });
+  if (on) {
+    setCardMeta('sessions-sub', '—');
+    setCardMeta('tokens-sub', 'Loading…');
+    setCardMeta('input-sub', 'Loading…');
+    setCardMeta('output-sub', 'Loading…');
+  }
+}
+
 // ── Range tabs ──────────────────────────────────────────────────────────────
 let currentDays = 30;
 const pageSearch = new URLSearchParams(window.location.search);
@@ -1110,7 +1232,12 @@ document.querySelectorAll('#range-tabs .pill').forEach(btn => {
     setRangeButtonState(btn);
     currentDays = parseInt(btn.dataset.days);
     document.getElementById('custom-days').value = '';
-    loadAll();
+    setStatLoading(true);
+    document.getElementById('chart-note').textContent = 'Loading…';
+    clearNode(document.getElementById('model-table-body'));
+    renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });
+    renderLegend([]);
+    loadAll().finally(() => setStatLoading(false));
   });
 });
 
@@ -1120,7 +1247,12 @@ document.getElementById('apply-custom-days').addEventListener('click', () => {
   currentDays = days;
   input.value = days;
   setRangeButtonState(null);
-  loadAll();
+  setStatLoading(true);
+  document.getElementById('chart-note').textContent = 'Loading…';
+  clearNode(document.getElementById('model-table-body'));
+  renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });
+  renderLegend([]);
+  loadAll().finally(() => setStatLoading(false));
 });
 
 document.getElementById('custom-days').addEventListener('keydown', (event) => {
@@ -1130,6 +1262,9 @@ document.getElementById('custom-days').addEventListener('keydown', (event) => {
 document.getElementById('top-n-select').addEventListener('change', (event) => {
   currentTopN = parseInt(event.target.value || '8');
   hiddenChartModels.clear();
+  document.getElementById('chart-note').textContent = 'Loading…';
+  renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });
+  renderLegend([]);
   loadDaily(currentDays);
 });
 
@@ -1147,17 +1282,22 @@ async function loadOverview(days) {
     const r = await fetch(`/api/overview?days=${rangeParam()}${simulateQuerySuffix()}`);
     const d = await r.json();
 
+    const sessionTokens = Number(d.session_tokens ?? ((d.non_cache_input || 0) + (d.total_output || 0)));
+    const nonCacheInput = Number(d.non_cache_input ?? d.total_input ?? 0);
+    const cacheRead = Number(d.cache_read || 0);
+    const cacheWrite = Number(d.cache_write || 0);
+    const cacheTotal = Number(d.cache_total ?? (cacheRead + cacheWrite));
+    const totalInput = Number(d.total_input ?? (nonCacheInput + cacheTotal));
+    const totalTokens = Number(d.total_tokens ?? (sessionTokens + cacheTotal));
+
     document.getElementById('total-sessions').textContent = fmtNum(d.total_sessions);
-    document.getElementById('total-tokens').textContent = fmtTokens(d.total_tokens);
-    document.getElementById('total-input').textContent = fmtTokens(d.total_input);
+    document.getElementById('total-tokens').textContent = fmtTokens(totalTokens);
+    document.getElementById('total-input').textContent = fmtTokens(totalInput);
     document.getElementById('total-output').textContent = fmtTokens(d.total_output);
 
     const sourceLabel = d.active_tool_label || 'OpenCode';
     const sourcePath = d.source_path || '~/.local/share/opencode/opencode.db';
     document.getElementById('db-path-display').textContent = `${sourceLabel} · ${sourcePath}`;
-    const totalAvg = fmtTokens(d.total_tokens / Math.max(d.total_sessions, 1));
-    const inputAvg = fmtTokens(d.total_input / Math.max(d.total_sessions, 1));
-    const outputAvg = fmtTokens(d.total_output / Math.max(d.total_sessions, 1));
     setCardMeta(
       'sessions-sub',
       `${d.first_session || '—'} → ${d.last_session || '—'}`,
@@ -1165,18 +1305,18 @@ async function loadOverview(days) {
     );
     setCardMeta(
       'tokens-sub',
-      `${fmtTokens(d.cache_read)} read / ${fmtTokens(d.cache_write)} write cache`,
-      `Canonical total = non-cache input + output. Ranking uses effective volume incl. cache. ${totalAvg} avg/session. Active sources: ${sourceLabel}.`,
+      `${keepTogether(fmtTokens(sessionTokens), 'direct')} · ${keepTogether(fmtTokens(cacheTotal), 'cached')} · ${cacheShare(cacheTotal, totalTokens)}`,
+      `Total token volume = input tokens + output tokens. Includes ${fmtTokens(cacheRead)} cache read and ${fmtTokens(cacheWrite)} cache write. Direct/session tokens = non-cache input + output. Active sources: ${sourceLabel}.`,
     );
     setCardMeta(
       'input-sub',
-      `${fmtTokens(d.cache_read)} cache read`,
-      `Input is non-cache prompt/context tokens. Ranking uses effective volume incl. cache; canonical total stays non-cache + output. ${inputAvg} input avg/session.`,
+      `${keepTogether(fmtTokens(nonCacheInput), 'non-cache')} · ${keepTogether(fmtTokens(cacheRead), 'cache read')} · ${keepTogether(fmtTokens(cacheWrite), 'cache write')}`,
+      `Input tokens = non-cache input + cache read + cache write. ${cacheShare(cacheTotal, totalInput)} of input volume is cached.`,
     );
     setCardMeta(
       'output-sub',
-      `${fmtTokens(d.cache_write)} cache write`,
-      `Output tokens are assistant response tokens. Cache write is newly cached context and is excluded from output totals. ${outputAvg} output avg/session.`,
+      'model output',
+      `Output tokens are model-generated response tokens. Cache write is provider-side cached context creation, not model output.`,
     );
     document.getElementById('tool-sources-subtitle').textContent = `Click a source name to focus the chart. Totals currently come from ${sourceLabel}.`;
     renderToolSources(d.tool_sources || []);
@@ -1196,8 +1336,12 @@ async function loadModels(days) {
       return;
     }
 
+    const pricedForCount = models.filter(m => (m.estimated_cost != null && m.estimated_cost !== undefined) || (m.partial_cost_usd != null && m.partial_cost_usd !== undefined));
     const priced = models.filter(m => m.estimated_cost !== null && m.estimated_cost !== undefined);
+    const partialModels = models.filter(m => (m.estimated_cost == null || m.estimated_cost === undefined) && (m.partial_cost_usd != null && m.partial_cost_usd !== undefined));
     const estimatedTotal = priced.reduce((sum, m) => sum + (m.estimated_cost || 0), 0);
+    const partialTotal = partialModels.reduce((sum, m) => sum + Number(m.partial_cost_usd || 0), 0);
+    const knownTotal = estimatedTotal + partialTotal;
     const costParts = priced.reduce((parts, m) => {
       const breakdown = m.cost_breakdown || {};
       parts.input += Number(breakdown.input || 0);
@@ -1206,14 +1350,18 @@ async function loadModels(days) {
       parts.cacheWrite += Number(breakdown.cache_write || 0);
       return parts;
     }, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
-    const unpricedCount = models.length - priced.length;
-    document.getElementById('estimated-cost').textContent = priced.length ? fmtCost(estimatedTotal) : '—';
-    setCardMeta(
+    const unpricedCount = models.length - pricedForCount.length;
+    document.getElementById('estimated-cost').textContent = pricedForCount.length ? fmtCost(knownTotal) : '—';
+    const counted = priced.length + partialModels.length;
+    const partialMeta = partialTotal > 0 ? ` Includes ${fmtCost(partialTotal)} from ${partialModels.length} partially priced model(s).` : '';
+    setCostMeta(
       'estimated-cost-sub',
-      priced.length ? `approx · ${priced.length}/${models.length} priced` : 'No matched pricing',
-      priced.length
-        ? `API-equivalent estimate, not actual subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}. ${unpricedCount} unmatched models.`
-        : 'No OpenRouter or hardcoded pricing matched the active models.',
+      priced.length,
+      models.length,
+      counted
+        ? `API-equivalent estimate, not subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}.${partialMeta}`
+        : 'No matched pricing.',
+      partialModels.length,
     );
 
     clearNode(tbody);

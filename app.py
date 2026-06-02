@@ -130,48 +130,82 @@ def api_overview():
     codex = codex_overview(days)
     hermes = hermes_overview(days)
     row["days"] = days
-    row["token_total_definition"] = "non-cache input + output assistant-message tokens; cache read/write separate"
+    row["token_total_definition"] = "total token volume = input tokens + output tokens; includes cache read/write"
+    row["input_token_definition"] = "input tokens = non-cache input + cache read + cache write"
+    row["session_token_definition"] = "session tokens = non-cache input + output assistant-message tokens"
 
-    opencode_totals = {
-        "sessions": row["total_sessions"],
-        "tokens_total": row["total_tokens"],
-        "tokens_input": row["total_input"],
-        "tokens_output": row["total_output"],
-        "cache_read": row["cache_read"],
-        "cache_write": row["cache_write"],
-    }
+    def overview_token_totals(sessions, tokens_input, tokens_output, cache_read, cache_write, metrics_note=None):
+        non_cache_input = tokens_input or 0
+        output = tokens_output or 0
+        read = cache_read or 0
+        write = cache_write or 0
+        session_tokens = non_cache_input + output
+        input_tokens = non_cache_input + read + write
+        total_tokens = session_tokens + read + write
+        totals = {
+            "sessions": sessions,
+            "tokens_total": total_tokens,
+            "session_tokens": session_tokens,
+            "tokens_input": input_tokens,
+            "non_cache_input": non_cache_input,
+            "tokens_output": output,
+            "cache_read": read,
+            "cache_write": cache_write,
+            "cache_total": read + write,
+        }
+        if metrics_note:
+            totals["metrics_note"] = metrics_note
+        return totals
+
+    opencode_totals = overview_token_totals(
+        row["total_sessions"],
+        row["total_input"],
+        row["total_output"],
+        row["cache_read"],
+        row["cache_write"],
+    )
     source_overviews = {"opencode": opencode_totals}
     if codex:
-        source_overviews["codex"] = {
-            "sessions": codex["total_sessions"],
-            "tokens_total": codex["total_tokens"],
-            "tokens_input": codex["total_input"],
-            "tokens_output": codex["total_output"],
-            "cache_read": codex["cache_read"],
-            "cache_write": None,
-            "metrics_note": "Cache write unavailable in local Codex JSONL.",
-        }
+        source_overviews["codex"] = overview_token_totals(
+            codex["total_sessions"],
+            codex["total_input"],
+            codex["total_output"],
+            codex["cache_read"],
+            None,
+            "Cache write unavailable in local Codex JSONL.",
+        )
     if hermes:
-        source_overviews["hermes"] = {
-            "sessions": hermes["total_sessions"],
-            "tokens_total": hermes["total_tokens"],
-            "tokens_input": hermes["total_input"],
-            "tokens_output": hermes["total_output"],
-            "cache_read": hermes["cache_read"],
-            "cache_write": hermes["cache_write"],
-            "metrics_note": "Hermes token metrics come from ~/.hermes/state.db sessions columns.",
-        }
+        source_overviews["hermes"] = overview_token_totals(
+            hermes["total_sessions"],
+            hermes["total_input"],
+            hermes["total_output"],
+            hermes["cache_read"],
+            hermes["cache_write"],
+            "Hermes token metrics come from ~/.hermes/state.db sessions columns.",
+        )
 
-    for source_id, totals in source_overviews.items():
-        if source_id == "opencode":
-            continue
-        row["total_sessions"] = (row["total_sessions"] or 0) + (totals["sessions"] or 0)
-        row["total_input"] = (row["total_input"] or 0) + (totals["tokens_input"] or 0)
-        row["total_output"] = (row["total_output"] or 0) + (totals["tokens_output"] or 0)
-        row["total_tokens"] = row["total_input"] + row["total_output"]
-        row["cache_read"] = (row["cache_read"] or 0) + (totals["cache_read"] or 0)
+    row.update({
+        "total_sessions": 0,
+        "total_input": 0,
+        "non_cache_input": 0,
+        "total_output": 0,
+        "total_tokens": 0,
+        "session_tokens": 0,
+        "cache_read": 0,
+        "cache_write": 0,
+        "cache_total": 0,
+    })
+    for totals in source_overviews.values():
+        row["total_sessions"] += totals["sessions"] or 0
+        row["total_input"] += totals["tokens_input"] or 0
+        row["non_cache_input"] += totals["non_cache_input"] or 0
+        row["total_output"] += totals["tokens_output"] or 0
+        row["total_tokens"] += totals["tokens_total"] or 0
+        row["session_tokens"] += totals["session_tokens"] or 0
+        row["cache_read"] += totals["cache_read"] or 0
         if totals["cache_write"] is not None:
-            row["cache_write"] = (row["cache_write"] or 0) + (totals["cache_write"] or 0)
+            row["cache_write"] += totals["cache_write"] or 0
+        row["cache_total"] += totals["cache_total"] or 0
 
     session_dates = [row["first_session"], row["last_session"]]
     for overview in [codex, hermes]:
