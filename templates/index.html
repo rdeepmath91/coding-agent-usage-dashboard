@@ -173,7 +173,36 @@
     font-size: 13px;
     line-height: 1.45;
   }
-  .stat-card .meta-main { min-width: 0; overflow-wrap: normal; }
+  .stat-card .sub,
+  .stat-card .meta-main,
+  .stat-card .meta-meta[data-card-sub-id] .estimate-meta,
+  .stat-card .view-currency {
+    transition: none;
+  }
+  .stat-card.loading .value,
+  .stat-card.loading .sub,
+  .stat-card.loading .estimate-meta,
+  .stat-card.loading .view-currency {
+    visibility: hidden;
+  }
+  .stat-card.loading::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      rgba(255, 255, 255, 0.08) 50%,
+      rgba(255, 255, 255, 0.04) 100%
+    );
+    border-radius: inherit;
+    pointer-events: none;
+    animation: shimmer 1.2s infinite linear;
+  }
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
   .estimate-meta {
     display: inline-flex;
     align-items: center;
@@ -1159,6 +1188,19 @@ function renderToolSources(sources = []) {
   });
 }
 
+const statCardIds = ['total-sessions','total-tokens','total-input','total-output','estimated-cost'];
+function setStatLoading(on) {
+  statCardIds.forEach(id => {
+    document.getElementById(id)?.closest('.stat-card')?.classList.toggle('loading', on);
+  });
+  if (on) {
+    setCardMeta('sessions-sub', '—');
+    setCardMeta('tokens-sub', 'Loading…');
+    setCardMeta('input-sub', 'Loading…');
+    setCardMeta('output-sub', 'Loading…');
+  }
+}
+
 // ── Range tabs ──────────────────────────────────────────────────────────────
 let currentDays = 30;
 const pageSearch = new URLSearchParams(window.location.search);
@@ -1186,7 +1228,12 @@ document.querySelectorAll('#range-tabs .pill').forEach(btn => {
     setRangeButtonState(btn);
     currentDays = parseInt(btn.dataset.days);
     document.getElementById('custom-days').value = '';
-    loadAll();
+    setStatLoading(true);
+    document.getElementById('chart-note').textContent = 'Loading…';
+    clearNode(document.getElementById('model-table-body'));
+    renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });
+    renderLegend([]);
+    loadAll().finally(() => setStatLoading(false));
   });
 });
 
@@ -1196,7 +1243,12 @@ document.getElementById('apply-custom-days').addEventListener('click', () => {
   currentDays = days;
   input.value = days;
   setRangeButtonState(null);
-  loadAll();
+  setStatLoading(true);
+  document.getElementById('chart-note').textContent = 'Loading…';
+  clearNode(document.getElementById('model-table-body'));
+  renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });
+  renderLegend([]);
+  loadAll().finally(() => setStatLoading(false));
 });
 
 document.getElementById('custom-days').addEventListener('keydown', (event) => {
@@ -1206,7 +1258,9 @@ document.getElementById('custom-days').addEventListener('keydown', (event) => {
 document.getElementById('top-n-select').addEventListener('change', (event) => {
   currentTopN = parseInt(event.target.value || '8');
   hiddenChartModels.clear();
-  loadDaily(currentDays);
+  setStatLoading(true);
+  document.getElementById('chart-note').textContent = 'Loading…';
+  loadDaily(currentDays).finally(() => setStatLoading(false));
 });
 
 document.getElementById('clear-chart-filter').addEventListener('click', () => {
@@ -1251,13 +1305,13 @@ async function loadOverview(days) {
     );
     setCardMeta(
       'input-sub',
-      `${keepTogether(fmtTokens(nonCacheInput), 'fresh')} · ${keepTogether(fmtTokens(cacheRead), 'cache read')} · ${keepTogether(fmtTokens(cacheWrite), 'cache write')}`,
-      `Input tokens = fresh prompt/context + cached context. ${cacheShare(cacheTotal, totalInput)} of input volume is cached.`,
+      `${keepTogether(fmtTokens(nonCacheInput), 'non-cache')} · ${keepTogether(fmtTokens(cacheRead), 'cache read')} · ${keepTogether(fmtTokens(cacheWrite), 'cache write')}`,
+      `Input tokens = non-cache input + cache read + cache write. ${cacheShare(cacheTotal, totalInput)} of input volume is cached.`,
     );
     setCardMeta(
       'output-sub',
-      'assistant-generated',
-      `Output tokens are assistant-generated response tokens. Cache write is provider-side cached context creation, not assistant output.`,
+      'model output',
+      `Output tokens are model-generated response tokens. Cache write is provider-side cached context creation, not model output.`,
     );
     document.getElementById('tool-sources-subtitle').textContent = `Click a source name to focus the chart. Totals currently come from ${sourceLabel}.`;
     renderToolSources(d.tool_sources || []);
@@ -1300,8 +1354,8 @@ async function loadModels(days) {
       priced.length,
       models.length,
       counted
-        ? `API-equivalent estimate, not actual subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}.${partialMeta} ${unpricedCount} unmatched models.`
-        : 'No OpenRouter or hardcoded pricing matched the active models.',
+        ? `API-equivalent estimate, not subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}.`
+        : 'No matched pricing.',
       partialModels.length,
     );
 
