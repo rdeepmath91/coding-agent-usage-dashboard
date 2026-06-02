@@ -285,6 +285,35 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(history[0]['tool'], 'OpenCode')
         self.assertEqual(history[0]['tool_id'], 'opencode')
         self.assertEqual(history[0]['tool_color'], '#3B82F6')
+
+    def test_models_api_cost_breakdown_supports_top_level_aggregate_summary(self):
+        self._write_codex_fixture()
+        response = self.client.get('/api/models?days=30')
+        self.assertEqual(response.status_code, 200)
+        models = response.get_json()
+
+        priced = [
+            item
+            for item in models
+            if item['estimated_cost'] is not None and item.get('cost_breakdown')
+        ]
+        self.assertTrue(priced)
+
+        estimated_total = sum(item['estimated_cost'] for item in priced)
+        breakdown_total = sum(sum(item['cost_breakdown'].values()) for item in priced)
+        self.assertAlmostEqual(estimated_total, breakdown_total)
+
+        component_totals = {
+            'input': sum(item['cost_breakdown']['input'] for item in priced),
+            'output': sum(item['cost_breakdown']['output'] for item in priced),
+            'cache_read': sum(item['cost_breakdown']['cache_read'] for item in priced),
+            'cache_write': sum(item['cost_breakdown']['cache_write'] for item in priced),
+        }
+        self.assertGreater(component_totals['input'], 0)
+        self.assertGreater(component_totals['output'], 0)
+        self.assertGreaterEqual(component_totals['cache_read'], 0)
+        self.assertGreaterEqual(component_totals['cache_write'], 0)
+
     def test_usage_history_applies_offset_after_merging_sources(self):
         response = self.client.get('/api/usage-history?limit=1&offset=1')
         self.assertEqual(response.status_code, 200)
@@ -684,6 +713,17 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('active sources:', html)
         self.assertIn("document.getElementById('db-path-display').textContent = `${sourceLabel} · ${sourcePath}`", html)
         self.assertNotIn('OpenCode · ~/.local/share/opencode/opencode.db</span>', html)
+
+    def test_dashboard_template_includes_cost_breakdown_tooltip_logic(self):
+        response = self.client.get('/')
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+
+        self.assertIn("const breakdown = m.cost_breakdown || {};", html)
+        self.assertIn("const breakdownTitle = m.cost_breakdown", html)
+        self.assertIn("input ${fmtCost(breakdown.input)}, output ${fmtCost(breakdown.output)}, cache read ${fmtCost(breakdown.cache_read)}, cache write ${fmtCost(breakdown.cache_write)}", html)
+        self.assertIn("const sessionAccounting = m.session_accounting_note ? `; ${m.session_accounting_note}` : '';", html)
+        self.assertIn("known subtotal ${fmtCost(m.partial_cost_usd)}", html)
 
     def test_tool_source_render_moves_source_path_into_info_tooltip(self):
         response = self.client.get('/')
