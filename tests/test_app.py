@@ -410,6 +410,8 @@ class DashboardApiTests(unittest.TestCase):
         created_ms: int | None = None,
         updated_ms: int | None = None,
         thread_id: str = "codex-1",
+        title: str = "Codex adapter spike",
+        include_preview: bool = True,
     ) -> None:
         state = Path(self.tmpdir.name) / "codex-state.sqlite"
         if state.exists():
@@ -425,8 +427,9 @@ class DashboardApiTests(unittest.TestCase):
             ]) + '\n'
         )
         conn = sqlite3.connect(state)
+        preview_column = ",\n                preview TEXT NOT NULL DEFAULT ''" if include_preview else ""
         conn.execute(
-            """
+            f"""
             CREATE TABLE threads (
                 id TEXT PRIMARY KEY,
                 rollout_path TEXT NOT NULL,
@@ -438,24 +441,37 @@ class DashboardApiTests(unittest.TestCase):
                 model_provider TEXT NOT NULL,
                 cwd TEXT NOT NULL,
                 title TEXT NOT NULL,
-                tokens_used INTEGER NOT NULL DEFAULT 0,
-                preview TEXT NOT NULL DEFAULT '',
+                tokens_used INTEGER NOT NULL DEFAULT 0{preview_column},
                 model TEXT
             )
             """
         )
-        conn.execute(
-            """
-            INSERT INTO threads (
-                id, rollout_path, created_at, updated_at, created_at_ms, updated_at_ms,
-                source, model_provider, cwd, title, tokens_used, preview, model
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                thread_id, str(rollout), created_ms // 1000, updated_ms // 1000, created_ms, updated_ms,
-                "cli", "openai", "/tmp/codex-project", "Codex adapter spike", 1725, "Codex adapter spike", "gpt-5.5",
-            ),
-        )
+        if include_preview:
+            conn.execute(
+                """
+                INSERT INTO threads (
+                    id, rollout_path, created_at, updated_at, created_at_ms, updated_at_ms,
+                    source, model_provider, cwd, title, tokens_used, preview, model
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    thread_id, str(rollout), created_ms // 1000, updated_ms // 1000, created_ms, updated_ms,
+                    "cli", "openai", "/tmp/codex-project", title, 1725, "Codex adapter spike", "gpt-5.5",
+                ),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO threads (
+                    id, rollout_path, created_at, updated_at, created_at_ms, updated_at_ms,
+                    source, model_provider, cwd, title, tokens_used, model
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    thread_id, str(rollout), created_ms // 1000, updated_ms // 1000, created_ms, updated_ms,
+                    "cli", "openai", "/tmp/codex-project", title, 1725, "gpt-5.5",
+                ),
+            )
         conn.commit()
         conn.close()
         dashboard_config.CODEX_STATE_PATH = str(state)
@@ -518,6 +534,22 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(record['date'], expected_updated_date)
         self.assertTrue(record['created'].startswith(expected_updated_date))
         self.assertNotEqual(record['date'], old_created_date)
+
+    def test_codex_records_support_older_state_without_preview_column(self):
+        self._write_codex_fixture(
+            thread_id="codex-old-schema",
+            title="",
+            include_preview=False,
+        )
+
+        records = dashboard_app.codex_records(days=30)
+
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record['id'], 'codex-old-schema')
+        self.assertEqual(record['title'], 'codex-old-schema')
+        self.assertEqual(record['tokens_input'], 1100)
+        self.assertEqual(record['tokens_output'], 225)
 
     def _write_hermes_fixture(self, *, started_at: float | None = None, session_id: str = 'hermes-1') -> None:
         state = Path(self.tmpdir.name) / 'hermes-state.db'
