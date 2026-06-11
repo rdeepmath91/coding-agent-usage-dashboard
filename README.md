@@ -2,6 +2,12 @@
 
 Local dashboard for inspecting coding-agent usage from your machine.
 
+## Screenshot
+
+<img src="docs/dashboard-screenshot.png" alt="Coding Agent Usage Dashboard showing overview cards, source filter, daily chart, model breakdown, and usage history" width="800">
+
+*Simulated dataset via `?simulate=1` — deterministic mock data for consistent screenshots and regression checks.*
+
 Right now the active sources are:
 
 - OpenCode via `~/.local/share/opencode/opencode.db`

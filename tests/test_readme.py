@@ -8,11 +8,16 @@ PYPROJECT = ROOT / 'pyproject.toml'
 UV_LOCK = ROOT / 'uv.lock'
 AGENTS = ROOT / 'AGENTS.md'
 GITIGNORE = ROOT / '.gitignore'
+SCREENSHOT = ROOT / 'docs' / 'dashboard-screenshot.png'
 
 
 class ReadmeTests(unittest.TestCase):
     def test_readme_documents_uv_sync_run_and_snapshot_steps(self):
         content = README.read_text()
+        self.assertIn('## Screenshot', content)
+        self.assertIn('docs/dashboard-screenshot.png', content)
+        self.assertIn('width="800"', content)
+        self.assertIn('Simulated dataset via `?simulate=1`', content)
         self.assertIn('## Setup', content)
         self.assertIn('https://docs.astral.sh/uv/', content)
         self.assertIn('curl -LsSf https://astral.sh/uv/install.sh | sh', content)
@@ -24,6 +29,10 @@ class ReadmeTests(unittest.TestCase):
         self.assertIn('uv run --with playwright python scripts/snapshot_dashboard.py --url http://localhost:8321', content)
         self.assertIn('dashboard-snapshots/', content)
         self.assertIn('http://localhost:8321', content)
+
+    def test_readme_screenshot_asset_exists(self):
+        self.assertTrue(SCREENSHOT.exists(), 'README screenshot should be committed')
+        self.assertGreater(SCREENSHOT.stat().st_size, 100_000, 'README screenshot should be a real dashboard capture')
 
     def test_repo_includes_uv_project_files_for_reproducible_setup(self):
         self.assertTrue(PYPROJECT.exists(), 'pyproject.toml should be committed')
