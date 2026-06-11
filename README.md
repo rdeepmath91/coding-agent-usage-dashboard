@@ -88,67 +88,12 @@ Model Breakdown lists sessions, token totals, cache read, and pricing status per
 
 Usage History shows recent sessions with source, date, model, title, and token details.
 
-## What the dashboard shows
-
-- daily usage by model
-- model breakdown with token totals
-- recent usage history
-- API-equivalent estimated cost when a model can be matched to public provider pricing
-- explicit tool/source labeling so multi-source totals are not ambiguous
-
 ## Current data rules
 
-- active sources: OpenCode local SQLite DB; Codex local state DB plus rollout JSONL; Hermes local session DB
-- top-level Overview `Total Tokens` = non-cache input + output assistant-message tokens + cache read/write
-- top-level Overview `Input Tokens` = non-cache input + cache read/write
-- session/model-history token totals use session-token semantics: non-cache input + output assistant-message tokens
-- API-equivalent estimated cost can include priced cache read/write tokens, so cost can be driven by cached context as well as fresh input/output
-- subscription-backed tools may not bill like public API pricing, so estimated cost is not necessarily actual subscription spend
-- raw provider input can include cached tokens; adapters subtract cache read where needed before reporting dashboard input
+- active sources: OpenCode local SQLite DB, Codex local state DB plus rollout JSONL, and Hermes local session DB
+- Overview `Total Tokens` = non-cache input + output assistant-message tokens + cache read/write
+- session and model-history totals use session-token semantics: non-cache input + output assistant-message tokens
+- API-equivalent estimated cost is based on matched public provider pricing, not necessarily actual subscription spend
 - unmatched model pricing stays unpriced instead of guessed
 
-### Codex source contract
-
-The Codex adapter reads session metadata from `~/.codex/state_5.sqlite`, table
-`threads`. The trusted metadata fields are session id, rollout path, created and
-updated timestamps, title/preview, cwd, provider, and model.
-
-Token metrics come from the latest cumulative `total_token_usage` object in each
-referenced rollout JSONL file. The trusted token fields are:
-
-- `input_tokens` → raw Codex input, including cached input
-- `cached_input_tokens` → cache read tokens
-- `input_tokens - cached_input_tokens` → dashboard input, to match OpenCode's non-cache input semantics
-- `output_tokens` → output tokens
-
-The adapter filters, groups, sorts, and displays Codex records by thread `updated_at`, not `created_at`, because token metrics are latest cumulative rollout usage for the thread. This keeps long-lived threads updated inside the selected range from appearing on out-of-range created dates.
-
-Adapter session tokens remain non-cache input + output. Cache read tokens are preserved so the Overview can add them into full `Total Tokens`. Codex local JSONL does not expose
-cache-write tokens, so the dashboard shows cache write as unavailable for Codex
-instead of treating it as zero. The adapter does not infer token counts from
-transcript text.
-
-### Hermes source contract
-
-The Hermes adapter reads session metadata and token metrics from
-`~/.hermes/state.db`, table `sessions`. The trusted metadata fields are session
-id, source, title, started/ended timestamps, message/tool-call counts, provider,
-and model.
-
-The trusted token fields are:
-
-- `input_tokens` → dashboard non-cache input tokens
-- `output_tokens` → output tokens
-- `cache_read_tokens` → cache read tokens
-- `cache_write_tokens` → cache write tokens
-
-Hermes records are filtered, grouped, sorted, and displayed by `started_at`.
-Adapter session tokens remain input + output. Cache read/write tokens are preserved so the Overview can add them into full `Total Tokens`. The adapter does not infer token
-counts from message text.
-
-## Local verification
-
-```bash
-uv run python -m unittest tests.test_app tests.test_readme -v
-uv run python -m py_compile app.py scripts/snapshot_dashboard.py
-```
+See [source contracts](docs/source-contracts.md) for adapter-specific field and token rules.
