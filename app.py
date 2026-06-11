@@ -350,10 +350,14 @@ def api_daily():
         simulated = build_simulated_dataset(days)
         daily_data = simulated["daily"]
         dates = simulated["dates"]
+        simulated_models = [
+            item for item in simulated["models"]
+            if selected_tool_id is None or item.get("tool_id") == selected_tool_id
+        ]
         all_models_ordered = [
             item["chart_model_id"]
             for item in sorted(
-                simulated["models"],
+                simulated_models,
                 key=lambda item: item.get("tokens_effective_total") or item.get("tokens_total") or 0,
                 reverse=True,
             )
@@ -365,15 +369,15 @@ def api_daily():
                 "provider": item["provider"],
                 "color": item["color"],
             }
-            for item in simulated["models"]
+            for item in simulated_models
         }
         model_totals = {
             item["chart_model_id"]: item.get("tokens_effective_total") or item.get("tokens_total") or 0
-            for item in simulated["models"]
+            for item in simulated_models
         }
         model_total_display = {
             item["chart_model_id"]: item.get("tokens_total", 0)
-            for item in simulated["models"]
+            for item in simulated_models
         }
         active_models = [m for m in all_models_ordered if model_totals.get(m, 0) > 0]
         top_models = [selected_model_id] if selected_model_id in active_models else active_models[:top_n]

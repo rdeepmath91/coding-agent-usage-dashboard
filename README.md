@@ -2,39 +2,7 @@
 
 Local dashboard for inspecting coding-agent usage from your machine.
 
-## Screenshots
-
-All screenshots use the simulated dataset from `?simulate=1`, so the examples are deterministic for docs, screenshots, and regression checks.
-
-### Overview
-
-<img src="docs/screenshots/dashboard-overview.png" alt="Dashboard overview cards" width="800">
-
-The overview cards show full token volume, API-equivalent estimated cost, input/output split, and session count for the selected range.
-
-### Tool Sources
-
-<img src="docs/screenshots/dashboard-tool-sources.png" alt="Dashboard tool sources" width="800">
-
-Tool Sources shows which local adapter contributes to the dashboard totals and keeps source provenance visible.
-
-### Daily Tokens by Model
-
-<img src="docs/screenshots/dashboard-daily-tokens.png" alt="Dashboard daily tokens chart" width="800">
-
-Daily Tokens by Model shows stacked model usage over time, with categorical colors and source filtering.
-
-### Model Breakdown
-
-<img src="docs/screenshots/dashboard-model-breakdown.png" alt="Dashboard model breakdown table" width="800">
-
-Model Breakdown lists sessions, token totals, cache read, and pricing status per model. Table totals use session-token semantics: non-cache input plus output.
-
-### Usage History
-
-<img src="docs/screenshots/dashboard-usage-history.png" alt="Dashboard usage history table" width="800">
-
-Usage History shows recent sessions with source, date, model, title, and token details.
+## Data Sources
 
 Right now the active sources are:
 
@@ -42,7 +10,7 @@ Right now the active sources are:
 - Codex CLI via `~/.codex/state_5.sqlite` plus rollout JSONL files referenced by that state DB
 - Hermes via `~/.hermes/state.db`
 
-## Setup
+## Quick Start
 
 ### 1. Install uv
 
@@ -86,9 +54,9 @@ open:
 http://localhost:8321/?simulate=1
 ```
 
-## Snapshots
+## Updating Screenshots
 
-Capture a localhost snapshot with Playwright:
+Capture a localhost snapshot for local review:
 
 ```bash
 uv run --with playwright python scripts/snapshot_dashboard.py --url http://localhost:8321
@@ -114,6 +82,40 @@ dashboard-snapshots/
 
 That snapshot run produces a rendered screenshot plus a DOM summary so you can
 review what the dashboard actually showed at capture time.
+
+## Screenshots
+
+All screenshots use the simulated dataset from `?simulate=1`, so the examples are deterministic for docs, screenshots, and regression checks.
+
+### Overview
+
+<img src="docs/screenshots/dashboard-overview.png" alt="Dashboard overview cards" width="800">
+
+The overview cards show full token volume, API-equivalent estimated cost, input/output split, and session count for the selected range.
+
+### Tool Sources
+
+<img src="docs/screenshots/dashboard-tool-sources.png" alt="Dashboard tool sources" width="800">
+
+Tool Sources shows how OpenCode, Codex CLI, and Hermes can all contribute to dashboard totals while keeping source provenance visible.
+
+### Daily Tokens by Model
+
+<img src="docs/screenshots/dashboard-daily-tokens.png" alt="Dashboard daily tokens chart" width="800">
+
+Daily Tokens by Model shows stacked model usage over time, with categorical colors and source filtering.
+
+### Model Breakdown
+
+<img src="docs/screenshots/dashboard-model-breakdown.png" alt="Dashboard model breakdown table" width="800">
+
+Model Breakdown lists sessions, token totals, cache read, and pricing status per model. Table totals use session-token semantics: non-cache input plus output.
+
+### Usage History
+
+<img src="docs/screenshots/dashboard-usage-history.png" alt="Dashboard usage history table" width="800">
+
+Usage History shows recent sessions with source, date, model, title, and token details.
 
 ## What the dashboard shows
 
