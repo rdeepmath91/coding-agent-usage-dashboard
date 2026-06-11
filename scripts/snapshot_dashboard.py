@@ -11,11 +11,25 @@ from datetime import datetime, timezone
 from playwright.sync_api import sync_playwright
 
 
+DOCS_SCREENSHOTS = {
+    "overview": "#overview-cards",
+    "tool-sources": "#tool-sources",
+    "daily-tokens": "#daily-tokens",
+    "model-breakdown": "#models",
+    "usage-history": "#usage",
+}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Snapshot the local coding-agent usage dashboard.")
     parser.add_argument("--url", default="http://localhost:8321", help="Dashboard URL to inspect")
     parser.add_argument("--out", default="dashboard-snapshots", help="Output directory")
     parser.add_argument("--wait", default="#model-table-body td", help="Selector that confirms data rendered")
+    parser.add_argument(
+        "--docs",
+        action="store_true",
+        help="Capture stable README section screenshots into the output directory",
+    )
     args = parser.parse_args()
 
     out_dir = Path(args.out)
@@ -35,7 +49,15 @@ def main() -> None:
 
         response = page.goto(args.url, wait_until="networkidle")
         page.wait_for_selector(args.wait, timeout=10_000)
-        page.screenshot(path=screenshot_path, full_page=True)
+        if args.docs:
+            screenshot_outputs = {}
+            for name, selector in DOCS_SCREENSHOTS.items():
+                path = out_dir / f"dashboard-{name}.png"
+                page.locator(selector).screenshot(path=path)
+                screenshot_outputs[name] = str(path)
+        else:
+            page.screenshot(path=screenshot_path, full_page=True)
+            screenshot_outputs = {"full_page": str(screenshot_path)}
 
         summary = {
             "url": page.url,
@@ -45,16 +67,26 @@ def main() -> None:
             "overview_cards": page.locator(".stat-card").count(),
             "legend_items": page.locator("#chart-legend .legend-item").count(),
             "model_rows": page.locator("#model-table-body tr").count(),
-            "usage_rows": page.locator("#usage-table-body tr").count(),
+            "usage_rows": page.locator("#history-table-body tr").count(),
             "first_model": page.locator("#model-table-body td").first.inner_text(timeout=5_000).strip(),
             "console_messages": console_messages,
             "page_errors": page_errors,
-            "screenshot": str(screenshot_path),
+            "screenshots": screenshot_outputs,
         }
         summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
         browser.close()
 
-    print(json.dumps({"screenshot": str(screenshot_path), "summary": str(summary_path), "title": summary["title"], "errors": len(page_errors)}, indent=2))
+    print(
+        json.dumps(
+            {
+                "screenshots": screenshot_outputs,
+                "summary": str(summary_path),
+                "title": summary["title"],
+                "errors": len(page_errors),
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

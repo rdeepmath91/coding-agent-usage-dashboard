@@ -9,5 +9,6 @@ venv/
 dashboard-snapshots/
 .playwright-mcp/
 dashboard-*.png
-!docs/dashboard-screenshot.png
+!docs/screenshots/
+!docs/screenshots/*.png
 .worktrees/

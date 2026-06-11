@@ -2,19 +2,39 @@
 
 Local dashboard for inspecting coding-agent usage from your machine.
 
-## Screenshot
+## Screenshots
 
-<img src="docs/dashboard-screenshot.png" alt="Coding Agent Usage Dashboard simulated overview" width="800">
+All screenshots use the simulated dataset from `?simulate=1`, so the examples are deterministic for docs, screenshots, and regression checks.
 
-*Simulated dataset via `?simulate=1` — deterministic mock data for consistent screenshots and regression checks.*
+### Overview
 
-What this shows:
+<img src="docs/screenshots/dashboard-overview.png" alt="Dashboard overview cards" width="800">
 
-- Overview cards: full token volume, API-equivalent cost, input/output split, and session count.
-- Tool Sources: which local adapter contributed the totals shown in the dashboard.
-- Daily Tokens by Model: stacked model usage over the selected date range.
-- Model Breakdown: model-level sessions, token totals, cache read, and pricing status.
-- Usage History: recent simulated sessions with source, date, model, title, and token details.
+The overview cards show full token volume, API-equivalent estimated cost, input/output split, and session count for the selected range.
+
+### Tool Sources
+
+<img src="docs/screenshots/dashboard-tool-sources.png" alt="Dashboard tool sources" width="800">
+
+Tool Sources shows which local adapter contributes to the dashboard totals and keeps source provenance visible.
+
+### Daily Tokens by Model
+
+<img src="docs/screenshots/dashboard-daily-tokens.png" alt="Dashboard daily tokens chart" width="800">
+
+Daily Tokens by Model shows stacked model usage over time, with categorical colors and source filtering.
+
+### Model Breakdown
+
+<img src="docs/screenshots/dashboard-model-breakdown.png" alt="Dashboard model breakdown table" width="800">
+
+Model Breakdown lists sessions, token totals, cache read, and pricing status per model. Table totals use session-token semantics: non-cache input plus output.
+
+### Usage History
+
+<img src="docs/screenshots/dashboard-usage-history.png" alt="Dashboard usage history table" width="800">
+
+Usage History shows recent sessions with source, date, model, title, and token details.
 
 Right now the active sources are:
 
@@ -78,6 +98,12 @@ To snapshot the simulated dataset instead of your live local usage:
 
 ```bash
 uv run --with playwright python scripts/snapshot_dashboard.py --url http://localhost:8321/?simulate=1
+```
+
+To refresh the committed README section screenshots:
+
+```bash
+uv run --with playwright python scripts/snapshot_dashboard.py --url http://localhost:8321/?simulate=1 --out docs/screenshots --docs
 ```
 
 Outputs are written to:
