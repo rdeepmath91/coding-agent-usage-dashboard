@@ -54,35 +54,6 @@ open:
 http://localhost:8321/?simulate=1
 ```
 
-## Snapshots
-
-Capture a localhost snapshot for local review:
-
-```bash
-uv run --with playwright python scripts/snapshot_dashboard.py --url http://localhost:8321
-```
-
-To snapshot the simulated dataset instead of your live local usage:
-
-```bash
-uv run --with playwright python scripts/snapshot_dashboard.py --url http://localhost:8321/?simulate=1
-```
-
-To refresh the committed README section screenshots:
-
-```bash
-uv run --with playwright python scripts/snapshot_dashboard.py --url http://localhost:8321/?simulate=1 --out docs/screenshots --docs
-```
-
-Outputs are written to:
-
-```text
-dashboard-snapshots/
-```
-
-That snapshot run produces a rendered screenshot plus a DOM summary so you can
-review what the dashboard actually showed at capture time.
-
 ## Screenshots
 
 All screenshots use the simulated dataset from `?simulate=1`, so the examples are deterministic for docs, screenshots, and regression checks.
