@@ -4,9 +4,17 @@ Local dashboard for inspecting coding-agent usage from your machine.
 
 ## Screenshot
 
-<img src="docs/dashboard-screenshot.png" alt="Coding Agent Usage Dashboard showing overview cards, source filter, daily chart, model breakdown, and usage history" width="800">
+<img src="docs/dashboard-screenshot.png" alt="Coding Agent Usage Dashboard simulated overview" width="800">
 
 *Simulated dataset via `?simulate=1` — deterministic mock data for consistent screenshots and regression checks.*
+
+What this shows:
+
+- Overview cards: full token volume, API-equivalent cost, input/output split, and session count.
+- Tool Sources: which local adapter contributed the totals shown in the dashboard.
+- Daily Tokens by Model: stacked model usage over the selected date range.
+- Model Breakdown: model-level sessions, token totals, cache read, and pricing status.
+- Usage History: recent simulated sessions with source, date, model, title, and token details.
 
 Right now the active sources are:
 
