@@ -42,15 +42,15 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
     ]
 
     model_specs = [
-        {"tool": "OpenCode", "tool_id": "opencode", "provider": "opencode-go", "model_id": "kimi-k2.6", "base": 210_000, "burst": 2.1, "session_ratio": 0.20},
-        {"tool": "OpenCode", "tool_id": "opencode", "provider": "opencode-go", "model_id": "deepseek-v4-flash", "base": 150_000, "burst": 1.3, "session_ratio": 0.18},
-        {"tool": "OpenCode", "tool_id": "opencode", "provider": "opencode-go", "model_id": "qwen3.6-plus", "base": 90_000, "burst": 0.82, "session_ratio": 0.11},
-        {"tool": "Codex CLI", "tool_id": "codex", "provider": "openai-codex", "model_id": "gpt-5.1-codex", "base": 170_000, "burst": 1.7, "session_ratio": 0.16},
-        {"tool": "Codex CLI", "tool_id": "codex", "provider": "openai-codex", "model_id": "gpt-5.1", "base": 95_000, "burst": 0.95, "session_ratio": 0.11},
-        {"tool": "Codex CLI", "tool_id": "codex", "provider": "openai-codex", "model_id": "o4-mini-high", "base": 70_000, "burst": 0.72, "session_ratio": 0.09},
-        {"tool": "Hermes", "tool_id": "hermes", "provider": "hermes-agent", "model_id": "qwen3-coder", "base": 120_000, "burst": 1.05, "session_ratio": 0.13},
-        {"tool": "Hermes", "tool_id": "hermes", "provider": "hermes-agent", "model_id": "gpt-oss-120b", "base": 85_000, "burst": 0.82, "session_ratio": 0.10},
-        {"tool": "Hermes", "tool_id": "hermes", "provider": "hermes-agent", "model_id": "llama-4-maverick", "base": 65_000, "burst": 0.62, "session_ratio": 0.08},
+        {"tool": "OpenCode", "tool_id": "opencode", "provider": "opencode", "model_id": "deepseek-v4-flash-free", "base": 210_000, "burst": 2.1, "session_ratio": 0.20},
+        {"tool": "OpenCode", "tool_id": "opencode", "provider": "opencode", "model_id": "qwen3.6-plus-free", "base": 150_000, "burst": 1.3, "session_ratio": 0.18},
+        {"tool": "OpenCode", "tool_id": "opencode", "provider": "opencode", "model_id": "minimax-m3-free", "base": 90_000, "burst": 0.82, "session_ratio": 0.11},
+        {"tool": "Codex CLI", "tool_id": "codex", "provider": "openai", "model_id": "gpt-5.5", "base": 170_000, "burst": 1.7, "session_ratio": 0.16},
+        {"tool": "Codex CLI", "tool_id": "codex", "provider": "openai", "model_id": "gpt-5.4-mini", "base": 95_000, "burst": 0.95, "session_ratio": 0.11},
+        {"tool": "Codex CLI", "tool_id": "codex", "provider": "openai", "model_id": "gpt-5.3-codex-spark", "base": 70_000, "burst": 0.72, "session_ratio": 0.09},
+        {"tool": "Hermes", "tool_id": "hermes", "provider": "nous", "model_id": "nvidia/nemotron-3-ultra:free", "base": 120_000, "burst": 1.05, "session_ratio": 0.13},
+        {"tool": "Hermes", "tool_id": "hermes", "provider": "openai-codex", "model_id": "gpt-5.5", "base": 85_000, "burst": 0.82, "session_ratio": 0.10},
+        {"tool": "Hermes", "tool_id": "hermes", "provider": "openai-codex", "model_id": "gpt-5.4-mini", "base": 65_000, "burst": 0.62, "session_ratio": 0.08},
     ]
 
     daily = {}
@@ -75,7 +75,7 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
             burst_factor = 0.28
 
         for spec in model_specs:
-            if index > int(window_days * 0.82) and spec["model_id"] not in {"kimi-k2.6", "gpt-5.1-codex", "qwen3-coder"}:
+            if index > int(window_days * 0.82) and spec["model_id"] not in {"deepseek-v4-flash-free", "gpt-5.5", "nvidia/nemotron-3-ultra:free"}:
                 activity_factor = 0.0
             else:
                 activity_factor = 0.82 + rng.random() * 0.42

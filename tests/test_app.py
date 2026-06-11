@@ -832,7 +832,7 @@ class DashboardApiTests(unittest.TestCase):
         codex_daily = self.client.get('/api/daily?simulate=1&days=31&tool_id=codex').get_json()
         self.assertEqual(codex_daily['selected_tool_id'], 'codex')
         self.assertTrue(codex_daily['models'])
-        self.assertTrue(all(model['id'].startswith('openai-codex/') for model in codex_daily['models']))
+        self.assertTrue(all(model['id'].startswith('openai/') for model in codex_daily['models']))
 
         history = self.client.get('/api/usage-history?simulate=1&limit=5').get_json()
         self.assertEqual(len(history), 5)

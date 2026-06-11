@@ -18,6 +18,7 @@ DOCS_SCREENSHOTS = {
     "model-breakdown": "#models",
     "usage-history": "#usage",
 }
+DOCS_USAGE_HISTORY_ROWS = 6
 
 
 def main() -> None:
@@ -52,6 +53,11 @@ def main() -> None:
         if args.docs:
             screenshot_outputs = {}
             for name, selector in DOCS_SCREENSHOTS.items():
+                if name == "usage-history":
+                    page.locator("#history-table-body tr").evaluate_all(
+                        "(rows, visibleRows) => rows.forEach((row, index) => { if (index >= visibleRows) row.remove(); })",
+                        DOCS_USAGE_HISTORY_ROWS,
+                    )
                 path = out_dir / f"dashboard-{name}.png"
                 page.locator(selector).screenshot(path=path)
                 screenshot_outputs[name] = str(path)
