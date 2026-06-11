@@ -844,21 +844,32 @@ class DashboardApiTests(unittest.TestCase):
         overview = self.client.get('/api/overview?simulate=1&days=31')
         self.assertEqual(overview.status_code, 200)
         payload = overview.get_json()
-        self.assertEqual(payload['active_tool_label'], 'OpenCode (simulated)')
-        self.assertEqual(payload['source_path'], 'simulated dataset')
+        self.assertEqual(payload['active_tool_label'], 'OpenCode + Codex CLI + Hermes (simulated)')
+        self.assertEqual(payload['source_path'], 'simulated multi-source dataset')
         self.assertGreater(payload['total_tokens'], 0)
+        sources = {item['id']: item for item in payload['tool_sources']}
+        self.assertEqual(set(sources), {'opencode', 'codex', 'hermes'})
+        for source in sources.values():
+            self.assertEqual(source['status'], 'active')
+            self.assertEqual(source['status_label'], 'Simulated')
+            self.assertGreater(source['tokens_total'], 0)
 
         models = self.client.get('/api/models?simulate=1&days=31').get_json()
         self.assertTrue(models)
-        self.assertEqual(models[0]['source_path'], 'simulated dataset')
+        self.assertEqual({'opencode', 'codex', 'hermes'}, {item['tool_id'] for item in models})
 
         daily = self.client.get('/api/daily?simulate=1&days=31&top_n=4').get_json()
         self.assertEqual(len(daily['dates']), 31)
         self.assertLessEqual(len(daily['models']), 5)
+        codex_daily = self.client.get('/api/daily?simulate=1&days=31&tool_id=codex').get_json()
+        self.assertEqual(codex_daily['selected_tool_id'], 'codex')
+        self.assertTrue(codex_daily['models'])
+        self.assertTrue(all(model['id'].startswith('openai/') for model in codex_daily['models']))
 
         history = self.client.get('/api/usage-history?simulate=1&limit=5').get_json()
         self.assertEqual(len(history), 5)
         self.assertTrue(all(item['id'].startswith('sim-') for item in history))
+        self.assertGreaterEqual(len({item['tool_id'] for item in history}), 2)
 
     def test_estimate_cost_marks_paid_cache_write_without_price_partial(self):
         original_cache = dict(dashboard_pricing.PRICING_CACHE)
