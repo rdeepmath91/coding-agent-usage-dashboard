@@ -10,7 +10,7 @@ Right now the active sources are:
 - Codex CLI via `~/.codex/state_5.sqlite` plus rollout JSONL files referenced by that state DB
 - Hermes via `~/.hermes/state.db`
 
-## Quick Start
+## Setup
 
 ### 1. Install uv
 
@@ -54,7 +54,7 @@ open:
 http://localhost:8321/?simulate=1
 ```
 
-## Updating Screenshots
+## Snapshots
 
 Capture a localhost snapshot for local review:
 

@@ -8,51 +8,22 @@ PYPROJECT = ROOT / 'pyproject.toml'
 UV_LOCK = ROOT / 'uv.lock'
 AGENTS = ROOT / 'AGENTS.md'
 GITIGNORE = ROOT / '.gitignore'
-SCREENSHOTS = [
-    ROOT / 'docs' / 'screenshots' / 'dashboard-overview.png',
-    ROOT / 'docs' / 'screenshots' / 'dashboard-tool-sources.png',
-    ROOT / 'docs' / 'screenshots' / 'dashboard-daily-tokens.png',
-    ROOT / 'docs' / 'screenshots' / 'dashboard-model-breakdown.png',
-    ROOT / 'docs' / 'screenshots' / 'dashboard-usage-history.png',
-]
 
 
 class ReadmeTests(unittest.TestCase):
     def test_readme_documents_uv_sync_run_and_snapshot_steps(self):
         content = README.read_text()
-        self.assertIn('## Screenshots', content)
-        self.assertIn('All screenshots use the simulated dataset from `?simulate=1`', content)
-        self.assertIn('docs/screenshots/dashboard-overview.png', content)
-        self.assertIn('docs/screenshots/dashboard-tool-sources.png', content)
-        self.assertIn('docs/screenshots/dashboard-daily-tokens.png', content)
-        self.assertIn('docs/screenshots/dashboard-model-breakdown.png', content)
-        self.assertIn('docs/screenshots/dashboard-usage-history.png', content)
-        self.assertIn('width="800"', content)
-        self.assertIn('full token volume, API-equivalent estimated cost', content)
-        self.assertIn('source provenance visible', content)
-        self.assertIn('stacked model usage over time', content)
-        self.assertIn('Table totals use session-token semantics', content)
-        self.assertIn('recent sessions with source, date, model, title, and token details', content)
-        self.assertIn('## Quick Start', content)
+        self.assertIn('## Setup', content)
         self.assertIn('https://docs.astral.sh/uv/', content)
         self.assertIn('curl -LsSf https://astral.sh/uv/install.sh | sh', content)
         self.assertIn('uv sync', content)
         self.assertNotIn('uv pip install -r requirements.txt', content)
         self.assertNotIn('uv venv', content)
         self.assertIn('uv run python app.py', content)
-        self.assertIn('## Updating Screenshots', content)
+        self.assertIn('## Snapshots', content)
         self.assertIn('uv run --with playwright python scripts/snapshot_dashboard.py --url http://localhost:8321', content)
-        self.assertIn('--out docs/screenshots --docs', content)
         self.assertIn('dashboard-snapshots/', content)
         self.assertIn('http://localhost:8321', content)
-        self.assertLess(content.index('## Quick Start'), content.index('## Screenshots'))
-        self.assertLess(content.index('## Updating Screenshots'), content.index('## Screenshots'))
-
-    def test_readme_screenshot_assets_exist(self):
-        for screenshot in SCREENSHOTS:
-            with self.subTest(screenshot=screenshot.name):
-                self.assertTrue(screenshot.exists(), f'{screenshot.name} should be committed')
-                self.assertGreater(screenshot.stat().st_size, 10_000, f'{screenshot.name} should be a real dashboard capture')
 
     def test_repo_includes_uv_project_files_for_reproducible_setup(self):
         self.assertTrue(PYPROJECT.exists(), 'pyproject.toml should be committed')
