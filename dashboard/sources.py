@@ -71,12 +71,8 @@ def codex_records(days: int | None = None) -> list[dict]:
     if days is not None:
         since_ms = int((datetime.datetime.now() - datetime.timedelta(days=days)).timestamp() * 1000)
 
-    conn = sqlite3.connect(f"file:{config.CODEX_STATE_PATH}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
-    where = "WHERE COALESCE(updated_at_ms, updated_at * 1000, created_at_ms, created_at * 1000) >= ?" if since_ms else ""
-    params = (since_ms,) if since_ms else ()
-    try:
-        rows = conn.execute(f"""
+    def _fetch_rows_with_preview(conn, where: str, params: tuple) -> list[sqlite3.Row]:
+        return conn.execute(f"""
             SELECT
                 id,
                 rollout_path,
@@ -92,6 +88,36 @@ def codex_records(days: int | None = None) -> list[dict]:
             {where}
             ORDER BY COALESCE(updated_at_ms, updated_at * 1000, created_at_ms, created_at * 1000) DESC
         """, params).fetchall()
+
+    def _fetch_rows_without_preview(conn, where: str, params: tuple) -> list[sqlite3.Row]:
+        return conn.execute(f"""
+            SELECT
+                id,
+                rollout_path,
+                COALESCE(created_at_ms, created_at * 1000) as created_ms,
+                COALESCE(updated_at_ms, updated_at * 1000) as updated_ms,
+                model_provider,
+                model,
+                title,
+                cwd,
+                tokens_used
+            FROM threads
+            {where}
+            ORDER BY COALESCE(updated_at_ms, updated_at * 1000, created_at_ms, created_at * 1000) DESC
+        """, params).fetchall()
+
+    conn = sqlite3.connect(f"file:{config.CODEX_STATE_PATH}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    where = "WHERE COALESCE(updated_at_ms, updated_at * 1000, created_at_ms, created_at * 1000) >= ?" if since_ms else ""
+    params = (since_ms,) if since_ms else ()
+    try:
+        try:
+            rows = _fetch_rows_with_preview(conn, where, params)
+        except sqlite3.OperationalError as e:
+            if "no such column: preview" in str(e).lower():
+                rows = _fetch_rows_without_preview(conn, where, params)
+            else:
+                raise
     finally:
         conn.close()
 
@@ -124,7 +150,7 @@ def codex_records(days: int | None = None) -> list[dict]:
             "created_at": created_dt.strftime("%Y-%m-%d %H:%M:%S") if created_dt else None,
             "updated": updated_dt.strftime("%Y-%m-%d %H:%M:%S") if updated_dt else None,
             "date": updated_dt.date().isoformat() if updated_dt else None,
-            "title": row["title"] or row["preview"] or row["id"],
+            "title": row["title"] or (row["preview"] if "preview" in row.keys() else "") or row["id"],
             "directory": row["cwd"],
             "provider": provider,
             "model_id": model_id,
