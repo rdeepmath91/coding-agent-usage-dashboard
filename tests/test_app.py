@@ -11,6 +11,7 @@ import app as dashboard_app
 from dashboard import config as dashboard_config
 from dashboard import pricing as dashboard_pricing
 from dashboard.daily import build_daily_from_model_records
+import dashboard.snapshot as dashboard_snapshot
 
 
 HOME_PREFIX = f"{Path.home()}/"
@@ -207,6 +208,7 @@ class DashboardApiTests(unittest.TestCase):
         dashboard_config.CODEX_SESSIONS_DIR = str(self.codex_sessions_dir)
         dashboard_config.CODEX_SOURCE_PATH = str(self.codex_state_path)
         dashboard_config.HERMES_STATE_PATH = str(self.hermes_state_path)
+        dashboard_snapshot.clear_dashboard_snapshot_cache()
         self.client = dashboard_app.app.test_client()
 
     def test_overview_exposes_tool_source_metadata(self):
@@ -333,6 +335,134 @@ class DashboardApiTests(unittest.TestCase):
 
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]['id'], 'sess-1')
+
+    def test_usage_history_keeps_older_open_code_rows_and_tokens_total(self):
+        conn = sqlite3.connect(self.db_path)
+        old_created_ms = int(time.time() * 1000) - 45 * 86400000
+        conn.execute(
+            """
+            INSERT INTO session (
+                id, title, directory, model, tokens_input, tokens_output,
+                summary_files, summary_additions, summary_deletions,
+                time_created, time_updated
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                'sess-old',
+                'Older OpenCode session',
+                '/tmp/project-old',
+                json.dumps({"id": "gpt-5.5", "providerID": "openai"}),
+                111,
+                222,
+                7,
+                24,
+                6,
+                old_created_ms,
+                old_created_ms + 60000,
+            ),
+        )
+        write_message(
+            conn,
+            session_id='sess-old',
+            created_ms=old_created_ms,
+            role='assistant',
+            model_id='gpt-5.5',
+            provider_id='openai',
+            tokens_input=111,
+            tokens_output=222,
+        )
+        conn.commit()
+        conn.close()
+
+        response = self.client.get('/api/usage-history?limit=10')
+        self.assertEqual(response.status_code, 200)
+        history = response.get_json()
+        old = next(item for item in history if item['id'] == 'sess-old')
+
+        self.assertEqual(old['tokens_input'], 111)
+        self.assertEqual(old['tokens_output'], 222)
+        self.assertEqual(old['tokens_total'], 333)
+        self.assertEqual(old['files_changed'], 7)
+        self.assertEqual(old['additions'], 24)
+        self.assertEqual(old['deletions'], 6)
+        self.assertNotIn('summary_files', old)
+        self.assertNotIn('summary_additions', old)
+        self.assertNotIn('summary_deletions', old)
+
+    def test_dashboard_snapshot_cache_includes_wal_signatures(self):
+        wal_path = Path(f'{self.db_path}-wal')
+        shm_path = Path(f'{self.db_path}-shm')
+        wal_path.write_text('wal-1', encoding='utf-8')
+        shm_path.write_text('shm-1', encoding='utf-8')
+        dashboard_snapshot.clear_dashboard_snapshot_cache()
+
+        with mock.patch.object(dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot) as build_snapshot:
+            first = dashboard_snapshot.load_dashboard_snapshot(30)
+            wal_path.write_text('wal-2-updated', encoding='utf-8')
+            shm_path.write_text('shm-2-updated', encoding='utf-8')
+            second = dashboard_snapshot.load_dashboard_snapshot(30)
+
+        self.assertEqual(build_snapshot.call_count, 2)
+        self.assertIsNot(first, second)
+
+    def test_dashboard_snapshot_cache_includes_codex_rollout_signatures(self):
+        self._write_codex_fixture()
+        dashboard_snapshot.clear_dashboard_snapshot_cache()
+
+        with mock.patch.object(dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot) as build_snapshot:
+            first = dashboard_snapshot.load_dashboard_snapshot(30)
+            self.codex_rollout_path.write_text(
+                self.codex_rollout_path.read_text(encoding='utf-8') + '\n' + json.dumps({
+                    "timestamp": "2026-05-30T00:03:00Z",
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "task_complete",
+                        "info": {
+                            "total_token_usage": {
+                                "input_tokens": 1800,
+                                "cached_input_tokens": 500,
+                                "output_tokens": 300,
+                                "reasoning_output_tokens": 50,
+                                "total_tokens": 2100,
+                            }
+                        },
+                    },
+                }) + '\n',
+                encoding='utf-8',
+            )
+            second = dashboard_snapshot.load_dashboard_snapshot(30)
+
+        self.assertEqual(build_snapshot.call_count, 2)
+        self.assertIsNot(first, second)
+
+    def test_dashboard_snapshot_refreshes_relative_ranges_when_time_bucket_changes(self):
+        dashboard_snapshot.clear_dashboard_snapshot_cache()
+
+        with mock.patch("dashboard.snapshot.time.time") as mock_time, mock.patch.object(
+            dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot
+        ) as build_snapshot:
+            mock_time.return_value = 1000.0
+            first = dashboard_snapshot.load_dashboard_snapshot(30)
+            second = dashboard_snapshot.load_dashboard_snapshot(30)
+            mock_time.return_value = 1300.0
+            third = dashboard_snapshot.load_dashboard_snapshot(30)
+
+        self.assertEqual(build_snapshot.call_count, 2)
+        self.assertIs(first, second)
+        self.assertIsNot(first, third)
+
+    def test_dashboard_snapshot_is_reused_across_dashboard_endpoints(self):
+        with mock.patch.object(dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot) as build_snapshot:
+            overview = self.client.get('/api/overview?days=30')
+            models = self.client.get('/api/models?days=30')
+            daily = self.client.get('/api/daily?days=30&top_n=8')
+            history = self.client.get('/api/usage-history?limit=30')
+
+        self.assertEqual(overview.status_code, 200)
+        self.assertEqual(models.status_code, 200)
+        self.assertEqual(daily.status_code, 200)
+        self.assertEqual(history.status_code, 200)
+        self.assertEqual(build_snapshot.call_count, 2)
 
     def test_daily_other_zero_bucket_preserves_cache_fields(self):
         payload = build_daily_from_model_records([
@@ -478,6 +608,7 @@ class DashboardApiTests(unittest.TestCase):
         conn.close()
         dashboard_config.CODEX_STATE_PATH = str(state)
         dashboard_config.CODEX_SOURCE_PATH = str(state)
+        self.codex_rollout_path = rollout
 
     def test_codex_records_flow_into_sources_models_daily_and_history(self):
         self._write_codex_fixture()
