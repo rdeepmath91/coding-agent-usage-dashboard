@@ -1,10 +1,13 @@
-"""Model labeling, chart colors, and cost estimation."""
+"""Model labeling, chart colors, alias resolution, and cost estimation."""
 
+from dataclasses import dataclass
 import json
 import time
+from urllib.parse import quote
 import urllib.request
 
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+OPENROUTER_MODEL_PAGE_BASE = "https://openrouter.ai"
 PRICING_CACHE = {"fetched_at": 0, "prices": {}}
 
 HARDCODED_MODEL_PRICES = {
@@ -67,7 +70,54 @@ HARDCODED_MODEL_PRICES = {
         "input_cache_read": "0.0000003",
         "input_cache_write": "0.00000375",
     },
+    "google/gemini-3.1-pro-preview": {
+        "prompt": "0.000002",
+        "completion": "0.000012",
+        "input_cache_read": "0.0000002",
+        "input_cache_write": "0.000000375",
+    },
 }
+
+
+@dataclass(frozen=True)
+class PricingResolution:
+    """Resolved provider pricing ID plus human-readable provenance."""
+
+    model_id: str | None
+    source: str | None = None
+    aliased: bool = False
+
+
+PRICING_MODEL_ALIASES = {
+    ("opencode", "gpt-5.3-codex-spark"): "openai/gpt-5.3-codex",
+    ("opencode-go", "gpt-5.3-codex-spark"): "openai/gpt-5.3-codex",
+    ("openai", "gpt-5.3-codex-spark"): "openai/gpt-5.3-codex",
+    ("openai-codex", "gpt-5.3-codex-spark"): "openai/gpt-5.3-codex",
+    ("unknown", "gpt-5.3-codex-spark"): "openai/gpt-5.3-codex",
+    ("antigravity", "gemini-3.1-pro"): "google/gemini-3.1-pro-preview",
+    ("google-antigravity", "gemini-3.1-pro"): "google/gemini-3.1-pro-preview",
+    ("google", "antigravity-gemini-3.1-pro"): "google/gemini-3.1-pro-preview",
+    ("google", "antigravity-gemini-3.1-pro-low"): "google/gemini-3.1-pro-preview",
+}
+
+FREE_SUFFIX_MODEL_ALIASES = {
+    "deepseek-v4-flash": "deepseek/deepseek-v4-flash:free",
+    "minimax-m2.5": "minimax/minimax-m2.5:free",
+}
+
+PROVIDER_MODEL_NAMESPACES = {
+    "openai": "openai",
+    "openai-codex": "openai",
+    "google": "google",
+}
+
+MODEL_PREFIX_NAMESPACES = (
+    ("deepseek-", "deepseek"),
+    ("kimi-", "moonshotai"),
+    ("qwen", "qwen"),
+    ("minimax-", "minimax"),
+    ("ling-", "inclusionai"),
+)
 
 
 def normalize_model(raw: str) -> dict:
@@ -115,33 +165,58 @@ def chart_color(rank: int, model_id: str, provider: str) -> str:
     """Use rank-first colors so the chart adapts when model mix changes."""
     return QUALITATIVE_COLORS[rank % len(QUALITATIVE_COLORS)]
 
+def pricing_model_resolution(provider: str, model_id: str) -> PricingResolution:
+    """Resolve a local provider/model pair to a public pricing model ID."""
+    if not model_id:
+        return PricingResolution(None, "No local model ID available")
+
+    provider_key = (provider or "unknown").strip().lower()
+    model_key = model_id.strip()
+    alias = PRICING_MODEL_ALIASES.get((provider_key, model_key))
+    if alias:
+        local_id = f"{provider_key}/{model_key}"
+        return PricingResolution(alias, f"alias registry: {local_id} -> {alias}", True)
+
+    free = model_key.endswith("-free")
+    base = model_key.removesuffix("-free")
+
+    if "/" in base and not free:
+        return PricingResolution(base)
+
+    if free:
+        alias = FREE_SUFFIX_MODEL_ALIASES.get(base)
+        if alias:
+            local_id = f"{provider_key}/{model_key}"
+            return PricingResolution(alias, f"alias registry: {local_id} -> {alias}", True)
+        return PricingResolution(None, f"No matched pricing alias for free-suffixed model {provider_key}/{model_key}")
+
+    namespace = PROVIDER_MODEL_NAMESPACES.get(provider_key)
+    if namespace:
+        return PricingResolution(f"{namespace}/{base}")
+
+    for prefix, namespace in MODEL_PREFIX_NAMESPACES:
+        if base.startswith(prefix):
+            return PricingResolution(f"{namespace}/{base}")
+
+    return PricingResolution(None, f"No matched pricing alias for {provider_key}/{model_key}")
+
+
 def openrouter_model_id(provider: str, model_id: str) -> str | None:
     """Best-effort mapping from local provider/model IDs to OpenRouter model IDs."""
+    return pricing_model_resolution(provider, model_id).model_id
+
+
+def openrouter_model_url(model_id: str | None) -> str | None:
+    """Return the public OpenRouter model page for a canonical model ID."""
     if not model_id:
         return None
+    return f"{OPENROUTER_MODEL_PAGE_BASE}/{quote(model_id, safe='/:')}"
 
-    free = model_id.endswith("-free")
-    base = model_id.removesuffix("-free")
 
-    if "/" in base:
-        return base
-    if provider in {"openai", "openai-codex"}:
-        return f"openai/{base}"
-    if provider == "google":
-        return f"google/{base}"
-    if base.startswith("deepseek-"):
-        suffix = ":free" if free else ""
-        return f"deepseek/{base}{suffix}"
-    if base.startswith("kimi-"):
-        return f"moonshotai/{base}"
-    if base.startswith("qwen"):
-        return f"qwen/{base}"
-    if base.startswith("minimax-"):
-        suffix = ":free" if free else ""
-        return f"minimax/{base}{suffix}"
-    if base.startswith("ling-"):
-        return f"inclusionai/{base}"
-    return None
+def _pricing_source(base_source: str, resolution: PricingResolution) -> str:
+    if resolution.source and resolution.aliased:
+        return f"{base_source}; {resolution.source}"
+    return base_source
 
 def openrouter_prices() -> dict:
     """Fetch public OpenRouter per-token pricing, cached for one hour."""
@@ -160,7 +235,8 @@ def openrouter_prices() -> dict:
 
 def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output: int, cache_read: int = 0, cache_write: int = 0) -> dict:
     """Estimate USD cost from token counts using latest fetched OpenRouter pricing."""
-    router_id = openrouter_model_id(provider, model_id)
+    resolution = pricing_model_resolution(provider, model_id)
+    router_id = resolution.model_id
     fallback_pricing = HARDCODED_MODEL_PRICES.get(router_id or "", {})
     fetched_pricing = openrouter_prices().get(router_id or "", {})
     pricing = {**fallback_pricing, **fetched_pricing}
@@ -172,11 +248,15 @@ def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output
             return 0.0
 
     if not pricing:
+        pricing_source = resolution.source or (
+            f"No matched public pricing for {router_id}" if router_id else "No matched public pricing"
+        )
         return {
             "estimated_cost": None,
             "pricing_status": "unpriced",
-            "pricing_source": None,
+            "pricing_source": pricing_source,
             "pricing_model_id": router_id,
+            "pricing_url": openrouter_model_url(router_id),
         }
 
     input_price = price("prompt")
@@ -209,12 +289,16 @@ def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output
         "cache_read": token_buckets["input_cache_read"] * cache_read_price,
         "cache_write": token_buckets["input_cache_write"] * cache_write_price,
     }
-    source = "OpenRouter /api/v1/models" if fetched_pricing else "Hardcoded pricing fallback"
+    source = _pricing_source(
+        "OpenRouter /api/v1/models" if fetched_pricing else "Hardcoded pricing fallback",
+        resolution,
+    )
     result = {
         "estimated_cost": estimated,
         "pricing_status": "priced",
         "pricing_source": source,
         "pricing_model_id": router_id,
+        "pricing_url": openrouter_model_url(router_id),
         "cost_basis": "api_equivalent_estimate",
         "cost_breakdown": cost_breakdown,
         "input_price": input_price,

@@ -327,6 +327,14 @@ class DashboardApiTests(unittest.TestCase):
         self.assertGreater(component_totals['output'], 0)
         self.assertGreaterEqual(component_totals['cache_read'], 0)
         self.assertGreaterEqual(component_totals['cache_write'], 0)
+        api_priced = [
+            item for item in models
+            if item.get('pricing_model_id')
+            and str(item.get('cost_basis', '')).startswith('api_equivalent')
+            and item.get('pricing_status') in {'priced', 'partial'}
+        ]
+        self.assertTrue(api_priced)
+        self.assertTrue(all(item.get('pricing_url', '').startswith('https://openrouter.ai/') for item in api_priced))
 
     def test_usage_history_applies_offset_after_merging_sources(self):
         response = self.client.get('/api/usage-history?limit=1&offset=1')
@@ -766,6 +774,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(hermes_model['tokens_total'], 2500)
         self.assertEqual(hermes_model['tokens_effective_total'], 10625)
         self.assertEqual(hermes_model['pricing_model_id'], 'openai-codex/gpt-5.5')
+        self.assertEqual(hermes_model['pricing_url'], 'https://openrouter.ai/openai/gpt-5.5')
         self.assertEqual(hermes_model['pricing_status'], 'priced')
         self.assertEqual(hermes_model['pricing_source'], 'Hermes session accounting')
         self.assertEqual(hermes_model['estimated_cost'], 0.42)
@@ -991,7 +1000,13 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn("const breakdownTitle = m.cost_breakdown", html)
         self.assertIn("input ${fmtCost(breakdown.input)}, output ${fmtCost(breakdown.output)}, cache read ${fmtCost(breakdown.cache_read)}, cache write ${fmtCost(breakdown.cache_write)}", html)
         self.assertIn("const sessionAccounting = m.session_accounting_note ? `; ${m.session_accounting_note}` : '';", html)
+        self.assertIn("const unpricedTitle = m.pricing_source || `No matched pricing for ${m.pricing_model_id || m.model_id}`;", html)
         self.assertIn("known subtotal ${fmtCost(m.partial_cost_usd)}", html)
+        self.assertIn(": unpricedTitle;", html)
+        self.assertIn("if (m.pricing_url && m.estimated_cost !== null && m.estimated_cost !== undefined)", html)
+        self.assertIn("costLink.href = m.pricing_url;", html)
+        self.assertIn("costLink.rel = 'noopener noreferrer';", html)
+        self.assertIn("Open pricing reference for ${m.pricing_model_id || m.model_id}", html)
 
     def _fake_command_runner(self, command_results, calls):
         def runner(args, *, timeout=dashboard_app.APP_COMMAND_TIMEOUT_SECONDS):
@@ -1336,6 +1351,89 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIsNone(result["estimated_cost"])
         self.assertGreater(result["partial_cost_usd"], 0)
         self.assertIn("input_cache_write", result["missing_price_buckets"])
+
+    def test_pricing_alias_registry_resolves_target_aliases(self):
+        with mock.patch.object(dashboard_pricing, 'openrouter_prices', return_value={}):
+            opencode_spark = dashboard_pricing.estimate_cost(
+                "opencode-go",
+                "gpt-5.3-codex-spark",
+                tokens_input=1000,
+                tokens_output=100,
+            )
+            codex_spark = dashboard_pricing.estimate_cost(
+                "openai-codex",
+                "gpt-5.3-codex-spark",
+                tokens_input=1000,
+                tokens_output=100,
+            )
+            codex_cli_spark = dashboard_pricing.estimate_cost(
+                "openai",
+                "gpt-5.3-codex-spark",
+                tokens_input=1000,
+                tokens_output=100,
+            )
+            unknown_provider_spark = dashboard_pricing.estimate_cost(
+                "unknown",
+                "gpt-5.3-codex-spark",
+                tokens_input=1000,
+                tokens_output=100,
+            )
+            antigravity_gemini = dashboard_pricing.estimate_cost(
+                "antigravity",
+                "gemini-3.1-pro",
+                tokens_input=1000,
+                tokens_output=100,
+                cache_read=20,
+                cache_write=10,
+            )
+            observed_antigravity_gemini = dashboard_pricing.estimate_cost(
+                "google",
+                "antigravity-gemini-3.1-pro",
+                tokens_input=1000,
+                tokens_output=100,
+                cache_read=20,
+                cache_write=10,
+            )
+            unresolved_free = dashboard_pricing.estimate_cost(
+                "opencode-go",
+                "qwen3.6-plus-free",
+                tokens_input=1000,
+                tokens_output=100,
+            )
+
+        self.assertEqual(opencode_spark["pricing_status"], "priced")
+        self.assertEqual(opencode_spark["pricing_model_id"], "openai/gpt-5.3-codex")
+        self.assertEqual(opencode_spark["pricing_url"], "https://openrouter.ai/openai/gpt-5.3-codex")
+        self.assertIn("alias registry: opencode-go/gpt-5.3-codex-spark -> openai/gpt-5.3-codex", opencode_spark["pricing_source"])
+
+        self.assertEqual(codex_spark["pricing_status"], "priced")
+        self.assertEqual(codex_spark["pricing_model_id"], "openai/gpt-5.3-codex")
+        self.assertIn("alias registry: openai-codex/gpt-5.3-codex-spark -> openai/gpt-5.3-codex", codex_spark["pricing_source"])
+
+        self.assertEqual(codex_cli_spark["pricing_status"], "priced")
+        self.assertEqual(codex_cli_spark["pricing_model_id"], "openai/gpt-5.3-codex")
+        self.assertIn("alias registry: openai/gpt-5.3-codex-spark -> openai/gpt-5.3-codex", codex_cli_spark["pricing_source"])
+
+        self.assertEqual(unknown_provider_spark["pricing_status"], "priced")
+        self.assertEqual(unknown_provider_spark["pricing_model_id"], "openai/gpt-5.3-codex")
+        self.assertIn("alias registry: unknown/gpt-5.3-codex-spark -> openai/gpt-5.3-codex", unknown_provider_spark["pricing_source"])
+
+        self.assertEqual(antigravity_gemini["pricing_status"], "priced")
+        self.assertEqual(antigravity_gemini["pricing_model_id"], "google/gemini-3.1-pro-preview")
+        self.assertEqual(antigravity_gemini["pricing_url"], "https://openrouter.ai/google/gemini-3.1-pro-preview")
+        self.assertIn("alias registry: antigravity/gemini-3.1-pro -> google/gemini-3.1-pro-preview", antigravity_gemini["pricing_source"])
+
+        self.assertEqual(observed_antigravity_gemini["pricing_status"], "priced")
+        self.assertEqual(observed_antigravity_gemini["pricing_model_id"], "google/gemini-3.1-pro-preview")
+        self.assertIn("alias registry: google/antigravity-gemini-3.1-pro -> google/gemini-3.1-pro-preview", observed_antigravity_gemini["pricing_source"])
+
+        self.assertEqual(unresolved_free["pricing_status"], "unpriced")
+        self.assertIsNone(unresolved_free["pricing_model_id"])
+        self.assertIsNone(unresolved_free["pricing_url"])
+        self.assertEqual(
+            unresolved_free["pricing_source"],
+            "No matched pricing alias for free-suffixed model opencode-go/qwen3.6-plus-free",
+        )
 
 
 class ReviewScriptGuardTests(unittest.TestCase):
