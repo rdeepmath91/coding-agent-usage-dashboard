@@ -741,6 +741,8 @@
   }
   .data-table .model-cell { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
   .data-table .num { text-align: right; font-family: var(--font-mono); }
+  .data-table .cost-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+  .data-table .cost-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
   .data-table .token-cell { color: var(--accent); font-weight: 600; }
   .chart-focus-button {
     margin-left: 10px;
@@ -1844,12 +1846,24 @@ function renderModelTable(models = currentModels) {
       ? `input ${fmtCost(breakdown.input)}, output ${fmtCost(breakdown.output)}, cache read ${fmtCost(breakdown.cache_read)}, cache write ${fmtCost(breakdown.cache_write)}`
       : '';
     const sessionAccounting = m.session_accounting_note ? `; ${m.session_accounting_note}` : '';
+    const unpricedTitle = m.pricing_source || `No matched pricing for ${m.pricing_model_id || m.model_id}`;
     costCell.title = m.pricing_status === 'priced'
       ? `${m.pricing_source}: ${m.pricing_model_id}${breakdownTitle ? `; ${breakdownTitle}` : ''}`
       : m.pricing_status === 'partial'
       ? `${m.pricing_source}; known subtotal ${fmtCost(m.partial_cost_usd)}${breakdownTitle ? `; ${breakdownTitle}` : ''}${sessionAccounting}`
-      : `No matched pricing for ${m.pricing_model_id || m.model_id}`;
-    costCell.textContent = fmtCost(m.estimated_cost);
+      : unpricedTitle;
+    if (m.pricing_url && m.estimated_cost !== null && m.estimated_cost !== undefined) {
+      const costLink = document.createElement('a');
+      costLink.className = 'cost-link';
+      costLink.href = m.pricing_url;
+      costLink.target = '_blank';
+      costLink.rel = 'noopener noreferrer';
+      costLink.textContent = fmtCost(m.estimated_cost);
+      costLink.setAttribute('aria-label', `Open pricing reference for ${m.pricing_model_id || m.model_id}`);
+      costCell.appendChild(costLink);
+    } else {
+      costCell.textContent = fmtCost(m.estimated_cost);
+    }
 
     row.append(toolCell, modelCell, sessionsCell, totalCell, inputCell, outputCell, cacheCell, costCell);
     tbody.appendChild(row);
