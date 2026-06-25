@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Selected homepage update control with prominent button</title>
+  <desc id="desc">Current dashboard homepage mockup with a prominent update panel and larger Update App button in the Overview top area.</desc>
+  <defs>
+    <linearGradient id="panel" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#101316"/>
+      <stop offset="1" stop-color="#0d0f11"/>
+    </linearGradient>
+    <linearGradient id="button" x1="0" x2="1">
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#1e2429" stroke-width="1" opacity="0.38"/>
+    </pattern>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1280" height="720" fill="#08090a"/>
+  <rect width="1280" height="720" fill="url(#grid)" opacity="0.5"/>
+
+  <rect x="0" y="0" width="224" height="720" fill="#0b0d0f" stroke="#272b30"/>
+  <text x="28" y="48" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="18" font-weight="700">coding agent</text>
+  <text x="158" y="48" fill="#71717a" font-family="JetBrains Mono, ui-monospace, monospace" font-size="18">usage</text>
+  <rect x="16" y="92" width="192" height="38" rx="4" fill="#1a1d20"/>
+  <rect x="0" y="98" width="3" height="26" rx="2" fill="#38bdf8"/>
+  <text x="28" y="116" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="14">☤ Overview</text>
+  <text x="28" y="166" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="14">◇ Models</text>
+  <text x="28" y="214" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="14">◆ Usage</text>
+  <text x="28" y="262" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="14">⚙ Settings</text>
+
+  <g transform="translate(284 56)">
+    <text x="0" y="0" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="38" font-weight="700" letter-spacing="-1">Overview</text>
+    <text x="0" y="30" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="13">Top cards show full token volume. Session totals and cache details appear in secondary lines.</text>
+
+    <g transform="translate(620 -16)">
+      <rect width="330" height="126" rx="8" fill="#0d0f11" stroke="#272b30"/>
+      <rect width="330" height="4" rx="2" fill="url(#button)"/>
+      <text x="20" y="32" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="17" font-weight="700">App Update</text>
+      <text x="20" y="56" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="11">Pull latest dashboard build.</text>
+      <rect x="20" y="74" width="152" height="34" rx="4" fill="#101316" stroke="#272b30"/>
+      <circle cx="38" cy="91" r="4" fill="#34d399"/>
+      <text x="50" y="96" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="11">main@a1b2c3d</text>
+      <rect x="188" y="72" width="122" height="40" rx="5" fill="url(#button)"/>
+      <text x="213" y="97" fill="#061012" font-family="JetBrains Mono, ui-monospace, monospace" font-size="13" font-weight="800">Update App</text>
+    </g>
+
+    <g transform="translate(0 132)">
+      <rect width="180" height="118" rx="4" fill="url(#panel)" stroke="#272b30"/>
+      <text x="18" y="28" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="12" letter-spacing="1">TOTAL TOKENS</text>
+      <text x="18" y="72" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="28" font-weight="700">18.4M</text>
+      <text x="18" y="98" fill="#71717a" font-family="JetBrains Mono, ui-monospace, monospace" font-size="11">incl. cache volume</text>
+    </g>
+    <g transform="translate(204 132)">
+      <rect width="180" height="118" rx="4" fill="url(#panel)" stroke="#272b30"/>
+      <text x="18" y="28" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="12" letter-spacing="1">API COST</text>
+      <text x="18" y="72" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="28" font-weight="700">$42.19</text>
+      <text x="18" y="98" fill="#71717a" font-family="JetBrains Mono, ui-monospace, monospace" font-size="11">provider matched</text>
+    </g>
+    <g transform="translate(408 132)">
+      <rect width="180" height="118" rx="4" fill="url(#panel)" stroke="#272b30"/>
+      <text x="18" y="28" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="12" letter-spacing="1">INPUT TOKENS</text>
+      <text x="18" y="72" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="28" font-weight="700">15.1M</text>
+      <text x="18" y="98" fill="#71717a" font-family="JetBrains Mono, ui-monospace, monospace" font-size="11">non-cache + cache</text>
+    </g>
+    <g transform="translate(612 132)">
+      <rect width="180" height="118" rx="4" fill="url(#panel)" stroke="#272b30"/>
+      <text x="18" y="28" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="12" letter-spacing="1">SESSIONS</text>
+      <text x="18" y="72" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="28" font-weight="700">312</text>
+      <text x="18" y="98" fill="#71717a" font-family="JetBrains Mono, ui-monospace, monospace" font-size="11">last 30 days</text>
+    </g>
+
+    <rect x="0" y="296" width="944" height="234" rx="6" fill="#0d0f11" stroke="#272b30"/>
+    <text x="24" y="334" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="20" font-weight="700">Daily Tokens by Model</text>
+    <text x="24" y="358" fill="#71717a" font-family="JetBrains Mono, ui-monospace, monospace" font-size="12">Position-based categorical colors · top models by token volume</text>
+    <path d="M50 500 C135 442 178 470 250 402 S401 426 482 342 S634 376 735 296 S842 342 890 280" fill="none" stroke="#38bdf8" stroke-width="4" filter="url(#glow)"/>
+    <path d="M50 522 C130 500 202 516 276 478 S420 516 508 450 S662 486 810 406 S862 418 890 394" fill="none" stroke="#f59e0b" stroke-width="3" opacity="0.9"/>
+    <g opacity="0.65">
+      <line x1="50" y1="388" x2="894" y2="388" stroke="#272b30"/>
+      <line x1="50" y1="448" x2="894" y2="448" stroke="#272b30"/>
+      <line x1="50" y1="508" x2="894" y2="508" stroke="#272b30"/>
+    </g>
+  </g>
+
+  <g transform="translate(872 146)">
+    <rect width="322" height="88" rx="6" fill="#0d0f11" stroke="#34d399" opacity="0.98"/>
+    <text x="18" y="31" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="13" font-weight="700">More evident, still top-level</text>
+    <text x="18" y="56" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="11">Uses Option B’s larger button and maintenance-card feel.</text>
+  </g>
+</svg>
