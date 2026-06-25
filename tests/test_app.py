@@ -336,6 +336,69 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]['id'], 'sess-1')
 
+    def test_usage_history_keeps_older_open_code_rows_and_tokens_total(self):
+        conn = sqlite3.connect(self.db_path)
+        old_created_ms = int(time.time() * 1000) - 45 * 86400000
+        conn.execute(
+            """
+            INSERT INTO session (
+                id, title, directory, model, tokens_input, tokens_output,
+                summary_files, summary_additions, summary_deletions,
+                time_created, time_updated
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                'sess-old',
+                'Older OpenCode session',
+                '/tmp/project-old',
+                json.dumps({"id": "gpt-5.5", "providerID": "openai"}),
+                111,
+                222,
+                0,
+                0,
+                0,
+                old_created_ms,
+                old_created_ms + 60000,
+            ),
+        )
+        write_message(
+            conn,
+            session_id='sess-old',
+            created_ms=old_created_ms,
+            role='assistant',
+            model_id='gpt-5.5',
+            provider_id='openai',
+            tokens_input=111,
+            tokens_output=222,
+        )
+        conn.commit()
+        conn.close()
+
+        response = self.client.get('/api/usage-history?limit=10')
+        self.assertEqual(response.status_code, 200)
+        history = response.get_json()
+        old = next(item for item in history if item['id'] == 'sess-old')
+
+        self.assertEqual(old['tokens_input'], 111)
+        self.assertEqual(old['tokens_output'], 222)
+        self.assertEqual(old['tokens_total'], 333)
+
+    def test_dashboard_snapshot_cache_includes_wal_signatures(self):
+        wal_path = Path(f'{self.db_path}-wal')
+        shm_path = Path(f'{self.db_path}-shm')
+        wal_path.write_text('wal-1', encoding='utf-8')
+        shm_path.write_text('shm-1', encoding='utf-8')
+        dashboard_snapshot.clear_dashboard_snapshot_cache()
+
+        with mock.patch.object(dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot) as build_snapshot:
+            first = dashboard_snapshot.load_dashboard_snapshot(30)
+            wal_path.write_text('wal-2-updated', encoding='utf-8')
+            shm_path.write_text('shm-2-updated', encoding='utf-8')
+            second = dashboard_snapshot.load_dashboard_snapshot(30)
+
+        self.assertEqual(build_snapshot.call_count, 2)
+        self.assertIsNot(first, second)
+
     def test_dashboard_snapshot_is_reused_across_dashboard_endpoints(self):
         with mock.patch.object(dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot) as build_snapshot:
             overview = self.client.get('/api/overview?days=30')
@@ -347,7 +410,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(models.status_code, 200)
         self.assertEqual(daily.status_code, 200)
         self.assertEqual(history.status_code, 200)
-        self.assertEqual(build_snapshot.call_count, 1)
+        self.assertEqual(build_snapshot.call_count, 2)
 
     def test_daily_other_zero_bucket_preserves_cache_fields(self):
         payload = build_daily_from_model_records([

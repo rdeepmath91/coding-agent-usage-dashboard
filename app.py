@@ -9,8 +9,8 @@ from pathlib import Path
 
 from flask import Flask, Response, jsonify, render_template, request, send_file
 
+from dashboard import config as dashboard_config
 from dashboard.config import (
-    DB_PATH,
     KNOWN_TOOL_IDS,
     current_tool_sources,
     display_path,
@@ -284,7 +284,7 @@ def api_overview():
     counted_sources = [source for source in current_sources if source["id"] in source_overviews]
     row["active_tool"] = "multiple" if len(counted_sources) > 1 else (counted_sources[0]["id"] if counted_sources else "opencode")
     row["active_tool_label"] = " + ".join(source["label"] for source in counted_sources) if counted_sources else "OpenCode"
-    row["source_path"] = " + ".join(source["source_path"] for source in counted_sources) if counted_sources else display_path(DB_PATH)
+    row["source_path"] = " + ".join(source["source_path"] for source in counted_sources) if counted_sources else display_path(dashboard_config.DB_PATH)
 
     row["tool_sources"] = []
     for source in current_sources:
@@ -504,9 +504,10 @@ def api_usage_history():
         start = int(offset or 0)
         count = int(limit or 50)
         return jsonify(history[start: start + count])
-    snapshot = load_dashboard_snapshot(30)
-    sessions = list(snapshot["opencode"]["history"])
-    for record in snapshot["codex_records"] + snapshot["hermes_records"]:
+    history_snapshot = load_dashboard_snapshot(None)
+    recent_snapshot = load_dashboard_snapshot(30)
+    sessions = list(history_snapshot["opencode"]["history"])
+    for record in recent_snapshot["codex_records"] + recent_snapshot["hermes_records"]:
         sessions.append({
             "id": record["id"],
             "tool": record["tool"],
@@ -751,5 +752,5 @@ def favicon():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8321))
     print(f"◆ Coding Agent Usage Dashboard → http://localhost:{port}")
-    print(f"◆ Database: {DB_PATH}")
+    print(f"◆ Database: {dashboard_config.DB_PATH}")
     app.run(host="0.0.0.0", port=port, debug=True)

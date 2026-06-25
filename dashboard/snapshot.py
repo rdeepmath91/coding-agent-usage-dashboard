@@ -11,7 +11,8 @@ from collections import defaultdict, OrderedDict
 from pathlib import Path
 from time import perf_counter
 
-from .config import DB_PATH, CODEX_SESSIONS_DIR, CODEX_STATE_PATH, HERMES_STATE_PATH, display_path
+from . import config as dashboard_config
+from .config import display_path
 from .pricing import chart_color, estimate_cost, normalize_model
 from .sources import (
     aggregate_codex_models,
@@ -48,13 +49,20 @@ def _file_signature(path: str) -> tuple[str, int | None, int | None]:
     return (str(file_path), stat.st_mtime_ns, stat.st_size)
 
 
+def _sqlite_live_signatures(path: str) -> tuple[tuple[str, int | None, int | None], ...]:
+    return (
+        _file_signature(path),
+        _file_signature(f"{path}-wal"),
+    )
+
+
 def _snapshot_key(days: int | None) -> tuple:
     return (
         days,
-        _file_signature(DB_PATH),
-        _file_signature(CODEX_STATE_PATH),
-        _file_signature(CODEX_SESSIONS_DIR),
-        _file_signature(HERMES_STATE_PATH),
+        *_sqlite_live_signatures(dashboard_config.DB_PATH),
+        *_sqlite_live_signatures(dashboard_config.CODEX_STATE_PATH),
+        _file_signature(dashboard_config.CODEX_SESSIONS_DIR),
+        *_sqlite_live_signatures(dashboard_config.HERMES_STATE_PATH),
     )
 
 
@@ -248,7 +256,7 @@ def _load_opencode_snapshot(days: int | None) -> dict:
             "tool": "OpenCode",
             "tool_id": "opencode",
             "tool_color": "#3B82F6",
-            "source_path": display_path(DB_PATH),
+            "source_path": display_path(dashboard_config.DB_PATH),
             "label": info["label"],
             "provider": info["provider"],
             "model_id": info["id"],
@@ -277,7 +285,7 @@ def _load_opencode_snapshot(days: int | None) -> dict:
             "tool": "OpenCode",
             "tool_id": "opencode",
             "tool_color": "#3B82F6",
-            "source_path": display_path(DB_PATH),
+            "source_path": display_path(dashboard_config.DB_PATH),
             "date": dt,
             "label": info["label"],
             "provider": info["provider"],
@@ -309,7 +317,7 @@ def _load_opencode_snapshot(days: int | None) -> dict:
             "tool": "OpenCode",
             "tool_id": "opencode",
             "tool_color": "#3B82F6",
-            "source_path": display_path(DB_PATH),
+            "source_path": display_path(dashboard_config.DB_PATH),
             "title": row["title"],
             "created": created_dt.strftime("%Y-%m-%d %H:%M:%S") if created_dt else None,
             "updated": updated_dt.strftime("%Y-%m-%d %H:%M:%S") if updated_dt else None,
@@ -319,6 +327,7 @@ def _load_opencode_snapshot(days: int | None) -> dict:
             "messages": session_message_counts.get(session_id, 0),
             "tokens_input": _safe_int(row.get("tokens_input"), 0),
             "tokens_output": _safe_int(row.get("tokens_output"), 0),
+            "tokens_total": _safe_int(row.get("tokens_input"), 0) + _safe_int(row.get("tokens_output"), 0),
             "summary_files": _safe_int(row.get("summary_files"), 0),
             "summary_additions": _safe_int(row.get("summary_additions"), 0),
             "summary_deletions": _safe_int(row.get("summary_deletions"), 0),
