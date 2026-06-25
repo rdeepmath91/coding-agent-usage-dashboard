@@ -9,6 +9,7 @@ Right now the active sources are:
 - OpenCode via `~/.local/share/opencode/opencode.db`
 - Codex CLI via `~/.codex/state_5.sqlite` plus rollout JSONL files referenced by that state DB
 - Hermes via `~/.hermes/state.db`
+- Cursor via `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`
 
 ## Setup
 
@@ -62,13 +63,13 @@ All screenshots use the simulated dataset from `?simulate=1`, so the examples ar
 
 <img src="docs/screenshots/dashboard-overview.png" alt="Dashboard overview cards" width="800">
 
-The overview cards show full token volume, API-equivalent estimated cost, input/output split, and session count for the selected range.
+The overview cards show full token volume, API-equivalent estimated cost, input/output split, and session count for the selected range. Sources that do not expose local cache or model metadata still appear with explicit unavailable-state provenance instead of guessed values.
 
 ### Tool Sources
 
 <img src="docs/screenshots/dashboard-tool-sources.png" alt="Dashboard tool sources" width="800">
 
-Tool Sources shows how OpenCode, Codex CLI, and Hermes can all contribute to dashboard totals while keeping source provenance visible.
+Tool Sources shows how OpenCode, Codex CLI, Hermes, and Cursor can appear in one dashboard while keeping source provenance visible.
 
 ### Daily Tokens by Model
 
@@ -90,10 +91,11 @@ Usage History shows recent sessions with source, date, model, title, and token d
 
 ## Current data rules
 
-- active sources: OpenCode local SQLite DB, Codex local state DB plus rollout JSONL, and Hermes local session DB
+- active sources: OpenCode local SQLite DB, Codex local state DB plus rollout JSONL, Hermes local session DB, and Cursor local global-storage state DB when present
 - Overview `Total Tokens` = non-cache input + output assistant-message tokens + cache read/write
 - session and model-history totals use session-token semantics: non-cache input + output assistant-message tokens
 - API-equivalent estimated cost is based on matched public provider pricing, not necessarily actual subscription spend
 - unmatched model pricing stays unpriced instead of guessed
+- Cursor token totals come from Cursor `composerData` assistant-bubble `tokenCount` fields; trusted Cursor cache metrics and model IDs remain unavailable locally
 
 See [source contracts](docs/source-contracts.md) for adapter-specific field and token rules.

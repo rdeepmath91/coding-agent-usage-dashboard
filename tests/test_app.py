@@ -64,8 +64,12 @@ class DashboardApiTests(unittest.TestCase):
         cls.original_codex_sessions_dir = dashboard_config.CODEX_SESSIONS_DIR
         cls.original_codex_source_path = dashboard_config.CODEX_SOURCE_PATH
         cls.original_hermes_state_path = dashboard_config.HERMES_STATE_PATH
+        cls.original_cursor_state_path = dashboard_config.CURSOR_STATE_PATH
+        cls.original_cursor_source_path = dashboard_config.CURSOR_SOURCE_PATH
         cls.codex_state_path = Path(cls.tmpdir.name) / "missing-codex-state.sqlite"
         cls.hermes_state_path = Path(cls.tmpdir.name) / "missing-hermes-state.db"
+        cls.cursor_state_path = Path(cls.tmpdir.name) / "missing-cursor-state.vscdb"
+        cls.cursor_fixture_state_path = Path(cls.tmpdir.name) / "cursor-state.vscdb"
         cls.codex_sessions_dir = Path(cls.tmpdir.name) / "codex-sessions"
         cls._build_test_db(cls.db_path)
         dashboard_config.DB_PATH = str(cls.db_path)
@@ -73,6 +77,8 @@ class DashboardApiTests(unittest.TestCase):
         dashboard_config.CODEX_SESSIONS_DIR = str(cls.codex_sessions_dir)
         dashboard_config.CODEX_SOURCE_PATH = str(cls.codex_state_path)
         dashboard_config.HERMES_STATE_PATH = str(cls.hermes_state_path)
+        dashboard_config.CURSOR_STATE_PATH = str(cls.cursor_state_path)
+        dashboard_config.CURSOR_SOURCE_PATH = str(cls.cursor_state_path)
 
     @classmethod
     def tearDownClass(cls):
@@ -81,6 +87,8 @@ class DashboardApiTests(unittest.TestCase):
         dashboard_config.CODEX_SESSIONS_DIR = cls.original_codex_sessions_dir
         dashboard_config.CODEX_SOURCE_PATH = cls.original_codex_source_path
         dashboard_config.HERMES_STATE_PATH = cls.original_hermes_state_path
+        dashboard_config.CURSOR_STATE_PATH = cls.original_cursor_state_path
+        dashboard_config.CURSOR_SOURCE_PATH = cls.original_cursor_source_path
         cls.tmpdir.cleanup()
 
     @classmethod
@@ -205,6 +213,10 @@ class DashboardApiTests(unittest.TestCase):
         dashboard_config.CODEX_SESSIONS_DIR = str(self.codex_sessions_dir)
         dashboard_config.CODEX_SOURCE_PATH = str(self.codex_state_path)
         dashboard_config.HERMES_STATE_PATH = str(self.hermes_state_path)
+        dashboard_config.CURSOR_STATE_PATH = str(self.cursor_state_path)
+        dashboard_config.CURSOR_SOURCE_PATH = str(self.cursor_state_path)
+        if self.cursor_fixture_state_path.exists():
+            self.cursor_fixture_state_path.unlink()
         self.client = dashboard_app.app.test_client()
 
     def test_overview_exposes_tool_source_metadata(self):
@@ -247,6 +259,12 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(sources['hermes']['source_path'], 'TBD')
         self.assertEqual(sources['hermes']['repo_url'], 'https://github.com/NousResearch/hermes-agent/')
         self.assertIsNone(sources['hermes']['issue'])
+        self.assertEqual(sources['cursor']['status'], 'placeholder')
+        self.assertEqual(sources['cursor']['status_label'], 'Planned adapter')
+        self.assertEqual(sources['cursor']['color'], '#6EE7B7')
+        self.assertEqual(sources['cursor']['source_path'], 'TBD')
+        self.assertEqual(sources['cursor']['repo_url'], 'https://github.com/getcursor/cursor/')
+        self.assertIsNone(sources['cursor']['issue'])
 
     def test_codex_tool_source_filter_returns_empty_result_when_data_missing(self):
         response = self.client.get('/api/daily?days=30&tool_id=codex')
@@ -269,6 +287,17 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(payload['models'], [])
         self.assertEqual(payload['data'], {})
         self.assertEqual(payload['error'], 'Hermes data is unavailable.')
+
+    def test_cursor_tool_source_filter_returns_empty_result_when_data_missing(self):
+        response = self.client.get('/api/daily?days=30&tool_id=cursor')
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+
+        self.assertEqual(payload['selected_tool_id'], 'cursor')
+        self.assertEqual(payload['selected_tool_label'], 'Cursor')
+        self.assertEqual(payload['models'], [])
+        self.assertEqual(payload['data'], {})
+        self.assertEqual(payload['error'], 'Cursor data is unavailable.')
 
     def test_unknown_tool_source_filter_returns_http_400(self):
         response = self.client.get('/api/daily?days=30&tool_id=unknown')
@@ -608,6 +637,118 @@ class DashboardApiTests(unittest.TestCase):
         conn.close()
         dashboard_config.HERMES_STATE_PATH = str(state)
 
+    def _write_cursor_fixture(self, *, session_id: str = 'cursor-1', timestamp_ms: int | None = None) -> None:
+        state = self.cursor_fixture_state_path
+        if state.exists():
+            state.unlink()
+        timestamp_ms = timestamp_ms if timestamp_ms is not None else int(time.time() * 1000) - 3600000
+        conn = sqlite3.connect(state)
+        conn.execute("CREATE TABLE cursorDiskKV (key TEXT PRIMARY KEY, value BLOB)")
+        composer = {
+            'composerId': session_id,
+            'name': 'Fix build failure',
+            'createdAt': timestamp_ms,
+            'lastUpdatedAt': timestamp_ms + 120000,
+            'status': 'completed',
+            'context': {
+                'fileSelections': [
+                    {
+                        'uri': {
+                            'fsPath': '/tmp/cursor-project/src/main.py',
+                        }
+                    }
+                ]
+            },
+            'conversation': [
+                {
+                    'type': 1,
+                    'text': 'help fix build',
+                },
+                {
+                    'type': 2,
+                    'text': 'I inspected build failure and applied fix.',
+                    'usageUuid': f'{session_id}-usage-1',
+                    'tokenCount': {'inputTokens': 1200, 'outputTokens': 300},
+                    'timingInfo': {
+                        'clientStartTime': timestamp_ms,
+                        'clientSettleTime': timestamp_ms + 60000,
+                        'clientEndTime': timestamp_ms + 60000,
+                    },
+                },
+                {
+                    'type': 1,
+                    'text': 'also clean warnings',
+                },
+                {
+                    'type': 2,
+                    'text': 'Warnings cleaned.',
+                    'usageUuid': f'{session_id}-usage-2',
+                    'tokenCount': {'inputTokens': 800, 'outputTokens': 200},
+                    'timingInfo': {
+                        'clientStartTime': timestamp_ms + 61000,
+                        'clientSettleTime': timestamp_ms + 120000,
+                        'clientEndTime': timestamp_ms + 120000,
+                    },
+                },
+            ],
+        }
+        conn.execute(
+            "INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)",
+            (f'composerData:{session_id}', json.dumps(composer)),
+        )
+        conn.commit()
+        conn.close()
+        dashboard_config.CURSOR_STATE_PATH = str(state)
+        dashboard_config.CURSOR_SOURCE_PATH = str(state)
+
+    def test_cursor_records_flow_into_sources_and_history_without_invented_tokens(self):
+        self._write_cursor_fixture()
+
+        overview = self.client.get('/api/overview?days=30').get_json()
+        sources = {item['id']: item for item in overview['tool_sources']}
+        self.assertEqual(sources['cursor']['status'], 'active')
+        self.assertEqual(sources['cursor']['status_label'], 'Active source')
+        self.assertEqual(sources['cursor']['source_type'], 'Cursor global storage SQLite database')
+        self.assertEqual(sources['cursor']['sessions'], 1)
+        self.assertEqual(sources['cursor']['tokens_input'], 2000)
+        self.assertEqual(sources['cursor']['non_cache_input'], 2000)
+        self.assertEqual(sources['cursor']['tokens_output'], 500)
+        self.assertEqual(sources['cursor']['session_tokens'], 2500)
+        self.assertEqual(sources['cursor']['tokens_total'], 2500)
+        self.assertIsNone(sources['cursor']['cache_read'])
+        self.assertIsNone(sources['cursor']['cache_write'])
+        self.assertIn('tokenCount fields', sources['cursor']['metrics_note'])
+
+        models = self.client.get('/api/models?days=30').get_json()
+        cursor_model = next(item for item in models if item['tool_id'] == 'cursor')
+        self.assertEqual(cursor_model['label'], 'Model unavailable (Cursor)')
+        self.assertEqual(cursor_model['sessions'], 1)
+        self.assertEqual(cursor_model['tokens_input'], 2000)
+        self.assertEqual(cursor_model['tokens_output'], 500)
+        self.assertEqual(cursor_model['tokens_total'], 2500)
+        self.assertEqual(cursor_model['tokens_effective_total'], 2500)
+
+        daily = self.client.get('/api/daily?days=30&tool_id=cursor').get_json()
+        self.assertEqual(daily['selected_tool_id'], 'cursor')
+        self.assertEqual(daily['models'][0]['id'], 'cursor/model-unavailable')
+        first_day = daily['dates'][0]
+        self.assertEqual(daily['data'][first_day]['cursor/model-unavailable']['tokens_total'], 2500)
+
+        history = self.client.get('/api/usage-history?limit=20').get_json()
+        cursor_history = next(item for item in history if item['tool_id'] == 'cursor')
+        self.assertEqual(cursor_history['messages'], 4)
+        self.assertEqual(cursor_history['tokens_input'], 2000)
+        self.assertEqual(cursor_history['tokens_output'], 500)
+        self.assertEqual(cursor_history['tokens_total'], 2500)
+        self.assertIn('tokenCount fields', cursor_history['metrics_note'])
+
+    def test_cursor_records_respect_days_window(self):
+        old_ms = int((time.time() - 40 * 86400) * 1000)
+        self._write_cursor_fixture(session_id='cursor-old', timestamp_ms=old_ms)
+
+        records = dashboard_app.cursor_records(days=30)
+        self.assertEqual(records, [])
+
     def test_hermes_records_flow_into_sources_models_daily_and_history(self):
         self._write_hermes_fixture()
 
@@ -744,9 +885,12 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('table/session totals use session-token semantics when labeled', html)
         self.assertIn('Codex CLI becomes active when', html)
         self.assertIn('Hermes becomes active when', html)
+        self.assertIn('Cursor becomes active when', html)
         self.assertNotIn('OpenCode is the active source today', html)
         self.assertIn('Cost is an API-equivalent estimate from matched provider pricing when available', html)
         self.assertIn('not necessarily actual subscription billing', html)
+        self.assertIn('state.vscdb', html)
+        self.assertIn('Cursor token totals come from local composer', html)
 
     def test_overview_page_includes_clickable_metric_tooltips(self):
         response = self.client.get('/')
@@ -870,11 +1014,11 @@ class DashboardApiTests(unittest.TestCase):
         overview = self.client.get('/api/overview?simulate=1&days=31')
         self.assertEqual(overview.status_code, 200)
         payload = overview.get_json()
-        self.assertEqual(payload['active_tool_label'], 'OpenCode + Codex CLI + Hermes (simulated)')
+        self.assertEqual(payload['active_tool_label'], 'OpenCode + Codex CLI + Hermes + Cursor (simulated)')
         self.assertEqual(payload['source_path'], 'simulated multi-source dataset')
         self.assertGreater(payload['total_tokens'], 0)
         sources = {item['id']: item for item in payload['tool_sources']}
-        self.assertEqual(set(sources), {'opencode', 'codex', 'hermes'})
+        self.assertEqual(set(sources), {'opencode', 'codex', 'hermes', 'cursor'})
         for source in sources.values():
             self.assertEqual(source['status'], 'active')
             self.assertEqual(source['status_label'], 'Simulated')
@@ -882,7 +1026,7 @@ class DashboardApiTests(unittest.TestCase):
 
         models = self.client.get('/api/models?simulate=1&days=31').get_json()
         self.assertTrue(models)
-        self.assertEqual({'opencode', 'codex', 'hermes'}, {item['tool_id'] for item in models})
+        self.assertEqual({'opencode', 'codex', 'hermes', 'cursor'}, {item['tool_id'] for item in models})
 
         daily = self.client.get('/api/daily?simulate=1&days=31&top_n=4').get_json()
         self.assertEqual(len(daily['dates']), 31)

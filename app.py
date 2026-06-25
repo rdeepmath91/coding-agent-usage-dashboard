@@ -13,6 +13,7 @@ from dashboard.config import (
     CODEX_STATE_PATH,
     CODEX_SESSIONS_DIR,
     CODEX_SOURCE_PATH,
+    CURSOR_SOURCE_PATH,
     HERMES_STATE_PATH,
     KNOWN_TOOL_IDS,
     TOOL_COLOR_MAP,
@@ -26,9 +27,12 @@ from dashboard.simulation import build_simulated_dataset
 from dashboard.token_metrics import effective_token_total
 from dashboard.sources import (
     aggregate_codex_models,
+    aggregate_cursor_models,
     aggregate_hermes_models,
     codex_overview,
     codex_records,
+    cursor_overview,
+    cursor_records,
     get_db,
     hermes_overview,
     hermes_records,
@@ -129,6 +133,7 @@ def api_overview():
     row = dict(cur.fetchone())
     codex = codex_overview(days)
     hermes = hermes_overview(days)
+    cursor = cursor_overview(days)
     row["days"] = days
     row["token_total_definition"] = "total token volume = input tokens + output tokens; includes cache read/write"
     row["input_token_definition"] = "input tokens = non-cache input + cache read + cache write"
@@ -183,7 +188,15 @@ def api_overview():
             hermes["cache_write"],
             "Hermes token metrics come from ~/.hermes/state.db sessions columns.",
         )
-
+    if cursor:
+        source_overviews["cursor"] = overview_token_totals(
+            cursor["total_sessions"],
+            cursor["total_input"],
+            cursor["total_output"],
+            cursor["cache_read"],
+            cursor["cache_write"],
+            cursor.get("metrics_note"),
+        )
     row.update({
         "total_sessions": 0,
         "total_input": 0,
@@ -208,7 +221,7 @@ def api_overview():
         row["cache_total"] += totals["cache_total"] or 0
 
     session_dates = [row["first_session"], row["last_session"]]
-    for overview in [codex, hermes]:
+    for overview in [codex, hermes, cursor]:
         if overview:
             session_dates.extend([overview["first_session"], overview["last_session"]])
     session_dates = [d for d in session_dates if d]
@@ -227,6 +240,12 @@ def api_overview():
         item = dict(source)
         if item["id"] in source_overviews:
             item.update(source_overviews[item["id"]])
+            if item["id"] == "cursor":
+                item.update({
+                    "cache_read": None,
+                    "cache_write": None,
+                    "cache_total": None,
+                })
         else:
             item.update({
                 "sessions": None,
@@ -310,6 +329,7 @@ def api_models():
     conn.close()
     models.extend(aggregate_codex_models(days))
     models.extend(aggregate_hermes_models(days))
+    models.extend(aggregate_cursor_models(days))
     models.sort(key=lambda item: item.get("tokens_effective_total") or 0, reverse=True)
     for rank, model in enumerate(models, start=1):
         model["rank"] = rank
@@ -324,7 +344,7 @@ def api_daily():
     top_n = parse_top_n(default=8)
     selected_model_id = request.args.get("model_id") or None
     selected_tool_id = request.args.get("tool_id") or None
-    if selected_tool_id and selected_tool_id not in {"opencode", "codex", "hermes"}:
+    if selected_tool_id and selected_tool_id not in {"opencode", "codex", "hermes", "cursor"}:
         if selected_tool_id in KNOWN_TOOL_IDS:
             source_label = tool_source_label(selected_tool_id) or selected_tool_id
             return empty_daily_response(
@@ -472,6 +492,11 @@ def api_daily():
         if not records:
             return empty_daily_response(top_n, selected_tool_id, error_message="Hermes data is unavailable.")
         return jsonify(build_daily_from_model_records(records, top_n, selected_model_id, selected_tool_id))
+    if selected_tool_id == "cursor":
+        records = cursor_records(days)
+        if not records:
+            return empty_daily_response(top_n, selected_tool_id, error_message="Cursor data is unavailable.")
+        return jsonify(build_daily_from_model_records(records, top_n, selected_model_id, selected_tool_id))
 
     where, params = since_clause(days)
     msg_where = where.replace("time_created", "m.time_created")
@@ -540,7 +565,7 @@ def api_daily():
         }
 
     if selected_tool_id is None:
-        for record in codex_records(days) + hermes_records(days):
+        for record in codex_records(days) + hermes_records(days) + cursor_records(days):
             dt = record.get("date")
             if not dt:
                 continue
@@ -757,7 +782,7 @@ def api_usage_history():
             "deletions": row["summary_deletions"],
         })
     conn.close()
-    for record in codex_records(30) + hermes_records(30):
+    for record in codex_records(30) + hermes_records(30) + cursor_records(30):
         sessions.append({
             "id": record["id"],
             "tool": record["tool"],

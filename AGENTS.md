@@ -5,7 +5,7 @@ Guidance for agents working in this repo.
 ## Scope
 
 - This repo is a local Flask dashboard for coding-agent usage data.
-- Active production data sources are OpenCode at `~/.local/share/opencode/opencode.db`, Codex CLI via `~/.codex/state_5.sqlite` when that local state file exists, and Hermes via `~/.hermes/state.db` when that local state DB exists.
+- Active production data sources are OpenCode at `~/.local/share/opencode/opencode.db`, Codex CLI via `~/.codex/state_5.sqlite` when that local state file exists, Hermes via `~/.hermes/state.db` when that local state DB exists, and Cursor via `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` when composer token rows exist there.
 - Keep the current product contract explicit: show where totals come from, avoid ambiguous labels, and do not invent data when a source is missing.
 
 ## Working style
@@ -35,8 +35,10 @@ Guidance for agents working in this repo.
 ## Data and UX rules
 
 - Source provenance must stay visible. If a chart or summary only reflects a subset of OpenCode, Codex CLI, and Hermes, say so.
+- Source provenance must stay visible. If a chart or summary only reflects a subset of OpenCode, Codex CLI, Hermes, and Cursor, say so.
 - Overview `Total Tokens` means full token volume: non-cache input + output assistant-message tokens + cache read/write. Session/model-history totals may still use `Session Tokens` semantics (`non-cache input + output`) when explicitly labeled.
 - Unpriced or unsupported models must remain clearly labeled instead of guessed.
+- Sources that do not expose local token totals or model IDs must remain clearly labeled unavailable instead of guessed.
 - Simulated/demo mode should stay deterministic enough for screenshots, regression checks, and design review.
 - Tooltips and interactive affordances should work for hover, focus, and tap.
 - Accessibility and keyboard interaction are part of done, not polish.
