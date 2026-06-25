@@ -14,6 +14,7 @@ from dashboard.daily import build_daily_from_model_records
 
 
 HOME_PREFIX = f"{Path.home()}/"
+UPDATE_HEADERS = {"X-Dashboard-Update": "1"}
 
 
 def display_like_app(path: Path) -> str:
@@ -832,7 +833,9 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('App Update', html)
         self.assertIn('id="app-update-button"', html)
         self.assertIn("fetch('/api/app-version')", html)
-        self.assertIn("fetch('/api/update', { method: 'POST' })", html)
+        self.assertIn("fetch('/api/update', {", html)
+        self.assertIn("method: 'POST'", html)
+        self.assertIn("headers: { 'X-Dashboard-Update': '1' }", html)
         self.assertIn('Local changes detected. Update manually to avoid overwriting work.', html)
         self.assertIn('Update failed. Run: git pull --ff-only origin main && uv sync', html)
         self.assertIn('Updated to ${result.new_sha}. Restart required.', html)
@@ -841,6 +844,8 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn("if (version.status === 'update_available') return 'Update App';", html)
         self.assertNotIn('id="app-version-pill"', html)
         self.assertNotIn('id="app-update-copy-command"', html)
+        self.assertIn('flex: 0 0 160px;', html)
+        self.assertIn('min-height: 44px;', html)
 
     def test_dashboard_template_includes_cost_breakdown_tooltip_logic(self):
         response = self.client.get('/')
@@ -922,6 +927,28 @@ class DashboardApiTests(unittest.TestCase):
         self.assertTrue(payload['dirty'])
         self.assertEqual(payload['message'], 'Current · main@abc1234')
 
+    def test_app_version_rejects_non_local_requests_without_running_git(self):
+        calls = []
+        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner({}, calls)):
+            response = self.client.get('/api/app-version', environ_base={'REMOTE_ADDR': '192.0.2.10'})
+
+        self.assertEqual(response.status_code, 403)
+        payload = response.get_json()
+        self.assertEqual(payload['status'], 'forbidden')
+        self.assertIn('localhost', payload['error'])
+        self.assertEqual(calls, [])
+
+    def test_update_rejects_missing_dashboard_header_without_running_git(self):
+        calls = []
+        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner({}, calls)):
+            response = self.client.post('/api/update')
+
+        self.assertEqual(response.status_code, 403)
+        payload = response.get_json()
+        self.assertEqual(payload['status'], 'forbidden')
+        self.assertIn('dashboard UI request', payload['error'])
+        self.assertEqual(calls, [])
+
     def test_update_refuses_dirty_worktree_when_main_update_is_available(self):
         calls = []
         command_results = {
@@ -934,7 +961,7 @@ class DashboardApiTests(unittest.TestCase):
             ('git', 'status', '--porcelain'): {'stdout': ' M app.py\n'},
         }
         with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
-            response = self.client.post('/api/update')
+            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
 
         self.assertEqual(response.status_code, 409)
         payload = response.get_json()
@@ -958,7 +985,7 @@ class DashboardApiTests(unittest.TestCase):
             ('git', 'merge-base', '--is-ancestor', 'HEAD', 'origin/main'): {'returncode': 1},
         }
         with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
-            response = self.client.post('/api/update')
+            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
 
         self.assertEqual(response.status_code, 409)
         payload = response.get_json()
@@ -986,7 +1013,7 @@ class DashboardApiTests(unittest.TestCase):
             ('uv', 'sync'): {'stdout': 'Resolved 1 package\n'},
         }
         with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
-            response = self.client.post('/api/update')
+            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
 
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
@@ -1006,7 +1033,7 @@ class DashboardApiTests(unittest.TestCase):
             ('git', 'rev-parse', 'origin/main'): {'stdout': 'abc1234-full\n'},
         }
         with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
-            response = self.client.post('/api/update')
+            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
 
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
@@ -1029,7 +1056,7 @@ class DashboardApiTests(unittest.TestCase):
             ('git', 'pull', '--ff-only', 'origin', 'main'): {'returncode': 128, 'stderr': 'fatal: not possible to fast-forward\n'},
         }
         with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
-            response = self.client.post('/api/update')
+            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
 
         self.assertEqual(response.status_code, 500)
         payload = response.get_json()
@@ -1056,7 +1083,7 @@ class DashboardApiTests(unittest.TestCase):
             ('uv', 'sync'): {'returncode': 2, 'stderr': 'sync failed\n'},
         }
         with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
-            response = self.client.post('/api/update')
+            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
 
         self.assertEqual(response.status_code, 500)
         payload = response.get_json()
@@ -1068,7 +1095,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertLess(calls.index(('git', 'pull', '--ff-only', 'origin', 'main')), calls.index(('uv', 'sync')))
 
     def test_update_rejects_non_local_requests(self):
-        response = self.client.post('/api/update', environ_base={'REMOTE_ADDR': '192.0.2.10'})
+        response = self.client.post('/api/update', headers=UPDATE_HEADERS, environ_base={'REMOTE_ADDR': '192.0.2.10'})
 
         self.assertEqual(response.status_code, 403)
         payload = response.get_json()

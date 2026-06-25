@@ -42,6 +42,8 @@ UPDATE_REMOTE = "origin"
 UPDATE_BRANCH = "main"
 UPDATE_TARGET_REF = f"{UPDATE_REMOTE}/{UPDATE_BRANCH}"
 UPDATE_FALLBACK_COMMAND = f"git pull --ff-only {UPDATE_REMOTE} {UPDATE_BRANCH} && uv sync"
+UPDATE_HEADER_NAME = "X-Dashboard-Update"
+UPDATE_HEADER_VALUE = "1"
 APP_COMMAND_TIMEOUT_SECONDS = 120
 
 
@@ -136,6 +138,10 @@ def app_version_payload() -> dict:
 
 def is_local_request() -> bool:
     return (request.remote_addr or "") in {"127.0.0.1", "::1", "localhost"}
+
+
+def has_update_header() -> bool:
+    return request.headers.get(UPDATE_HEADER_NAME) == UPDATE_HEADER_VALUE
 
 
 def parse_days(default: int | None = 30) -> int | None:
@@ -905,6 +911,14 @@ def api_refresh():
 @app.route("/api/app-version")
 def api_app_version():
     """Return local dashboard version metadata for the update control."""
+    if not is_local_request():
+        return (
+            jsonify({
+                "status": "forbidden",
+                "error": "App version is only available from localhost.",
+            }),
+            403,
+        )
     return jsonify(app_version_payload())
 
 
@@ -916,6 +930,16 @@ def api_update():
             jsonify({
                 "status": "forbidden",
                 "error": "Update is only available from localhost.",
+                "fallback_command": UPDATE_FALLBACK_COMMAND,
+            }),
+            403,
+        )
+
+    if not has_update_header():
+        return (
+            jsonify({
+                "status": "forbidden",
+                "error": "Update requires a dashboard UI request.",
                 "fallback_command": UPDATE_FALLBACK_COMMAND,
             }),
             403,
