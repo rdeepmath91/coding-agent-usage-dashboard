@@ -109,14 +109,14 @@ def app_version_payload() -> dict:
     elif full_sha and target_full_sha:
         if full_sha == target_full_sha or is_git_ancestor(UPDATE_TARGET_REF, "HEAD"):
             status = "current"
-            message = f"Current · {UPDATE_BRANCH}@{target_sha}"
+            message = f"Current version · {target_sha or sha}"
         elif is_git_ancestor("HEAD", UPDATE_TARGET_REF):
             update_available = True
             status = "blocked_dirty" if dirty else "update_available"
             message = (
-                f"Update available · {target_sha} blocked by local changes"
+                f"New version available · {target_sha} blocked by local changes"
                 if dirty
-                else f"Update available · {sha} → {target_sha}"
+                else f"New version available · {target_sha}"
             )
         else:
             status = "manual_required"

@@ -847,6 +847,9 @@ class DashboardApiTests(unittest.TestCase):
         self.assertNotIn('id="app-update-copy-command"', html)
         self.assertIn('flex: 0 0 160px;', html)
         self.assertIn('min-height: 44px;', html)
+        self.assertIn('data-update-status="update_available"', html)
+        self.assertIn('background: var(--bg-secondary);', html)
+        self.assertIn('font-size: 12px;', html)
 
     def test_dashboard_template_includes_cost_breakdown_tooltip_logic(self):
         response = self.client.get('/')
@@ -926,7 +929,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(payload['status'], 'current')
         self.assertFalse(payload['update_available'])
         self.assertTrue(payload['dirty'])
-        self.assertEqual(payload['message'], 'Current · main@abc1234')
+        self.assertEqual(payload['message'], 'Current version · abc1234')
 
     def test_app_version_rejects_non_local_requests_without_running_git(self):
         calls = []
