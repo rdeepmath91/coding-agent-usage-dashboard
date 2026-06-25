@@ -399,6 +399,36 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(build_snapshot.call_count, 2)
         self.assertIsNot(first, second)
 
+    def test_dashboard_snapshot_cache_includes_codex_rollout_signatures(self):
+        self._write_codex_fixture()
+        dashboard_snapshot.clear_dashboard_snapshot_cache()
+
+        with mock.patch.object(dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot) as build_snapshot:
+            first = dashboard_snapshot.load_dashboard_snapshot(30)
+            self.codex_rollout_path.write_text(
+                self.codex_rollout_path.read_text(encoding='utf-8') + '\n' + json.dumps({
+                    "timestamp": "2026-05-30T00:03:00Z",
+                    "type": "event_msg",
+                    "payload": {
+                        "type": "task_complete",
+                        "info": {
+                            "total_token_usage": {
+                                "input_tokens": 1800,
+                                "cached_input_tokens": 500,
+                                "output_tokens": 300,
+                                "reasoning_output_tokens": 50,
+                                "total_tokens": 2100,
+                            }
+                        },
+                    },
+                }) + '\n',
+                encoding='utf-8',
+            )
+            second = dashboard_snapshot.load_dashboard_snapshot(30)
+
+        self.assertEqual(build_snapshot.call_count, 2)
+        self.assertIsNot(first, second)
+
     def test_dashboard_snapshot_is_reused_across_dashboard_endpoints(self):
         with mock.patch.object(dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot) as build_snapshot:
             overview = self.client.get('/api/overview?days=30')
@@ -556,6 +586,7 @@ class DashboardApiTests(unittest.TestCase):
         conn.close()
         dashboard_config.CODEX_STATE_PATH = str(state)
         dashboard_config.CODEX_SOURCE_PATH = str(state)
+        self.codex_rollout_path = rollout
 
     def test_codex_records_flow_into_sources_models_daily_and_history(self):
         self._write_codex_fixture()

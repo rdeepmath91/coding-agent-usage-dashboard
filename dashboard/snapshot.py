@@ -6,6 +6,7 @@ import datetime
 import json
 import logging
 import os
+import sqlite3
 import threading
 from collections import defaultdict, OrderedDict
 from pathlib import Path
@@ -56,11 +57,36 @@ def _sqlite_live_signatures(path: str) -> tuple[tuple[str, int | None, int | Non
     )
 
 
+def _codex_rollout_signatures() -> tuple[tuple[str, int | None, int | None], ...]:
+    codex_state_path = dashboard_config.CODEX_STATE_PATH
+    if not codex_state_path or not Path(codex_state_path).exists():
+        return ()
+    try:
+        conn = sqlite3.connect(f"file:{codex_state_path}?mode=ro", uri=True)
+    except (OSError, sqlite3.Error):
+        return ()
+    try:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT rollout_path
+            FROM threads
+            WHERE rollout_path IS NOT NULL AND rollout_path != ''
+            """
+        ).fetchall()
+    except (OSError, sqlite3.Error):
+        return ()
+    finally:
+        conn.close()
+    signatures = tuple(sorted({_file_signature(row[0]) for row in rows if row and row[0]}))
+    return signatures
+
+
 def _snapshot_key(days: int | None) -> tuple:
     return (
         days,
         *_sqlite_live_signatures(dashboard_config.DB_PATH),
         *_sqlite_live_signatures(dashboard_config.CODEX_STATE_PATH),
+        *_codex_rollout_signatures(),
         _file_signature(dashboard_config.CODEX_SESSIONS_DIR),
         *_sqlite_live_signatures(dashboard_config.HERMES_STATE_PATH),
     )
