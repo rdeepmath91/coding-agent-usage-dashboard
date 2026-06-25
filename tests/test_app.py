@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import app as dashboard_app
@@ -13,6 +14,7 @@ from dashboard.daily import build_daily_from_model_records
 
 
 HOME_PREFIX = f"{Path.home()}/"
+UPDATE_HEADERS = {"X-Dashboard-Update": "1"}
 
 
 def display_like_app(path: Path) -> str:
@@ -828,6 +830,26 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('active sources:', html)
         self.assertIn("document.getElementById('db-path-display').textContent = `${sourceLabel} · ${sourcePath}`", html)
         self.assertNotIn('OpenCode · ~/.local/share/opencode/opencode.db</span>', html)
+        self.assertIn('App Update', html)
+        self.assertIn('id="app-update-button"', html)
+        self.assertIn("fetch('/api/app-version', {", html)
+        self.assertIn("headers: { 'X-Dashboard-Update': '1' }", html)
+        self.assertIn("fetch('/api/update', {", html)
+        self.assertIn("method: 'POST'", html)
+        self.assertIn("headers: { 'X-Dashboard-Update': '1' }", html)
+        self.assertIn('Local changes detected. Update manually to avoid overwriting work.', html)
+        self.assertIn('Update failed. Run: git pull --ff-only origin main && uv sync', html)
+        self.assertIn('Updated to ${result.new_sha}. Restart required.', html)
+        self.assertIn('function appUpdateButtonLabel(version)', html)
+        self.assertIn("if (version.status === 'current') return 'Up to Date';", html)
+        self.assertIn("if (version.status === 'update_available') return 'Update App';", html)
+        self.assertNotIn('id="app-version-pill"', html)
+        self.assertNotIn('id="app-update-copy-command"', html)
+        self.assertIn('flex: 0 0 160px;', html)
+        self.assertIn('min-height: 44px;', html)
+        self.assertIn('data-update-status="update_available"', html)
+        self.assertIn('background: var(--bg-secondary);', html)
+        self.assertIn('font-size: 12px;', html)
 
     def test_dashboard_template_includes_cost_breakdown_tooltip_logic(self):
         response = self.client.get('/')
@@ -839,6 +861,261 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn("input ${fmtCost(breakdown.input)}, output ${fmtCost(breakdown.output)}, cache read ${fmtCost(breakdown.cache_read)}, cache write ${fmtCost(breakdown.cache_write)}", html)
         self.assertIn("const sessionAccounting = m.session_accounting_note ? `; ${m.session_accounting_note}` : '';", html)
         self.assertIn("known subtotal ${fmtCost(m.partial_cost_usd)}", html)
+
+    def _fake_command_runner(self, command_results, calls):
+        def runner(args, *, timeout=dashboard_app.APP_COMMAND_TIMEOUT_SECONDS):
+            args = tuple(args)
+            calls.append(args)
+            if args not in command_results:
+                raise AssertionError(f'unexpected command: {args!r}')
+            result = command_results[args]
+            if isinstance(result, list):
+                if not result:
+                    raise AssertionError(f'no command result left for {args!r}')
+                result = result.pop(0)
+            return subprocess.CompletedProcess(
+                list(args),
+                result.get('returncode', 0),
+                stdout=result.get('stdout', ''),
+                stderr=result.get('stderr', ''),
+            )
+        return runner
+
+    def test_app_version_checks_origin_main_and_reports_blocked_dirty_update(self):
+        calls = []
+        command_results = {
+            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
+            ('git', 'rev-parse', '--abbrev-ref', 'HEAD'): {'stdout': 'main\n'},
+            ('git', 'rev-parse', '--short', 'HEAD'): {'stdout': 'abc1234\n'},
+            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
+            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'def5678\n'},
+            ('git', 'rev-parse', 'origin/main'): {'stdout': 'def5678-full\n'},
+            ('git', 'status', '--porcelain'): {'stdout': ' M app.py\n'},
+            ('git', 'merge-base', '--is-ancestor', 'origin/main', 'HEAD'): {'returncode': 1},
+            ('git', 'merge-base', '--is-ancestor', 'HEAD', 'origin/main'): {'returncode': 0},
+        }
+        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
+            response = self.client.get('/api/app-version', headers=UPDATE_HEADERS)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload['branch'], 'main')
+        self.assertEqual(payload['sha'], 'abc1234')
+        self.assertEqual(payload['target_ref'], 'origin/main')
+        self.assertEqual(payload['target_branch'], 'main')
+        self.assertEqual(payload['target_sha'], 'def5678')
+        self.assertEqual(payload['status'], 'blocked_dirty')
+        self.assertTrue(payload['update_available'])
+        self.assertTrue(payload['dirty'])
+        self.assertIn('M app.py', payload['dirty_details'])
+        self.assertEqual(payload['fallback_command'], 'git pull --ff-only origin main && uv sync')
+
+    def test_app_version_reports_current_even_when_worktree_is_dirty(self):
+        calls = []
+        command_results = {
+            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
+            ('git', 'rev-parse', '--abbrev-ref', 'HEAD'): {'stdout': 'issue-34-update-app\n'},
+            ('git', 'rev-parse', '--short', 'HEAD'): {'stdout': 'abc1234\n'},
+            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
+            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'abc1234\n'},
+            ('git', 'rev-parse', 'origin/main'): {'stdout': 'abc1234-full\n'},
+            ('git', 'status', '--porcelain'): {'stdout': ' M templates/index.html\n'},
+        }
+        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
+            response = self.client.get('/api/app-version', headers=UPDATE_HEADERS)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload['status'], 'current')
+        self.assertFalse(payload['update_available'])
+        self.assertTrue(payload['dirty'])
+        self.assertEqual(payload['message'], 'Current version · abc1234')
+
+    def test_app_version_rejects_non_local_requests_without_running_git(self):
+        calls = []
+        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner({}, calls)):
+            response = self.client.get('/api/app-version', environ_base={'REMOTE_ADDR': '192.0.2.10'})
+
+        self.assertEqual(response.status_code, 403)
+        payload = response.get_json()
+        self.assertEqual(payload['status'], 'forbidden')
+        self.assertIn('localhost', payload['error'])
+        self.assertEqual(calls, [])
+
+    def test_app_version_rejects_missing_dashboard_header_without_running_git(self):
+        calls = []
+        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner({}, calls)):
+            response = self.client.get('/api/app-version')
+
+        self.assertEqual(response.status_code, 403)
+        payload = response.get_json()
+        self.assertEqual(payload['status'], 'forbidden')
+        self.assertIn('dashboard UI request', payload['error'])
+        self.assertEqual(calls, [])
+
+    def test_update_rejects_missing_dashboard_header_without_running_git(self):
+        calls = []
+        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner({}, calls)):
+            response = self.client.post('/api/update')
+
+        self.assertEqual(response.status_code, 403)
+        payload = response.get_json()
+        self.assertEqual(payload['status'], 'forbidden')
+        self.assertIn('dashboard UI request', payload['error'])
+        self.assertEqual(calls, [])
+
+    def test_update_refuses_dirty_worktree_when_main_update_is_available(self):
+        calls = []
+        command_results = {
+            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
+            ('git', 'rev-parse', '--short', 'HEAD'): {'stdout': 'abc1234\n'},
+            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
+            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'def5678\n'},
+            ('git', 'rev-parse', 'origin/main'): {'stdout': 'def5678-full\n'},
+            ('git', 'merge-base', '--is-ancestor', 'origin/main', 'HEAD'): {'returncode': 1},
+            ('git', 'status', '--porcelain'): {'stdout': ' M app.py\n'},
+        }
+        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
+            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
+
+        self.assertEqual(response.status_code, 409)
+        payload = response.get_json()
+        self.assertEqual(payload['status'], 'local_changes')
+        self.assertEqual(payload['old_sha'], 'abc1234')
+        self.assertEqual(payload['new_sha'], 'abc1234')
+        self.assertIn('Local changes detected', payload['error'])
+        self.assertNotIn(('git', 'pull', '--ff-only', 'origin', 'main'), calls)
+        self.assertNotIn(('uv', 'sync'), calls)
+
+    def test_update_refuses_checkout_that_cannot_fast_forward_to_main(self):
+        calls = []
+        command_results = {
+            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
+            ('git', 'rev-parse', '--short', 'HEAD'): {'stdout': 'abc1234\n'},
+            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
+            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'def5678\n'},
+            ('git', 'rev-parse', 'origin/main'): {'stdout': 'def5678-full\n'},
+            ('git', 'merge-base', '--is-ancestor', 'origin/main', 'HEAD'): {'returncode': 1},
+            ('git', 'status', '--porcelain'): {'stdout': ''},
+            ('git', 'merge-base', '--is-ancestor', 'HEAD', 'origin/main'): {'returncode': 1},
+        }
+        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
+            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
+
+        self.assertEqual(response.status_code, 409)
+        payload = response.get_json()
+        self.assertEqual(payload['status'], 'manual_required')
+        self.assertEqual(payload['old_sha'], 'abc1234')
+        self.assertIn('cannot fast-forward to origin/main', payload['error'])
+        self.assertNotIn(('git', 'pull', '--ff-only', 'origin', 'main'), calls)
+        self.assertNotIn(('uv', 'sync'), calls)
+
+    def test_update_runs_fast_forward_pull_then_uv_sync_success(self):
+        calls = []
+        command_results = {
+            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
+            ('git', 'rev-parse', '--short', 'HEAD'): [
+                {'stdout': 'abc1234\n'},
+                {'stdout': 'def5678\n'},
+            ],
+            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
+            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'def5678\n'},
+            ('git', 'rev-parse', 'origin/main'): {'stdout': 'def5678-full\n'},
+            ('git', 'merge-base', '--is-ancestor', 'origin/main', 'HEAD'): {'returncode': 1},
+            ('git', 'status', '--porcelain'): {'stdout': ''},
+            ('git', 'merge-base', '--is-ancestor', 'HEAD', 'origin/main'): {'returncode': 0},
+            ('git', 'pull', '--ff-only', 'origin', 'main'): {'stdout': 'Fast-forward\n'},
+            ('uv', 'sync'): {'stdout': 'Resolved 1 package\n'},
+        }
+        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
+            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload['status'], 'updated')
+        self.assertEqual(payload['old_sha'], 'abc1234')
+        self.assertEqual(payload['new_sha'], 'def5678')
+        self.assertTrue(payload['restart_required'])
+        self.assertLess(calls.index(('git', 'pull', '--ff-only', 'origin', 'main')), calls.index(('uv', 'sync')))
+
+    def test_update_reports_already_current_without_running_pull_or_uv_sync(self):
+        calls = []
+        command_results = {
+            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
+            ('git', 'rev-parse', '--short', 'HEAD'): {'stdout': 'abc1234\n'},
+            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
+            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'abc1234\n'},
+            ('git', 'rev-parse', 'origin/main'): {'stdout': 'abc1234-full\n'},
+        }
+        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
+            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload['status'], 'already_current')
+        self.assertFalse(payload['restart_required'])
+        self.assertNotIn(('git', 'pull', '--ff-only', 'origin', 'main'), calls)
+        self.assertNotIn(('uv', 'sync'), calls)
+
+    def test_update_reports_git_pull_failure_without_uv_sync(self):
+        calls = []
+        command_results = {
+            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
+            ('git', 'rev-parse', '--short', 'HEAD'): {'stdout': 'abc1234\n'},
+            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
+            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'def5678\n'},
+            ('git', 'rev-parse', 'origin/main'): {'stdout': 'def5678-full\n'},
+            ('git', 'merge-base', '--is-ancestor', 'origin/main', 'HEAD'): {'returncode': 1},
+            ('git', 'status', '--porcelain'): {'stdout': ''},
+            ('git', 'merge-base', '--is-ancestor', 'HEAD', 'origin/main'): {'returncode': 0},
+            ('git', 'pull', '--ff-only', 'origin', 'main'): {'returncode': 128, 'stderr': 'fatal: not possible to fast-forward\n'},
+        }
+        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
+            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
+
+        self.assertEqual(response.status_code, 500)
+        payload = response.get_json()
+        self.assertEqual(payload['status'], 'failure')
+        self.assertIn('git pull --ff-only', payload['error'])
+        self.assertIn('fatal: not possible to fast-forward', payload['output'])
+        self.assertNotIn(('uv', 'sync'), calls)
+
+    def test_update_reports_uv_sync_failure_after_successful_pull(self):
+        calls = []
+        command_results = {
+            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
+            ('git', 'rev-parse', '--short', 'HEAD'): [
+                {'stdout': 'abc1234\n'},
+                {'stdout': 'def5678\n'},
+            ],
+            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
+            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'def5678\n'},
+            ('git', 'rev-parse', 'origin/main'): {'stdout': 'def5678-full\n'},
+            ('git', 'merge-base', '--is-ancestor', 'origin/main', 'HEAD'): {'returncode': 1},
+            ('git', 'status', '--porcelain'): {'stdout': ''},
+            ('git', 'merge-base', '--is-ancestor', 'HEAD', 'origin/main'): {'returncode': 0},
+            ('git', 'pull', '--ff-only', 'origin', 'main'): {'stdout': 'Fast-forward\n'},
+            ('uv', 'sync'): {'returncode': 2, 'stderr': 'sync failed\n'},
+        }
+        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
+            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
+
+        self.assertEqual(response.status_code, 500)
+        payload = response.get_json()
+        self.assertEqual(payload['status'], 'failure')
+        self.assertEqual(payload['old_sha'], 'abc1234')
+        self.assertEqual(payload['new_sha'], 'def5678')
+        self.assertIn('uv sync', payload['error'])
+        self.assertIn('sync failed', payload['output'])
+        self.assertLess(calls.index(('git', 'pull', '--ff-only', 'origin', 'main')), calls.index(('uv', 'sync')))
+
+    def test_update_rejects_non_local_requests(self):
+        response = self.client.post('/api/update', headers=UPDATE_HEADERS, environ_base={'REMOTE_ADDR': '192.0.2.10'})
+
+        self.assertEqual(response.status_code, 403)
+        payload = response.get_json()
+        self.assertEqual(payload['status'], 'forbidden')
+        self.assertIn('localhost', payload['error'])
 
     def test_tool_source_render_moves_source_path_into_info_tooltip(self):
         response = self.client.get('/')

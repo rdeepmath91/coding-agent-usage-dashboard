@@ -3,6 +3,7 @@
 
 import datetime
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -35,6 +36,112 @@ from dashboard.sources import (
 )
 
 app = Flask(__name__)
+
+REPO_ROOT = Path(__file__).resolve().parent
+UPDATE_REMOTE = "origin"
+UPDATE_BRANCH = "main"
+UPDATE_TARGET_REF = f"{UPDATE_REMOTE}/{UPDATE_BRANCH}"
+UPDATE_FALLBACK_COMMAND = f"git pull --ff-only {UPDATE_REMOTE} {UPDATE_BRANCH} && uv sync"
+UPDATE_HEADER_NAME = "X-Dashboard-Update"
+UPDATE_HEADER_VALUE = "1"
+APP_COMMAND_TIMEOUT_SECONDS = 120
+
+
+def run_app_command(args: list[str], *, timeout: int = APP_COMMAND_TIMEOUT_SECONDS) -> subprocess.CompletedProcess:
+    """Run a fixed app-maintenance command from the repository root."""
+    return subprocess.run(
+        args,
+        cwd=REPO_ROOT,
+        timeout=timeout,
+        capture_output=True,
+        text=True,
+    )
+
+
+def command_text(result: subprocess.CompletedProcess | None) -> str:
+    if result is None:
+        return ""
+    output = "\n".join(part.strip() for part in [result.stdout, result.stderr] if part and part.strip())
+    return output[-1200:]
+
+
+def git_value(args: list[str]) -> str | None:
+    result = run_app_command(["git", *args], timeout=20)
+    if result.returncode != 0:
+        return None
+    value = result.stdout.strip()
+    return value or None
+
+
+def fetch_update_target() -> subprocess.CompletedProcess:
+    return run_app_command(
+        ["git", "fetch", UPDATE_REMOTE, f"{UPDATE_BRANCH}:refs/remotes/{UPDATE_TARGET_REF}", "--quiet"],
+        timeout=60,
+    )
+
+
+def is_git_ancestor(base_ref: str, tip_ref: str) -> bool:
+    result = run_app_command(["git", "merge-base", "--is-ancestor", base_ref, tip_ref], timeout=20)
+    return result.returncode == 0
+
+
+def app_dirty_state() -> tuple[bool, str]:
+    result = run_app_command(["git", "status", "--porcelain"], timeout=20)
+    if result.returncode != 0:
+        return True, command_text(result) or "Unable to inspect local changes."
+    details = result.stdout.strip()
+    return bool(details), details
+
+
+def app_version_payload() -> dict:
+    fetch = fetch_update_target()
+    branch = git_value(["rev-parse", "--abbrev-ref", "HEAD"]) or "unknown"
+    sha = git_value(["rev-parse", "--short", "HEAD"]) or "unknown"
+    full_sha = git_value(["rev-parse", "HEAD"])
+    target_sha = git_value(["rev-parse", "--short", UPDATE_TARGET_REF])
+    target_full_sha = git_value(["rev-parse", UPDATE_TARGET_REF])
+    dirty, dirty_details = app_dirty_state()
+    update_available = False
+    status = "check_failed"
+    message = f"Could not check latest {UPDATE_BRANCH}."
+    if fetch.returncode != 0:
+        message = command_text(fetch) or message
+    elif full_sha and target_full_sha:
+        if full_sha == target_full_sha or is_git_ancestor(UPDATE_TARGET_REF, "HEAD"):
+            status = "current"
+            message = f"Current version · {target_sha or sha}"
+        elif is_git_ancestor("HEAD", UPDATE_TARGET_REF):
+            update_available = True
+            status = "blocked_dirty" if dirty else "update_available"
+            message = (
+                f"New version available · {target_sha} blocked by local changes"
+                if dirty
+                else f"New version available · {target_sha}"
+            )
+        else:
+            status = "manual_required"
+            message = f"Manual update required · {UPDATE_TARGET_REF}"
+    return {
+        "branch": branch,
+        "sha": sha,
+        "target_branch": UPDATE_BRANCH,
+        "target_ref": UPDATE_TARGET_REF,
+        "target_sha": target_sha,
+        "update_available": update_available,
+        "status": status,
+        "message": message,
+        "dirty": dirty,
+        "dirty_details": dirty_details,
+        "fallback_command": UPDATE_FALLBACK_COMMAND,
+    }
+
+
+def is_local_request() -> bool:
+    return (request.remote_addr or "") in {"127.0.0.1", "::1", "localhost"}
+
+
+def has_update_header() -> bool:
+    return request.headers.get(UPDATE_HEADER_NAME) == UPDATE_HEADER_VALUE
 
 
 def parse_days(default: int | None = 30) -> int | None:
@@ -799,6 +906,179 @@ def api_refresh():
     row = cur.fetchone()
     conn.close()
     return jsonify({"last_updated": row["max_ts"] or 0})
+
+
+@app.route("/api/app-version")
+def api_app_version():
+    """Return local dashboard version metadata for the update control."""
+    if not is_local_request():
+        return (
+            jsonify({
+                "status": "forbidden",
+                "error": "App version is only available from localhost.",
+            }),
+            403,
+        )
+    if not has_update_header():
+        return (
+            jsonify({
+                "status": "forbidden",
+                "error": "App version requires a dashboard UI request.",
+            }),
+            403,
+        )
+    return jsonify(app_version_payload())
+
+
+@app.route("/api/update", methods=["POST"])
+def api_update():
+    """Fast-forward this local dashboard checkout, then sync dependencies."""
+    if not is_local_request():
+        return (
+            jsonify({
+                "status": "forbidden",
+                "error": "Update is only available from localhost.",
+                "fallback_command": UPDATE_FALLBACK_COMMAND,
+            }),
+            403,
+        )
+
+    if not has_update_header():
+        return (
+            jsonify({
+                "status": "forbidden",
+                "error": "Update requires a dashboard UI request.",
+                "fallback_command": UPDATE_FALLBACK_COMMAND,
+            }),
+            403,
+        )
+
+    fetch = fetch_update_target()
+    old_sha = git_value(["rev-parse", "--short", "HEAD"]) or "unknown"
+    old_full_sha = git_value(["rev-parse", "HEAD"])
+    target_sha = git_value(["rev-parse", "--short", UPDATE_TARGET_REF])
+    target_full_sha = git_value(["rev-parse", UPDATE_TARGET_REF])
+    if fetch.returncode != 0 or not old_full_sha or not target_full_sha:
+        return (
+            jsonify({
+                "status": "failure",
+                "old_sha": old_sha,
+                "new_sha": old_sha,
+                "error": f"Could not check latest {UPDATE_BRANCH}.",
+                "output": command_text(fetch),
+                "fallback_command": UPDATE_FALLBACK_COMMAND,
+            }),
+            500,
+        )
+
+    if old_full_sha == target_full_sha or is_git_ancestor(UPDATE_TARGET_REF, "HEAD"):
+        return jsonify({
+            "status": "already_current",
+            "old_sha": old_sha,
+            "new_sha": old_sha,
+            "target_sha": target_sha,
+            "restart_required": False,
+            "output": f"Already up to date with {UPDATE_TARGET_REF}.",
+            "fallback_command": UPDATE_FALLBACK_COMMAND,
+        })
+
+    dirty, dirty_details = app_dirty_state()
+    if dirty:
+        return (
+            jsonify({
+                "status": "local_changes",
+                "old_sha": old_sha,
+                "new_sha": old_sha,
+                "target_sha": target_sha,
+                "error": "Local changes detected. Update manually to avoid overwriting work.",
+                "output": dirty_details,
+                "fallback_command": UPDATE_FALLBACK_COMMAND,
+            }),
+            409,
+        )
+
+    if not is_git_ancestor("HEAD", UPDATE_TARGET_REF):
+        return (
+            jsonify({
+                "status": "manual_required",
+                "old_sha": old_sha,
+                "new_sha": old_sha,
+                "target_sha": target_sha,
+                "error": f"This checkout cannot fast-forward to {UPDATE_TARGET_REF}.",
+                "fallback_command": UPDATE_FALLBACK_COMMAND,
+            }),
+            409,
+        )
+
+    try:
+        pull = run_app_command(["git", "pull", "--ff-only", UPDATE_REMOTE, UPDATE_BRANCH], timeout=120)
+    except subprocess.TimeoutExpired:
+        return (
+            jsonify({
+                "status": "failure",
+                "old_sha": old_sha,
+                "new_sha": old_sha,
+                "target_sha": target_sha,
+                "error": f"Update failed. git pull --ff-only {UPDATE_REMOTE} {UPDATE_BRANCH} timed out.",
+                "fallback_command": UPDATE_FALLBACK_COMMAND,
+            }),
+            500,
+        )
+    if pull.returncode != 0:
+        return (
+            jsonify({
+                "status": "failure",
+                "old_sha": old_sha,
+                "new_sha": old_sha,
+                "target_sha": target_sha,
+                "error": f"Update failed during git pull --ff-only {UPDATE_REMOTE} {UPDATE_BRANCH}.",
+                "output": command_text(pull),
+                "fallback_command": UPDATE_FALLBACK_COMMAND,
+            }),
+            500,
+        )
+
+    try:
+        sync = run_app_command(["uv", "sync"], timeout=180)
+    except subprocess.TimeoutExpired:
+        new_sha = git_value(["rev-parse", "--short", "HEAD"]) or old_sha
+        return (
+            jsonify({
+                "status": "failure",
+                "old_sha": old_sha,
+                "new_sha": new_sha,
+                "target_sha": target_sha,
+                "error": "Update failed. uv sync timed out.",
+                "output": command_text(pull),
+                "fallback_command": UPDATE_FALLBACK_COMMAND,
+            }),
+            500,
+        )
+    new_sha = git_value(["rev-parse", "--short", "HEAD"]) or old_sha
+    if sync.returncode != 0:
+        return (
+            jsonify({
+                "status": "failure",
+                "old_sha": old_sha,
+                "new_sha": new_sha,
+                "target_sha": target_sha,
+                "error": "Update failed during uv sync.",
+                "output": command_text(sync),
+                "fallback_command": UPDATE_FALLBACK_COMMAND,
+            }),
+            500,
+        )
+
+    status = "already_current" if old_sha == new_sha else "updated"
+    return jsonify({
+        "status": status,
+        "old_sha": old_sha,
+        "new_sha": new_sha,
+        "target_sha": target_sha,
+        "restart_required": status == "updated",
+        "output": "\n".join(part for part in [command_text(pull), command_text(sync)] if part),
+        "fallback_command": UPDATE_FALLBACK_COMMAND,
+    })
 
 
 # ── Page Routes ──────────────────────────────────────────────────────────────
