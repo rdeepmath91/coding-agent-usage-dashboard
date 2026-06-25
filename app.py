@@ -20,7 +20,7 @@ from dashboard.daily import build_daily_from_model_records
 from dashboard.pricing import QUALITATIVE_COLORS, chart_color
 from dashboard.simulation import build_simulated_dataset
 from dashboard.snapshot import load_dashboard_snapshot
-from dashboard.sources import codex_records, get_db, hermes_records
+from dashboard.sources import codex_records, cursor_records, get_db, hermes_records
 
 app = Flask(__name__)
 
@@ -196,11 +196,14 @@ def api_overview():
     row = dict(snapshot["opencode"]["overview"])
     codex = snapshot["codex_overview"]
     hermes = snapshot["hermes_overview"]
+    cursor = snapshot["cursor_overview"]
     row["days"] = days
 
     def overview_token_totals(sessions, tokens_input, tokens_output, cache_read, cache_write, metrics_note=None):
         non_cache_input = tokens_input or 0
+        output_available = tokens_output is not None
         output = tokens_output or 0
+        cache_read_available = cache_read is not None
         read = cache_read or 0
         write = cache_write or 0
         session_tokens = non_cache_input + output
@@ -212,8 +215,8 @@ def api_overview():
             "session_tokens": session_tokens,
             "tokens_input": input_tokens,
             "non_cache_input": non_cache_input,
-            "tokens_output": output,
-            "cache_read": read,
+            "tokens_output": tokens_output if output_available else None,
+            "cache_read": cache_read if cache_read_available else None,
             "cache_write": cache_write,
             "cache_total": read + write,
         }
@@ -247,6 +250,15 @@ def api_overview():
             hermes["cache_write"],
             "Hermes token metrics come from ~/.hermes/state.db sessions columns.",
         )
+    if cursor:
+        source_overviews["cursor"] = overview_token_totals(
+            cursor["total_sessions"],
+            cursor["total_input"],
+            cursor["total_output"],
+            cursor["cache_read"],
+            cursor["cache_write"],
+            cursor.get("metrics_note"),
+        )
 
     row.update({
         "total_sessions": 0,
@@ -272,7 +284,7 @@ def api_overview():
         row["cache_total"] += totals["cache_total"] or 0
 
     session_dates = [row["first_session"], row["last_session"]]
-    for overview in [codex, hermes]:
+    for overview in [codex, hermes, cursor]:
         if overview:
             session_dates.extend([overview["first_session"], overview["last_session"]])
     session_dates = [d for d in session_dates if d]
@@ -316,6 +328,7 @@ def api_models():
     models = list(snapshot["opencode"]["models"])
     models.extend(snapshot["codex_models"])
     models.extend(snapshot["hermes_models"])
+    models.extend(snapshot["cursor_models"])
     models.sort(key=lambda item: item.get("tokens_effective_total") or 0, reverse=True)
     for rank, model in enumerate(models, start=1):
         model["rank"] = rank
@@ -332,7 +345,7 @@ def api_daily():
     top_n = parse_top_n(default=8)
     selected_model_id = request.args.get("model_id") or None
     selected_tool_id = request.args.get("tool_id") or None
-    if selected_tool_id and selected_tool_id not in {"opencode", "codex", "hermes"}:
+    if selected_tool_id and selected_tool_id not in {"opencode", "codex", "hermes", "cursor"}:
         if selected_tool_id in KNOWN_TOOL_IDS:
             source_label = tool_source_label(selected_tool_id) or selected_tool_id
             return empty_daily_response(
@@ -483,11 +496,18 @@ def api_daily():
             return empty_daily_response(top_n, selected_tool_id, error_message="Hermes data is unavailable.")
         profile_endpoint("api_daily", started)
         return jsonify(build_daily_from_model_records(records, top_n, selected_model_id, selected_tool_id))
+    if selected_tool_id == "cursor":
+        records = snapshot["cursor_records"]
+        if not records:
+            return empty_daily_response(top_n, selected_tool_id, error_message="Cursor data is unavailable.")
+        profile_endpoint("api_daily", started)
+        return jsonify(build_daily_from_model_records(records, top_n, selected_model_id, selected_tool_id))
 
     records = list(snapshot["opencode"]["daily_records"])
     if selected_tool_id is None:
         records.extend(snapshot["codex_records"])
         records.extend(snapshot["hermes_records"])
+        records.extend(snapshot["cursor_records"])
     profile_endpoint("api_daily", started)
     return jsonify(build_daily_from_model_records(records, top_n, selected_model_id, selected_tool_id))
 
@@ -507,7 +527,7 @@ def api_usage_history():
     history_snapshot = load_dashboard_snapshot(None)
     recent_snapshot = load_dashboard_snapshot(30)
     sessions = list(history_snapshot["opencode"]["history"])
-    for record in recent_snapshot["codex_records"] + recent_snapshot["hermes_records"]:
+    for record in recent_snapshot["codex_records"] + recent_snapshot["hermes_records"] + recent_snapshot["cursor_records"]:
         sessions.append({
             "id": record["id"],
             "tool": record["tool"],

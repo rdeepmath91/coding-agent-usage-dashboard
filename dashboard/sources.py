@@ -1,7 +1,8 @@
-"""Local source adapters for OpenCode, Codex CLI, and Hermes."""
+"""Local source adapters for OpenCode, Codex CLI, Hermes, and Cursor."""
 
 import datetime
 import json
+import os
 import sqlite3
 from pathlib import Path
 
@@ -221,6 +222,306 @@ def codex_overview(days: int | None = None, *, records: list[dict] | None = None
         "first_session": dates[0] if dates else None,
         "last_session": dates[-1] if dates else None,
     }
+
+
+def _cursor_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(f"file:{config.CURSOR_STATE_PATH}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _cursor_nonzero_token_count(item: dict) -> dict | None:
+    token_count = item.get("tokenCount")
+    if not isinstance(token_count, dict):
+        return None
+    input_tokens = _safe_int(token_count.get("inputTokens"), 0) or 0
+    output_tokens = _safe_int(token_count.get("outputTokens"), 0) or 0
+    if input_tokens <= 0 and output_tokens <= 0:
+        return None
+    return {"inputTokens": input_tokens, "outputTokens": output_tokens}
+
+
+def _cursor_title(composer: dict) -> str:
+    name = (composer.get("name") or "").strip()
+    if name:
+        return name[:120]
+    for item in composer.get("conversation") or []:
+        if item.get("type") != 1:
+            continue
+        text = (item.get("text") or "").strip()
+        if text:
+            return text.splitlines()[0][:120]
+    return f"Cursor composer {composer.get('composerId', 'unknown')}"
+
+
+def _cursor_workspace_paths(composer: dict) -> list[str]:
+    paths = []
+    context = composer.get("context") or {}
+    for file_selection in context.get("fileSelections") or []:
+        uri = file_selection.get("uri") or {}
+        path = uri.get("fsPath")
+        if path:
+            paths.append(path)
+    return paths
+
+
+def _cursor_directory(composer: dict) -> str | None:
+    paths = _cursor_workspace_paths(composer)
+    if not paths:
+        return None
+    try:
+        common = Path(os.path.commonpath(paths))
+    except ValueError:
+        return str(Path(paths[0]).parent)
+    if common.is_file() or common.suffix:
+        return str(common.parent)
+    return str(common)
+
+
+def _cursor_timestamp_ms(composer: dict, assistant_items: list[dict]) -> int:
+    item_times = []
+    for item in assistant_items:
+        timing = item.get("timingInfo") or {}
+        for key in ("clientEndTime", "clientSettleTime", "clientRpcSendTime", "clientStartTime"):
+            ts = _safe_int(timing.get(key), None)
+            if ts:
+                item_times.append(ts)
+                break
+    for key in ("lastUpdatedAt", "createdAt"):
+        ts = _safe_int(composer.get(key), None)
+        if ts:
+            item_times.append(ts)
+    return max(item_times) if item_times else 0
+
+
+def _cursor_header_timestamp_ms(composer: dict) -> int:
+    item_times = []
+    for item in composer.get("fullConversationHeadersOnly") or []:
+        if not isinstance(item, dict):
+            continue
+        created_at = item.get("createdAt")
+        if not created_at:
+            continue
+        try:
+            item_times.append(int(datetime.datetime.fromisoformat(created_at.replace("Z", "+00:00")).timestamp() * 1000))
+        except ValueError:
+            continue
+    for key in ("lastUpdatedAt", "conversationCheckpointLastUpdatedAt", "createdAt"):
+        ts = _safe_int(composer.get(key), None)
+        if ts:
+            item_times.append(ts)
+    return max(item_times) if item_times else 0
+
+
+def _cursor_prompt_total_tokens(composer: dict) -> int | None:
+    prompt_breakdown = composer.get("promptTokenBreakdown") or {}
+    total_used = _safe_int(prompt_breakdown.get("totalUsedTokens"), None)
+    if total_used and total_used > 0:
+        return total_used
+    context_used = _safe_int(composer.get("contextTokensUsed"), None)
+    if context_used and context_used > 0:
+        return context_used
+    return None
+
+
+def _cursor_header_counts(composer: dict) -> tuple[int, int]:
+    headers = [item for item in (composer.get("fullConversationHeadersOnly") or []) if isinstance(item, dict)]
+    messages = len([item for item in headers if item.get("type") in {1, 2}])
+    assistant_messages = len([item for item in headers if item.get("type") == 2])
+    return messages, assistant_messages
+
+
+def _cursor_session_record(composer: dict) -> dict | None:
+    assistant_items = []
+    for item in composer.get("conversation") or []:
+        if not isinstance(item, dict) or item.get("type") != 2:
+            continue
+        token_count = _cursor_nonzero_token_count(item)
+        if token_count is None:
+            continue
+        assistant_items.append({"item": item, "token_count": token_count})
+    if not assistant_items:
+        prompt_total_tokens = _cursor_prompt_total_tokens(composer)
+        if not prompt_total_tokens:
+            return None
+        timestamp_ms = _cursor_header_timestamp_ms(composer)
+        timestamp_dt = datetime.datetime.fromtimestamp(timestamp_ms / 1000) if timestamp_ms else None
+        total_messages, assistant_messages = _cursor_header_counts(composer)
+        directory = _cursor_directory(composer)
+        model_label = "Model unavailable (Cursor)"
+        return {
+            "tool": "Cursor",
+            "tool_id": "cursor",
+            "tool_color": config.TOOL_COLOR_MAP.get("cursor", "#6EE7B7"),
+            "source_path": display_path(config.CURSOR_SOURCE_PATH),
+            "id": composer.get("composerId"),
+            "session_id": composer.get("composerId"),
+            "timestamp": timestamp_ms,
+            "created": timestamp_dt.strftime("%Y-%m-%d %H:%M:%S") if timestamp_dt else None,
+            "created_at": timestamp_dt.strftime("%Y-%m-%d %H:%M:%S") if timestamp_dt else None,
+            "updated": timestamp_dt.strftime("%Y-%m-%d %H:%M:%S") if timestamp_dt else None,
+            "date": timestamp_dt.date().isoformat() if timestamp_dt else None,
+            "title": _cursor_title(composer),
+            "directory": directory,
+            "provider": "cursor",
+            "model_id": "model-unavailable",
+            "model": model_label,
+            "chart_model_id": "cursor/model-unavailable",
+            "label": model_label,
+            "sessions": 1,
+            "messages": total_messages,
+            "assistant_messages": assistant_messages,
+            "tokens_input": prompt_total_tokens,
+            "raw_tokens_input": prompt_total_tokens,
+            "tokens_output": None,
+            "tokens_total": prompt_total_tokens,
+            "tokens_effective_total": effective_token_total(prompt_total_tokens, None, None),
+            "cache_read": None,
+            "cache_write": None,
+            "cache_write_available": False,
+            "metrics_note": "Cursor prompt/context token totals come from Cursor globalStorage promptTokenBreakdown.totalUsedTokens or contextTokensUsed. Assistant output, cache metrics, and trusted model IDs are unavailable in this newer local format.",
+            "files_changed": None,
+            "additions": None,
+            "deletions": None,
+        }
+
+    timestamp_ms = _cursor_timestamp_ms(composer, [entry["item"] for entry in assistant_items])
+    timestamp_dt = datetime.datetime.fromtimestamp(timestamp_ms / 1000) if timestamp_ms else None
+    tokens_input = sum(entry["token_count"]["inputTokens"] for entry in assistant_items)
+    tokens_output = sum(entry["token_count"]["outputTokens"] for entry in assistant_items)
+    total_messages = len([item for item in composer.get("conversation") or [] if isinstance(item, dict) and item.get("type") in {1, 2}])
+    directory = _cursor_directory(composer)
+    model_label = "Model unavailable (Cursor)"
+
+    return {
+        "tool": "Cursor",
+        "tool_id": "cursor",
+        "tool_color": config.TOOL_COLOR_MAP.get("cursor", "#6EE7B7"),
+        "source_path": display_path(config.CURSOR_SOURCE_PATH),
+        "id": composer.get("composerId"),
+        "session_id": composer.get("composerId"),
+        "timestamp": timestamp_ms,
+        "created": timestamp_dt.strftime("%Y-%m-%d %H:%M:%S") if timestamp_dt else None,
+        "created_at": timestamp_dt.strftime("%Y-%m-%d %H:%M:%S") if timestamp_dt else None,
+        "updated": timestamp_dt.strftime("%Y-%m-%d %H:%M:%S") if timestamp_dt else None,
+        "date": timestamp_dt.date().isoformat() if timestamp_dt else None,
+        "title": _cursor_title(composer),
+        "directory": directory,
+        "provider": "cursor",
+        "model_id": "model-unavailable",
+        "model": model_label,
+        "chart_model_id": "cursor/model-unavailable",
+        "label": model_label,
+        "sessions": 1,
+        "messages": total_messages,
+        "assistant_messages": len(assistant_items),
+        "tokens_input": tokens_input,
+        "raw_tokens_input": tokens_input,
+        "tokens_output": tokens_output,
+        "tokens_total": tokens_input + tokens_output,
+        "tokens_effective_total": effective_token_total(tokens_input + tokens_output, None, None),
+        "cache_read": None,
+        "cache_write": None,
+        "cache_write_available": False,
+        "metrics_note": "Cursor token totals come from Cursor globalStorage composerData assistant bubble tokenCount fields. Cursor local state does not expose trusted model IDs or cache metrics, so those fields remain unavailable.",
+        "files_changed": None,
+        "additions": None,
+        "deletions": None,
+    }
+
+
+def cursor_records(days: int | None = None) -> list[dict]:
+    """Normalize Cursor composer state into dashboard session records.
+
+    Trust boundary: Cursor stores composer sessions in
+    `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`, table
+    `cursorDiskKV`, keys `composerData:*`. Trusted token metrics come from
+    assistant conversation items with `tokenCount.inputTokens` and
+    `tokenCount.outputTokens`. Cursor local state does not expose stable cache
+    metrics or trusted model IDs for these sessions, so those fields remain
+    unavailable instead of guessed.
+    """
+    if not config.cursor_source_available():
+        return []
+
+    since_ms = None
+    if days is not None:
+        since_ms = int((datetime.datetime.now() - datetime.timedelta(days=days)).timestamp() * 1000)
+
+    records = []
+    conn = _cursor_db()
+    try:
+        rows = conn.execute("SELECT value FROM cursorDiskKV WHERE key LIKE 'composerData:%'").fetchall()
+    finally:
+        conn.close()
+
+    for row in rows:
+        raw_value = row[0]
+        if not raw_value:
+            continue
+        try:
+            composer = json.loads(raw_value)
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(composer, dict):
+            continue
+        record = _cursor_session_record(composer)
+        if not record:
+            continue
+        if since_ms is not None and (record.get("timestamp") or 0) < since_ms:
+            continue
+        records.append(record)
+
+    records.sort(key=lambda item: item.get("timestamp") or 0, reverse=True)
+    return records
+
+
+def cursor_overview(days: int | None = None) -> dict | None:
+    records = cursor_records(days)
+    if not records:
+        return None
+    dates = sorted({r["date"] for r in records if r.get("date")})
+    return {
+        "total_sessions": len({r["session_id"] for r in records}),
+        "total_input": _sum_available(records, "tokens_input") or 0,
+        "total_output": _sum_available(records, "tokens_output") or 0,
+        "total_tokens": _sum_available(records, "tokens_total") or 0,
+        "cache_read": None,
+        "cache_write": None,
+        "first_session": dates[0] if dates else None,
+        "last_session": dates[-1] if dates else None,
+        "metrics_note": "Cursor token totals come from Cursor globalStorage composerData assistant bubble tokenCount fields when present, or prompt/context token totals come from promptTokenBreakdown.totalUsedTokens or contextTokensUsed in newer local records. Cache metrics and trusted model IDs are unavailable locally.",
+    }
+
+
+def aggregate_cursor_models(days: int | None = 30) -> list[dict]:
+    records = cursor_records(days)
+    if not records:
+        return []
+    return [{
+        "tool": "Cursor",
+        "tool_id": "cursor",
+        "tool_color": config.TOOL_COLOR_MAP.get("cursor", "#6EE7B7"),
+        "source_path": display_path(config.CURSOR_SOURCE_PATH),
+        "provider": "cursor",
+        "model_id": "model-unavailable",
+        "label": "Model unavailable (Cursor)",
+        "chart_model_id": "cursor/model-unavailable",
+        "sessions": len({r["session_id"] for r in records}),
+        "messages": sum(r.get("messages") or 0 for r in records),
+        "tokens_input": _sum_available(records, "tokens_input"),
+        "tokens_output": _sum_available(records, "tokens_output"),
+        "tokens_total": _sum_available(records, "tokens_total"),
+        "tokens_effective_total": _sum_available(records, "tokens_total") or 0,
+        "cache_read": None,
+        "cache_write": None,
+        "cache_write_available": False,
+        "estimated_cost": None,
+        "pricing_status": "unpriced",
+        "pricing_source": None,
+        "pricing_model_id": None,
+        "metrics_note": "Cursor token totals are available from composerData tokenCount fields or prompt/context token totals in newer local records, but trusted model IDs are unavailable locally.",
+    }]
 
 def hermes_records(days: int | None = None) -> list[dict]:
     """Normalize Hermes session rows into dashboard records.

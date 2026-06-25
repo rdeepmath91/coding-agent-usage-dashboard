@@ -2,12 +2,15 @@
 
 from pathlib import Path
 import os
+import sqlite3
 
 DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
 CODEX_STATE_PATH = os.path.expanduser("~/.codex/state_5.sqlite")
 CODEX_SESSIONS_DIR = os.path.expanduser("~/.codex/sessions")
 CODEX_SOURCE_PATH = CODEX_STATE_PATH
 HERMES_STATE_PATH = os.path.expanduser("~/.hermes/state.db")
+CURSOR_STATE_PATH = os.path.expanduser("~/Library/Application Support/Cursor/User/globalStorage/state.vscdb")
+CURSOR_SOURCE_PATH = CURSOR_STATE_PATH
 
 
 def display_path(path: str) -> str:
@@ -49,6 +52,17 @@ TOOL_SOURCES = [
         "color": "#EAB308",
         "issue": None,
     },
+    {
+        "id": "cursor",
+        "label": "Cursor",
+        "status": "placeholder",
+        "status_label": "Planned adapter",
+        "source_type": "Cursor global storage SQLite database",
+        "source_path": "TBD",
+        "repo_url": "https://github.com/getcursor/cursor/",
+        "color": "#6EE7B7",
+        "issue": None,
+    },
 ]
 
 TOOL_COLOR_MAP = {item["id"]: item["color"] for item in TOOL_SOURCES}
@@ -63,6 +77,26 @@ def codex_source_available() -> bool:
 def hermes_source_available() -> bool:
     """Return whether local Hermes session state exists on this machine."""
     return Path(HERMES_STATE_PATH).exists()
+
+
+def cursor_source_available() -> bool:
+    """Return whether local Cursor composer state with token rows exists."""
+    state_path = Path(CURSOR_STATE_PATH)
+    if not state_path.exists():
+        return False
+    try:
+        conn = sqlite3.connect(f"file:{CURSOR_STATE_PATH}?mode=ro", uri=True)
+        try:
+            row = conn.execute(
+                "SELECT 1 FROM cursorDiskKV WHERE key LIKE 'composerData:%' AND CAST(value AS TEXT) LIKE '%tokenCount%' AND CAST(value AS TEXT) LIKE '%inputTokens%' LIMIT 1"
+            ).fetchone()
+            if row:
+                return True
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False
+    return False
 
 
 def current_tool_sources() -> list[dict]:
@@ -85,6 +119,13 @@ def current_tool_sources() -> list[dict]:
                 "status_label": "Active source",
                 "source_type": "Hermes session SQLite database",
                 "source_path": display_path(HERMES_STATE_PATH),
+            })
+        elif item["id"] == "cursor" and cursor_source_available():
+            item.update({
+                "status": "active",
+                "status_label": "Active source",
+                "source_type": "Cursor global storage SQLite database",
+                "source_path": display_path(CURSOR_SOURCE_PATH),
             })
         sources.append(item)
     return sources

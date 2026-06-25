@@ -13,6 +13,7 @@ SIMULATED_SOURCE_PATHS = {
     "opencode": "simulated OpenCode database",
     "codex": "simulated Codex state + rollouts",
     "hermes": "simulated Hermes session database",
+    "cursor": "simulated Cursor transcript dataset",
 }
 
 
@@ -51,6 +52,8 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
         {"tool": "Hermes", "tool_id": "hermes", "provider": "nous", "model_id": "nvidia/nemotron-3-ultra:free", "base": 120_000, "burst": 1.05, "session_ratio": 0.13},
         {"tool": "Hermes", "tool_id": "hermes", "provider": "openai-codex", "model_id": "gpt-5.5", "base": 85_000, "burst": 0.82, "session_ratio": 0.10},
         {"tool": "Hermes", "tool_id": "hermes", "provider": "openai-codex", "model_id": "gpt-5.4-mini", "base": 65_000, "burst": 0.62, "session_ratio": 0.08},
+        {"tool": "Cursor", "tool_id": "cursor", "provider": "anthropic", "model_id": "claude-sonnet-4", "base": 110_000, "burst": 0.94, "session_ratio": 0.12},
+        {"tool": "Cursor", "tool_id": "cursor", "provider": "openai", "model_id": "gpt-5.4", "base": 76_000, "burst": 0.74, "session_ratio": 0.09},
     ]
 
     daily = {}
@@ -199,7 +202,7 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
         "last_session": date_keys[-1],
         "days": days,
         "active_tool": "multiple",
-        "active_tool_label": "OpenCode + Codex CLI + Hermes (simulated)",
+        "active_tool_label": "OpenCode + Codex CLI + Hermes + Cursor (simulated)",
         "source_path": "simulated multi-source dataset",
         "token_total_definition": "total token volume = input tokens + output tokens; includes cache read/write",
         "input_token_definition": "input tokens = non-cache input + cache read + cache write",

@@ -208,6 +208,10 @@ class DashboardApiTests(unittest.TestCase):
         dashboard_config.CODEX_SESSIONS_DIR = str(self.codex_sessions_dir)
         dashboard_config.CODEX_SOURCE_PATH = str(self.codex_state_path)
         dashboard_config.HERMES_STATE_PATH = str(self.hermes_state_path)
+        dashboard_config.CURSOR_STATE_PATH = str(self.cursor_state_path)
+        dashboard_config.CURSOR_SOURCE_PATH = str(self.cursor_state_path)
+        if self.cursor_fixture_state_path.exists():
+            self.cursor_fixture_state_path.unlink()
         dashboard_snapshot.clear_dashboard_snapshot_cache()
         self.client = dashboard_app.app.test_client()
 
