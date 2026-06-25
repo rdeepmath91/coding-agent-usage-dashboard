@@ -27,6 +27,7 @@
     p { color: var(--muted); line-height: 1.6; margin: 0; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 22px; max-width: 1240px; margin: 0 auto; }
     figure { margin: 0; padding: 14px; border: 1px solid var(--border); background: rgba(13, 15, 17, 0.82); border-radius: 10px; }
+    .selected { grid-column: 1 / -1; }
     img { display: block; width: 100%; height: auto; border-radius: 6px; border: 1px solid #1f2429; }
     figcaption { padding: 12px 2px 0; color: var(--muted); font-size: 13px; }
     strong { color: var(--text); }
@@ -35,20 +36,20 @@
 <body>
   <header>
     <h1>Issue 34 Update UX Visual Alternatives</h1>
-    <p>Option B is selected. The updated Option B mockup now matches the current narrow Settings page card stack.</p>
+    <p>Selected direction is now a top-level homepage control: visible from Overview, but visually subordinate to analytics.</p>
   </header>
   <main class="grid">
+    <figure class="selected">
+      <img src="selected-homepage-top-level.svg" alt="Selected homepage top-level update control mockup">
+      <figcaption><strong>Selected:</strong> homepage Overview header utility card with app version and Update button.</figcaption>
+    </figure>
     <figure>
-      <img src="option-b-current-settings-aligned.svg" alt="Selected Option B current Settings UI aligned mockup">
-      <figcaption><strong>Selected Option B:</strong> current Settings page card stack with Application Update as a simple fourth card.</figcaption>
+      <img src="option-b-current-settings-aligned.svg" alt="Option B settings card mockup">
+      <figcaption><strong>Earlier Option B:</strong> Settings page card, not selected because it is less visible for normal users.</figcaption>
     </figure>
     <figure>
       <img src="option-a-footer-chip.svg" alt="Option A footer utility chip mockup">
       <figcaption><strong>Option A:</strong> compact footer utility chip.</figcaption>
-    </figure>
-    <figure>
-      <img src="option-c-header-status-rail.svg" alt="Option C header status rail mockup">
-      <figcaption><strong>Option C:</strong> prominent header status rail.</figcaption>
     </figure>
     <figure>
       <img src="option-d-command-modal.svg" alt="Option D command palette update modal mockup">
