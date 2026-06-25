@@ -398,19 +398,12 @@
     margin-bottom: 8px;
   }
   .tool-source-name {
-    border: 0;
-    background: transparent;
-    padding: 0;
     color: inherit;
-    cursor: pointer;
-    font: inherit;
     font-size: 19px;
     line-height: 1.15;
     font-weight: 700;
     text-align: left;
   }
-  .tool-source-name:hover { text-decoration: underline; text-underline-offset: 3px; }
-  .tool-source-name:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
   .tool-source-status { font-family: var(--font-sans); font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0; }
   .tool-source-meta { margin-top: 10px; color: var(--text-secondary); font-family: var(--font-sans); font-size: 12px; line-height: 1.5; }
   .tool-source-summary { color: var(--text-secondary); }
@@ -468,10 +461,27 @@
     visibility: visible;
     transform: translateX(-50%) translateY(0);
   }
-  .tool-source-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 12px; }
+  .tool-source-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-top: 8px; font-size: 12px; }
   .tool-source-filter-state { color: var(--text-tertiary); }
-  .tool-source-repo { color: var(--accent); text-decoration: none; }
-  .tool-source-repo:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 3px; }
+  .tool-source-focus,
+  .tool-source-repo {
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+    font: inherit;
+    padding: 0;
+    text-decoration: none;
+  }
+  .tool-source-focus:hover,
+  .tool-source-focus:focus-visible,
+  .tool-source-repo:hover,
+  .tool-source-repo:focus-visible {
+    outline: none;
+    color: var(--accent-hover);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
   .tool-pill {
     display: inline-flex;
     align-items: center;
@@ -1303,14 +1313,10 @@ function renderToolSources(sources = []) {
     const head = document.createElement('div');
     head.className = 'tool-source-head';
 
-    const name = document.createElement('button');
-    name.type = 'button';
+    const name = document.createElement('div');
     name.className = 'tool-source-name';
     name.style.color = color;
     name.textContent = source.label || 'Unknown';
-    name.setAttribute('aria-pressed', selectedChartToolId === source.id ? 'true' : 'false');
-    name.setAttribute('aria-label', `Focus chart and table on ${source.label || 'selected source'} source`);
-    name.addEventListener('click', () => setChartToolFilter(source.id, source.label || source.id));
 
     const status = document.createElement('span');
     status.className = 'tool-source-status';
@@ -1352,13 +1358,22 @@ function renderToolSources(sources = []) {
       : 'Not connected';
     actions.appendChild(filterState);
 
+    const focus = document.createElement('button');
+    focus.type = 'button';
+    focus.className = 'tool-source-focus';
+    focus.textContent = selectedChartToolId === source.id ? 'Clear focus' : 'Focus chart →';
+    focus.setAttribute('aria-pressed', selectedChartToolId === source.id ? 'true' : 'false');
+    focus.setAttribute('aria-label', `${selectedChartToolId === source.id ? 'Clear' : 'Focus'} chart and table for ${source.label || 'selected source'} source`);
+    focus.addEventListener('click', () => setChartToolFilter(source.id, source.label || source.id));
+    actions.appendChild(focus);
+
     if (source.repo_url) {
       const repo = document.createElement('a');
       repo.className = 'tool-source-repo';
       repo.href = source.repo_url;
       repo.target = '_blank';
       repo.rel = 'noopener noreferrer';
-      repo.textContent = 'repo';
+      repo.textContent = 'Repos →';
       repo.title = source.repo_url;
       repo.setAttribute('aria-label', `${source.label || 'Tool'} upstream repository`);
       actions.appendChild(repo);
@@ -1498,7 +1513,7 @@ async function loadOverview(days) {
       'model output',
       `Output tokens are model-generated response tokens. Cache write is provider-side cached context creation, not model output.`,
     );
-    document.getElementById('tool-sources-subtitle').textContent = `Click a source name to focus the chart. Totals currently come from ${sourceLabel}.`;
+    document.getElementById('tool-sources-subtitle').textContent = `Use Focus chart to inspect a source. Totals currently come from ${sourceLabel}.`;
     renderToolSources(d.tool_sources || []);
     renderUsageSummary();
   } catch(e) {
@@ -1752,7 +1767,6 @@ function updateChartFilterUi() {
     card.classList.toggle('active-filter', active);
     card.classList.toggle('dimmed-by-focus', dimmed);
     const button = card.querySelector('.tool-source-name');
-    button?.setAttribute('aria-pressed', active ? 'true' : 'false');
     const status = card.querySelector('.tool-source-status');
     if (status) {
       status.textContent = active ? 'Focused' : card.dataset.activeSource === 'true' ? 'Included in totals' : 'Planned adapter';
@@ -1764,6 +1778,12 @@ function updateChartFilterUi() {
         : card.dataset.activeSource === 'true'
         ? 'Click to focus chart'
         : 'Not connected';
+    }
+    const focus = card.querySelector('.tool-source-focus');
+    if (focus) {
+      focus.textContent = active ? 'Clear focus' : 'Focus chart →';
+      focus.setAttribute('aria-pressed', active ? 'true' : 'false');
+      focus.setAttribute('aria-label', `${active ? 'Clear' : 'Focus'} chart and table for ${button?.textContent || 'source'} source`);
     }
   });
 }
