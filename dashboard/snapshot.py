@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import sqlite3
+import time
 import threading
 from collections import defaultdict, OrderedDict
 from pathlib import Path
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 PROFILE_REQUESTS = str(os.environ.get("DASHBOARD_PROFILE", "")).strip().lower() in {"1", "true", "yes", "on"}
 SNAPSHOT_CACHE_LIMIT = 8
+SNAPSHOT_RELATIVE_RANGE_TTL_SECONDS = 300
 
 _SNAPSHOT_CACHE: OrderedDict[tuple, dict] = OrderedDict()
 _SNAPSHOT_IN_FLIGHT: dict[tuple, threading.Event] = {}
@@ -81,9 +83,16 @@ def _codex_rollout_signatures() -> tuple[tuple[str, int | None, int | None], ...
     return signatures
 
 
+def _snapshot_relative_range_bucket(days: int | None) -> int | None:
+    if days is None:
+        return None
+    return int(time.time() // SNAPSHOT_RELATIVE_RANGE_TTL_SECONDS)
+
+
 def _snapshot_key(days: int | None) -> tuple:
     return (
         days,
+        _snapshot_relative_range_bucket(days),
         *_sqlite_live_signatures(dashboard_config.DB_PATH),
         *_sqlite_live_signatures(dashboard_config.CODEX_STATE_PATH),
         *_codex_rollout_signatures(),

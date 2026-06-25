@@ -435,6 +435,22 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(build_snapshot.call_count, 2)
         self.assertIsNot(first, second)
 
+    def test_dashboard_snapshot_refreshes_relative_ranges_when_time_bucket_changes(self):
+        dashboard_snapshot.clear_dashboard_snapshot_cache()
+
+        with mock.patch("dashboard.snapshot.time.time") as mock_time, mock.patch.object(
+            dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot
+        ) as build_snapshot:
+            mock_time.return_value = 1000.0
+            first = dashboard_snapshot.load_dashboard_snapshot(30)
+            second = dashboard_snapshot.load_dashboard_snapshot(30)
+            mock_time.return_value = 1300.0
+            third = dashboard_snapshot.load_dashboard_snapshot(30)
+
+        self.assertEqual(build_snapshot.call_count, 2)
+        self.assertIs(first, second)
+        self.assertIsNot(first, third)
+
     def test_dashboard_snapshot_is_reused_across_dashboard_endpoints(self):
         with mock.patch.object(dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot) as build_snapshot:
             overview = self.client.get('/api/overview?days=30')
