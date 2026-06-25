@@ -204,8 +204,8 @@ def _record_tool_source_totals(records: list[dict], source: dict) -> dict:
     })
     return item
 
-def codex_overview(days: int | None = None) -> dict | None:
-    records = codex_records(days)
+def codex_overview(days: int | None = None, *, records: list[dict] | None = None) -> dict | None:
+    records = records if records is not None else codex_records(days)
     if not records:
         return None
     dates = sorted({r["date"] for r in records if r.get("date")})
@@ -326,8 +326,8 @@ def hermes_records(days: int | None = None) -> list[dict]:
         })
     return records
 
-def hermes_overview(days: int | None = None) -> dict | None:
-    records = hermes_records(days)
+def hermes_overview(days: int | None = None, *, records: list[dict] | None = None) -> dict | None:
+    records = records if records is not None else hermes_records(days)
     if not records:
         return None
     dates = sorted({r["date"] for r in records if r.get("date")})
@@ -356,9 +356,9 @@ def _trusted_hermes_accounting_cost(record: dict) -> float | None:
     return accounted_cost
 
 
-def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
+def aggregate_hermes_models(days: int | None = 30, *, records: list[dict] | None = None) -> list[dict]:
     grouped = {}
-    for record in hermes_records(days):
+    for record in (records if records is not None else hermes_records(days)):
         key = (record["provider"], record["model_id"])
         agg = grouped.setdefault(key, {
             "tool": "Hermes",
@@ -459,9 +459,9 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
             ))
     return models
 
-def aggregate_codex_models(days: int | None = 30) -> list[dict]:
+def aggregate_codex_models(days: int | None = 30, *, records: list[dict] | None = None) -> list[dict]:
     grouped = {}
-    for record in codex_records(days):
+    for record in (records if records is not None else codex_records(days)):
         key = (record["provider"], record["model_id"])
         agg = grouped.setdefault(key, {
             "tool": "Codex CLI",

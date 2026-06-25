@@ -11,6 +11,7 @@ import app as dashboard_app
 from dashboard import config as dashboard_config
 from dashboard import pricing as dashboard_pricing
 from dashboard.daily import build_daily_from_model_records
+import dashboard.snapshot as dashboard_snapshot
 
 
 HOME_PREFIX = f"{Path.home()}/"
@@ -207,6 +208,7 @@ class DashboardApiTests(unittest.TestCase):
         dashboard_config.CODEX_SESSIONS_DIR = str(self.codex_sessions_dir)
         dashboard_config.CODEX_SOURCE_PATH = str(self.codex_state_path)
         dashboard_config.HERMES_STATE_PATH = str(self.hermes_state_path)
+        dashboard_snapshot.clear_dashboard_snapshot_cache()
         self.client = dashboard_app.app.test_client()
 
     def test_overview_exposes_tool_source_metadata(self):
@@ -333,6 +335,19 @@ class DashboardApiTests(unittest.TestCase):
 
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]['id'], 'sess-1')
+
+    def test_dashboard_snapshot_is_reused_across_dashboard_endpoints(self):
+        with mock.patch.object(dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot) as build_snapshot:
+            overview = self.client.get('/api/overview?days=30')
+            models = self.client.get('/api/models?days=30')
+            daily = self.client.get('/api/daily?days=30&top_n=8')
+            history = self.client.get('/api/usage-history?limit=30')
+
+        self.assertEqual(overview.status_code, 200)
+        self.assertEqual(models.status_code, 200)
+        self.assertEqual(daily.status_code, 200)
+        self.assertEqual(history.status_code, 200)
+        self.assertEqual(build_snapshot.call_count, 1)
 
     def test_daily_other_zero_bucket_preserves_cache_fields(self):
         payload = build_daily_from_model_records([
