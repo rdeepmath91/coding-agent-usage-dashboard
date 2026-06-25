@@ -354,9 +354,9 @@ class DashboardApiTests(unittest.TestCase):
                 json.dumps({"id": "gpt-5.5", "providerID": "openai"}),
                 111,
                 222,
-                0,
-                0,
-                0,
+                7,
+                24,
+                6,
                 old_created_ms,
                 old_created_ms + 60000,
             ),
@@ -382,6 +382,12 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(old['tokens_input'], 111)
         self.assertEqual(old['tokens_output'], 222)
         self.assertEqual(old['tokens_total'], 333)
+        self.assertEqual(old['files_changed'], 7)
+        self.assertEqual(old['additions'], 24)
+        self.assertEqual(old['deletions'], 6)
+        self.assertNotIn('summary_files', old)
+        self.assertNotIn('summary_additions', old)
+        self.assertNotIn('summary_deletions', old)
 
     def test_dashboard_snapshot_cache_includes_wal_signatures(self):
         wal_path = Path(f'{self.db_path}-wal')

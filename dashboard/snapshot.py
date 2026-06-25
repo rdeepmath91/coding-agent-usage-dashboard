@@ -354,9 +354,9 @@ def _load_opencode_snapshot(days: int | None) -> dict:
             "tokens_input": _safe_int(row.get("tokens_input"), 0),
             "tokens_output": _safe_int(row.get("tokens_output"), 0),
             "tokens_total": _safe_int(row.get("tokens_input"), 0) + _safe_int(row.get("tokens_output"), 0),
-            "summary_files": _safe_int(row.get("summary_files"), 0),
-            "summary_additions": _safe_int(row.get("summary_additions"), 0),
-            "summary_deletions": _safe_int(row.get("summary_deletions"), 0),
+            "files_changed": _safe_int(row.get("summary_files"), 0),
+            "additions": _safe_int(row.get("summary_additions"), 0),
+            "deletions": _safe_int(row.get("summary_deletions"), 0),
         })
 
     return {
