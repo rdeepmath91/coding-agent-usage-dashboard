@@ -832,7 +832,8 @@ class DashboardApiTests(unittest.TestCase):
         self.assertNotIn('OpenCode · ~/.local/share/opencode/opencode.db</span>', html)
         self.assertIn('App Update', html)
         self.assertIn('id="app-update-button"', html)
-        self.assertIn("fetch('/api/app-version')", html)
+        self.assertIn("fetch('/api/app-version', {", html)
+        self.assertIn("headers: { 'X-Dashboard-Update': '1' }", html)
         self.assertIn("fetch('/api/update', {", html)
         self.assertIn("method: 'POST'", html)
         self.assertIn("headers: { 'X-Dashboard-Update': '1' }", html)
@@ -891,7 +892,7 @@ class DashboardApiTests(unittest.TestCase):
             ('git', 'merge-base', '--is-ancestor', 'HEAD', 'origin/main'): {'returncode': 0},
         }
         with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
-            response = self.client.get('/api/app-version')
+            response = self.client.get('/api/app-version', headers=UPDATE_HEADERS)
 
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
@@ -918,7 +919,7 @@ class DashboardApiTests(unittest.TestCase):
             ('git', 'status', '--porcelain'): {'stdout': ' M templates/index.html\n'},
         }
         with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
-            response = self.client.get('/api/app-version')
+            response = self.client.get('/api/app-version', headers=UPDATE_HEADERS)
 
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
@@ -936,6 +937,17 @@ class DashboardApiTests(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload['status'], 'forbidden')
         self.assertIn('localhost', payload['error'])
+        self.assertEqual(calls, [])
+
+    def test_app_version_rejects_missing_dashboard_header_without_running_git(self):
+        calls = []
+        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner({}, calls)):
+            response = self.client.get('/api/app-version')
+
+        self.assertEqual(response.status_code, 403)
+        payload = response.get_json()
+        self.assertEqual(payload['status'], 'forbidden')
+        self.assertIn('dashboard UI request', payload['error'])
         self.assertEqual(calls, [])
 
     def test_update_rejects_missing_dashboard_header_without_running_git(self):

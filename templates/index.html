@@ -1233,7 +1233,9 @@ function renderAppVersion(version, options = {}) {
 async function loadAppVersion() {
   renderAppVersion(null, { message: 'Checking app version...' });
   try {
-    const response = await fetch('/api/app-version');
+    const response = await fetch('/api/app-version', {
+      headers: { 'X-Dashboard-Update': '1' },
+    });
     const version = await response.json();
     renderAppVersion(version);
   } catch (error) {

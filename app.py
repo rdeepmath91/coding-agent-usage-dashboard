@@ -919,6 +919,14 @@ def api_app_version():
             }),
             403,
         )
+    if not has_update_header():
+        return (
+            jsonify({
+                "status": "forbidden",
+                "error": "App version requires a dashboard UI request.",
+            }),
+            403,
+        )
     return jsonify(app_version_payload())
 
 
