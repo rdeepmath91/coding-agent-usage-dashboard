@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Option C: Header status rail</title>
+  <desc id="desc">Dashboard overview mockup with a thin build status rail above the page header.</desc>
+  <defs>
+    <linearGradient id="rail" x1="0" x2="1"><stop offset="0" stop-color="#0e1a20"/><stop offset="0.55" stop-color="#111315"/><stop offset="1" stop-color="#16110b"/></linearGradient>
+    <linearGradient id="hot" x1="0" x2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#f59e0b"/></linearGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="12"/></filter>
+  </defs>
+  <rect width="1280" height="720" fill="#08090a"/>
+  <circle cx="958" cy="136" r="126" fill="#38bdf8" opacity="0.08" filter="url(#soft)"/>
+  <circle cx="1008" cy="502" r="160" fill="#f59e0b" opacity="0.06" filter="url(#soft)"/>
+  <rect x="0" y="0" width="224" height="720" fill="#0b0d0f" stroke="#272b30"/>
+  <text x="28" y="48" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="18" font-weight="700">coding agent</text>
+  <text x="158" y="48" fill="#71717a" font-family="JetBrains Mono, ui-monospace, monospace" font-size="18">usage</text>
+  <rect x="16" y="92" width="192" height="38" rx="4" fill="#1a1d20"/>
+  <rect x="0" y="98" width="3" height="26" rx="2" fill="#38bdf8"/>
+  <text x="28" y="116" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="14">☤ Overview</text>
+  <text x="28" y="166" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="14">◇ Models</text>
+  <text x="28" y="214" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="14">◆ Usage</text>
+  <text x="28" y="262" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="14">⚙ Settings</text>
+
+  <g transform="translate(284 46)">
+    <rect width="900" height="48" rx="6" fill="url(#rail)" stroke="#27313a"/>
+    <rect x="0" y="0" width="900" height="2" fill="url(#hot)"/>
+    <text x="20" y="30" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="12">Dashboard build</text>
+    <text x="148" y="30" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="12" font-weight="700">main@a1b2c3d</text>
+    <circle cx="270" cy="25" r="4" fill="#34d399"/>
+    <text x="282" y="30" fill="#d1fae5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="12">clean</text>
+    <text x="346" y="30" fill="#71717a" font-family="JetBrains Mono, ui-monospace, monospace" font-size="12">last checked 2m ago</text>
+    <rect x="788" y="10" width="92" height="28" rx="14" fill="#0b1f28" stroke="#38bdf8"/>
+    <text x="813" y="29" fill="#7dd3fc" font-family="JetBrains Mono, ui-monospace, monospace" font-size="12" font-weight="700">Update</text>
+  </g>
+
+  <g transform="translate(284 136)">
+    <text x="0" y="0" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="38" font-weight="700" letter-spacing="-1">Overview</text>
+    <text x="0" y="30" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="13">Top cards show full token volume. Session totals and cache details appear in secondary lines.</text>
+    <g transform="translate(0 72)">
+      <rect width="170" height="104" rx="4" fill="#0d0f11" stroke="#272b30"/>
+      <text x="16" y="30" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="12">TOTAL TOKENS</text>
+      <text x="16" y="70" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="27" font-weight="700">18.4M</text>
+    </g>
+    <g transform="translate(194 72)">
+      <rect width="170" height="104" rx="4" fill="#0d0f11" stroke="#272b30"/>
+      <text x="16" y="30" fill="#a1a1aa" font-family="JetBrains Mono, ui-monospace, monospace" font-size="12">INPUT TOKENS</text>
+      <text x="16" y="70" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="27" font-weight="700">15.1M</text>
+    </g>
+    <rect x="0" y="218" width="900" height="296" rx="6" fill="#0d0f11" stroke="#272b30"/>
+    <text x="26" y="258" fill="#f4f4f5" font-family="JetBrains Mono, ui-monospace, monospace" font-size="20" font-weight="700">Daily Tokens by Model</text>
+    <rect x="26" y="290" width="848" height="190" rx="4" fill="#090a0b" stroke="#1f2429"/>
+    <polyline points="58,428 150,374 236,392 326,318 424,348 510,284 636,306 760,248 842,270" fill="none" stroke="#38bdf8" stroke-width="4"/>
+    <polyline points="58,450 150,438 236,428 326,402 424,420 510,374 636,388 760,340 842,358" fill="none" stroke="#f59e0b" stroke-width="3" opacity="0.86"/>
+  </g>
+
+  <g transform="translate(862 94)">
+    <path d="M38 0 L76 38 L38 76 L0 38 Z" fill="#111315" stroke="#f59e0b"/>
+    <text x="-166" y="124" fill="#fbbf24" font-family="JetBrains Mono, ui-monospace, monospace" font-size="12">Rail expands during update</text>
+  </g>
+</svg>
