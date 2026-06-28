@@ -928,6 +928,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('Usage Summary', html)
         self.assertIn('usage-summary-primary', html)
         self.assertIn('pricingCoverageLabel', html)
+        self.assertLess(html.index('Daily Tokens by Model'), html.index('Tool Sources'))
         self.assertIn('Peak day:', html)
         self.assertIn('Next: inspect', html)
         self.assertIn('Partial estimate', html)
