@@ -3,13 +3,33 @@
 from pathlib import Path
 import os
 import sqlite3
+import sys
 
 DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
 CODEX_STATE_PATH = os.path.expanduser("~/.codex/state_5.sqlite")
 CODEX_SESSIONS_DIR = os.path.expanduser("~/.codex/sessions")
 CODEX_SOURCE_PATH = CODEX_STATE_PATH
 HERMES_STATE_PATH = os.path.expanduser("~/.hermes/state.db")
-CURSOR_STATE_PATH = os.path.expanduser("~/Library/Application Support/Cursor/User/globalStorage/state.vscdb")
+
+
+def default_cursor_state_path(platform_name: str | None = None, env: dict | None = None) -> str:
+    """Return the default Cursor global-storage SQLite path for this platform."""
+    env = os.environ if env is None else env
+    override = env.get("DASHBOARD_CURSOR_STATE_PATH")
+    if override:
+        return os.path.expanduser(override)
+    platform_name = platform_name or sys.platform
+    if platform_name == "darwin":
+        return os.path.expanduser("~/Library/Application Support/Cursor/User/globalStorage/state.vscdb")
+    if platform_name.startswith("win"):
+        appdata = env.get("APPDATA")
+        if appdata:
+            return os.path.join(appdata, "Cursor", "User", "globalStorage", "state.vscdb")
+        return os.path.expanduser("~/AppData/Roaming/Cursor/User/globalStorage/state.vscdb")
+    return os.path.expanduser("~/.config/Cursor/User/globalStorage/state.vscdb")
+
+
+CURSOR_STATE_PATH = default_cursor_state_path()
 CURSOR_SOURCE_PATH = CURSOR_STATE_PATH
 
 

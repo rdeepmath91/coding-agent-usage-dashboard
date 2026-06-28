@@ -270,6 +270,24 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(sources['cursor']['repo_url'], 'https://github.com/getcursor/cursor/')
         self.assertIsNone(sources['cursor']['issue'])
 
+    def test_cursor_default_state_path_is_platform_aware_and_overridable(self):
+        self.assertEqual(
+            dashboard_config.default_cursor_state_path("linux", {}),
+            str(Path.home() / ".config/Cursor/User/globalStorage/state.vscdb"),
+        )
+        self.assertEqual(
+            dashboard_config.default_cursor_state_path("darwin", {}),
+            str(Path.home() / "Library/Application Support/Cursor/User/globalStorage/state.vscdb"),
+        )
+        self.assertEqual(
+            dashboard_config.default_cursor_state_path("win32", {"APPDATA": r"C:\Users\Ray\AppData\Roaming"}),
+            r"C:\Users\Ray\AppData\Roaming/Cursor/User/globalStorage/state.vscdb",
+        )
+        self.assertEqual(
+            dashboard_config.default_cursor_state_path("linux", {"DASHBOARD_CURSOR_STATE_PATH": "~/cursor/custom.vscdb"}),
+            str(Path.home() / "cursor/custom.vscdb"),
+        )
+
     def test_codex_tool_source_filter_returns_empty_result_when_data_missing(self):
         response = self.client.get('/api/daily?days=30&tool_id=codex')
         self.assertEqual(response.status_code, 200)
@@ -842,6 +860,40 @@ class DashboardApiTests(unittest.TestCase):
         dashboard_config.CURSOR_STATE_PATH = str(state)
         dashboard_config.CURSOR_SOURCE_PATH = str(state)
 
+    def _write_cursor_prompt_fixture(self, *, session_id: str = 'cursor-prompt', timestamp_ms: int | None = None) -> None:
+        state = self.cursor_fixture_state_path
+        if state.exists():
+            state.unlink()
+        timestamp_ms = timestamp_ms if timestamp_ms is not None else int(time.time() * 1000) - 3600000
+        conn = sqlite3.connect(state)
+        conn.execute("CREATE TABLE cursorDiskKV (key TEXT PRIMARY KEY, value BLOB)")
+        composer = {
+            'composerId': session_id,
+            'name': 'Explain token summary',
+            'createdAt': timestamp_ms,
+            'lastUpdatedAt': timestamp_ms + 60000,
+            'contextTokensUsed': 3200,
+            'promptTokenBreakdown': {
+                'totalUsedTokens': 4500,
+            },
+            'fullConversationHeadersOnly': [
+                {'type': 1, 'createdAt': '2026-06-20T10:00:00.000Z'},
+                {'type': 2, 'createdAt': '2026-06-20T10:01:00.000Z'},
+            ],
+            'conversation': [
+                {'type': 1, 'text': 'summarize this repo'},
+                {'type': 2, 'text': 'summary without tokenCount'},
+            ],
+        }
+        conn.execute(
+            "INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)",
+            (f'composerData:{session_id}', json.dumps(composer)),
+        )
+        conn.commit()
+        conn.close()
+        dashboard_config.CURSOR_STATE_PATH = str(state)
+        dashboard_config.CURSOR_SOURCE_PATH = str(state)
+
     def test_cursor_records_flow_into_sources_and_history_without_invented_tokens(self):
         self._write_cursor_fixture()
 
@@ -882,6 +934,27 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(cursor_history['tokens_output'], 500)
         self.assertEqual(cursor_history['tokens_total'], 2500)
         self.assertIn('tokenCount fields', cursor_history['metrics_note'])
+
+    def test_cursor_prompt_context_records_flow_without_invented_output_or_cache(self):
+        self._write_cursor_prompt_fixture()
+
+        records = dashboard_app.cursor_records(days=30)
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record['tokens_input'], 4500)
+        self.assertIsNone(record['tokens_output'])
+        self.assertEqual(record['tokens_total'], 4500)
+        self.assertEqual(record['messages'], 2)
+        self.assertEqual(record['assistant_messages'], 1)
+        self.assertIsNone(record['cache_read'])
+        self.assertIsNone(record['cache_write'])
+        self.assertIn('promptTokenBreakdown.totalUsedTokens', record['metrics_note'])
+
+        overview = self.client.get('/api/overview?days=30').get_json()
+        cursor_source = next(item for item in overview['tool_sources'] if item['id'] == 'cursor')
+        self.assertEqual(cursor_source['tokens_input'], 4500)
+        self.assertIsNone(cursor_source['tokens_output'])
+        self.assertEqual(cursor_source['tokens_total'], 4500)
 
     def test_cursor_records_respect_days_window(self):
         old_ms = int((time.time() - 40 * 86400) * 1000)

@@ -481,10 +481,11 @@ def cursor_overview(days: int | None = None, *, records: list[dict] | None = Non
     if not records:
         return None
     dates = sorted({r["date"] for r in records if r.get("date")})
+    total_output = _sum_available(records, "tokens_output")
     return {
         "total_sessions": len({r["session_id"] for r in records}),
         "total_input": _sum_available(records, "tokens_input") or 0,
-        "total_output": _sum_available(records, "tokens_output") or 0,
+        "total_output": total_output,
         "total_tokens": _sum_available(records, "tokens_total") or 0,
         "cache_read": None,
         "cache_write": None,

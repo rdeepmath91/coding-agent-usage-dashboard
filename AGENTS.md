@@ -5,7 +5,7 @@ Guidance for agents working in this repo.
 ## Scope
 
 - This repo is a local Flask dashboard for coding-agent usage data.
-- Active production data sources are OpenCode at `~/.local/share/opencode/opencode.db`, Codex CLI via `~/.codex/state_5.sqlite` when that local state file exists, Hermes via `~/.hermes/state.db` when that local state DB exists, and Cursor via `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` when composer token rows exist there.
+- Active production data sources are OpenCode at `~/.local/share/opencode/opencode.db`, Codex CLI via `~/.codex/state_5.sqlite` when that local state file exists, Hermes via `~/.hermes/state.db` when that local state DB exists, and Cursor via local global storage when composer token rows exist there. Cursor defaults to `~/.config/Cursor/User/globalStorage/state.vscdb` on Linux and `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` on macOS, with `DASHBOARD_CURSOR_STATE_PATH` available for custom locations.
 - Keep the current product contract explicit: show where totals come from, avoid ambiguous labels, and do not invent data when a source is missing.
 
 ## Working style

@@ -201,6 +201,7 @@ def api_overview():
 
     def overview_token_totals(sessions, tokens_input, tokens_output, cache_read, cache_write, metrics_note=None):
         non_cache_input = tokens_input or 0
+        output_available = tokens_output is not None
         output = tokens_output or 0
         cache_read_available = cache_read is not None
         read = cache_read or 0
@@ -214,7 +215,7 @@ def api_overview():
             "session_tokens": session_tokens,
             "tokens_input": input_tokens,
             "non_cache_input": non_cache_input,
-            "tokens_output": output,
+            "tokens_output": tokens_output if output_available else None,
             "cache_read": cache_read if cache_read_available else None,
             "cache_write": cache_write,
             "cache_total": read + write,
