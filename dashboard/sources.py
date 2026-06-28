@@ -8,7 +8,7 @@ from pathlib import Path
 
 from . import config
 from .config import display_path
-from .pricing import estimate_cost, normalize_model
+from .pricing import estimate_cost, normalize_model, openrouter_model_url, pricing_model_resolution
 from .token_metrics import effective_token_total
 
 
@@ -205,8 +205,8 @@ def _record_tool_source_totals(records: list[dict], source: dict) -> dict:
     })
     return item
 
-def codex_overview(days: int | None = None) -> dict | None:
-    records = codex_records(days)
+def codex_overview(days: int | None = None, *, records: list[dict] | None = None) -> dict | None:
+    records = records if records is not None else codex_records(days)
     if not records:
         return None
     dates = sorted({r["date"] for r in records if r.get("date")})
@@ -476,8 +476,8 @@ def cursor_records(days: int | None = None) -> list[dict]:
     return records
 
 
-def cursor_overview(days: int | None = None) -> dict | None:
-    records = cursor_records(days)
+def cursor_overview(days: int | None = None, *, records: list[dict] | None = None) -> dict | None:
+    records = records if records is not None else cursor_records(days)
     if not records:
         return None
     dates = sorted({r["date"] for r in records if r.get("date")})
@@ -494,8 +494,8 @@ def cursor_overview(days: int | None = None) -> dict | None:
     }
 
 
-def aggregate_cursor_models(days: int | None = 30) -> list[dict]:
-    records = cursor_records(days)
+def aggregate_cursor_models(days: int | None = 30, *, records: list[dict] | None = None) -> list[dict]:
+    records = records if records is not None else cursor_records(days)
     if not records:
         return []
     return [{
@@ -627,8 +627,8 @@ def hermes_records(days: int | None = None) -> list[dict]:
         })
     return records
 
-def hermes_overview(days: int | None = None) -> dict | None:
-    records = hermes_records(days)
+def hermes_overview(days: int | None = None, *, records: list[dict] | None = None) -> dict | None:
+    records = records if records is not None else hermes_records(days)
     if not records:
         return None
     dates = sorted({r["date"] for r in records if r.get("date")})
@@ -657,9 +657,16 @@ def _trusted_hermes_accounting_cost(record: dict) -> float | None:
     return accounted_cost
 
 
-def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
+def _hermes_pricing_url(provider: str, model_id: str) -> str | None:
+    """Return a public model reference URL when Hermes accounting names a known model."""
+    if "/" in (model_id or ""):
+        return openrouter_model_url(model_id)
+    return openrouter_model_url(pricing_model_resolution(provider, model_id).model_id)
+
+
+def aggregate_hermes_models(days: int | None = 30, *, records: list[dict] | None = None) -> list[dict]:
     grouped = {}
-    for record in hermes_records(days):
+    for record in (records if records is not None else hermes_records(days)):
         key = (record["provider"], record["model_id"])
         agg = grouped.setdefault(key, {
             "tool": "Hermes",
@@ -717,6 +724,7 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
                 "pricing_status": "priced",
                 "pricing_source": "Hermes session accounting",
                 "pricing_model_id": item["chart_model_id"],
+                "pricing_url": _hermes_pricing_url(item["provider"], item["model_id"]),
                 "cost_basis": "actual_or_session_estimate",
                 "cost_breakdown": None,
             })
@@ -737,6 +745,7 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
                     "pricing_status": "partial",
                     "pricing_source": accounting_note,
                     "pricing_model_id": item["chart_model_id"],
+                    "pricing_url": _hermes_pricing_url(item["provider"], item["model_id"]),
                     "cost_basis": "partial_actual_or_session_estimate",
                     "partial_cost_usd": accounted_cost,
                     "cost_breakdown": None,
@@ -760,9 +769,9 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
             ))
     return models
 
-def aggregate_codex_models(days: int | None = 30) -> list[dict]:
+def aggregate_codex_models(days: int | None = 30, *, records: list[dict] | None = None) -> list[dict]:
     grouped = {}
-    for record in codex_records(days):
+    for record in (records if records is not None else codex_records(days)):
         key = (record["provider"], record["model_id"])
         agg = grouped.setdefault(key, {
             "tool": "Codex CLI",

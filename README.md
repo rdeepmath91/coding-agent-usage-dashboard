@@ -48,6 +48,9 @@ Then open:
 http://localhost:8321
 ```
 
+Once the dashboard is running a version that includes the homepage `Update App` control,
+future `main` updates can be pulled from the dashboard itself.
+
 For a deterministic fake dataset that is useful for screenshots and UI checks,
 open:
 

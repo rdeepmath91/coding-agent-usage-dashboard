@@ -88,7 +88,17 @@ def cursor_source_available() -> bool:
         conn = sqlite3.connect(f"file:{CURSOR_STATE_PATH}?mode=ro", uri=True)
         try:
             row = conn.execute(
-                "SELECT 1 FROM cursorDiskKV WHERE key LIKE 'composerData:%' AND CAST(value AS TEXT) LIKE '%tokenCount%' AND CAST(value AS TEXT) LIKE '%inputTokens%' LIMIT 1"
+                """
+                SELECT 1
+                FROM cursorDiskKV
+                WHERE key LIKE 'composerData:%'
+                  AND (
+                    (CAST(value AS TEXT) LIKE '%tokenCount%' AND CAST(value AS TEXT) LIKE '%inputTokens%')
+                    OR CAST(value AS TEXT) LIKE '%promptTokenBreakdown%'
+                    OR CAST(value AS TEXT) LIKE '%contextTokensUsed%'
+                  )
+                LIMIT 1
+                """
             ).fetchone()
             if row:
                 return True

@@ -237,6 +237,7 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
             "pricing_status": "unpriced",
             "pricing_source": None,
             "pricing_model_id": None,
+            "pricing_url": None,
             "cost_basis": "simulated_no_billing",
             "cost_breakdown": None,
             "accounted_cost": None,
