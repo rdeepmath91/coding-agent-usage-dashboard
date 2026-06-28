@@ -10,6 +10,7 @@ from pathlib import Path
 import app as dashboard_app
 from dashboard import config as dashboard_config
 from dashboard import pricing as dashboard_pricing
+from dashboard import sources as dashboard_sources
 from dashboard.daily import build_daily_from_model_records
 import dashboard.snapshot as dashboard_snapshot
 
@@ -700,7 +701,7 @@ class DashboardApiTests(unittest.TestCase):
         updated_ms = now_ms - 3600000
         self._write_codex_fixture(created_ms=created_ms, updated_ms=updated_ms, thread_id="codex-long-lived")
 
-        records = dashboard_app.codex_records(days=30)
+        records = dashboard_sources.codex_records(days=30)
         self.assertEqual(len(records), 1)
         record = records[0]
         expected_updated_date = time.strftime('%Y-%m-%d', time.localtime(updated_ms / 1000))
@@ -719,7 +720,7 @@ class DashboardApiTests(unittest.TestCase):
             include_preview=False,
         )
 
-        records = dashboard_app.codex_records(days=30)
+        records = dashboard_sources.codex_records(days=30)
 
         self.assertEqual(len(records), 1)
         record = records[0]
@@ -927,7 +928,7 @@ class DashboardApiTests(unittest.TestCase):
     def test_cursor_prompt_context_records_flow_without_invented_output_or_cache(self):
         self._write_cursor_prompt_fixture()
 
-        records = dashboard_app.cursor_records(days=30)
+        records = dashboard_sources.cursor_records(days=30)
         self.assertEqual(len(records), 1)
         record = records[0]
         self.assertEqual(record['tokens_input'], 4500)
@@ -949,7 +950,7 @@ class DashboardApiTests(unittest.TestCase):
         old_ms = int((time.time() - 40 * 86400) * 1000)
         self._write_cursor_fixture(session_id='cursor-old', timestamp_ms=old_ms)
 
-        records = dashboard_app.cursor_records(days=30)
+        records = dashboard_sources.cursor_records(days=30)
         self.assertEqual(records, [])
 
     def test_hermes_records_flow_into_sources_models_daily_and_history(self):
@@ -1077,7 +1078,7 @@ class DashboardApiTests(unittest.TestCase):
         started_at = time.time() - 40 * 86400
         self._write_hermes_fixture(started_at=started_at, session_id='hermes-old')
 
-        records = dashboard_app.hermes_records(days=30)
+        records = dashboard_sources.hermes_records(days=30)
         self.assertEqual(records, [])
 
 
