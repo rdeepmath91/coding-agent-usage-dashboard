@@ -1282,6 +1282,8 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn("repo.textContent = 'Repos →'", html)
         self.assertIn("const name = document.createElement('div')", html)
         self.assertIn('Use Focus chart to inspect a source', html)
+        self.assertIn('.tool-source-focus:focus-visible', html)
+        self.assertIn('outline: 2px solid var(--accent)', html)
         self.assertNotIn("name.addEventListener('click'", html)
         self.assertNotIn('Click a source name to focus the chart', html)
         self.assertNotIn('meta.textContent = `${sourceType} · Source: ${sourcePath}`', html)

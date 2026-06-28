@@ -561,10 +561,16 @@
     text-decoration: none;
   }
   .tool-source-focus:hover,
+  .tool-source-repo:hover {
+    color: var(--accent-hover);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
   .tool-source-focus:focus-visible,
-  .tool-source-repo:hover,
   .tool-source-repo:focus-visible {
-    outline: none;
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 3px;
     color: var(--accent-hover);
     text-decoration: underline;
     text-underline-offset: 3px;
