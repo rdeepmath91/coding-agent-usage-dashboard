@@ -976,6 +976,8 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn(500, {record['tokens_output'] for record in records})
 
         overview = self.client.get('/api/overview?days=30').get_json()
+        self.assertIsNone(overview['total_output'])
+        self.assertIn('Cursor', overview['active_tool_label'])
         cursor_source = next(item for item in overview['tool_sources'] if item['id'] == 'cursor')
         self.assertEqual(cursor_source['tokens_input'], 6500)
         self.assertIsNone(cursor_source['tokens_output'])

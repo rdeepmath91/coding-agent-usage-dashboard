@@ -135,17 +135,23 @@ def build_overview_payload(snapshot: dict, days: int | None) -> dict:
         "cache_write": 0,
         "cache_total": 0,
     })
+    output_complete = True
     for totals in source_overviews.values():
         row["total_sessions"] += totals["sessions"] or 0
         row["total_input"] += totals["tokens_input"] or 0
         row["non_cache_input"] += totals["non_cache_input"] or 0
-        row["total_output"] += totals["tokens_output"] or 0
+        if totals["tokens_output"] is None:
+            output_complete = False
+        else:
+            row["total_output"] += totals["tokens_output"] or 0
         row["total_tokens"] += totals["tokens_total"] or 0
         row["session_tokens"] += totals["session_tokens"] or 0
         row["cache_read"] += totals["cache_read"] or 0
         if totals["cache_write"] is not None:
             row["cache_write"] += totals["cache_write"] or 0
         row["cache_total"] += totals["cache_total"] or 0
+    if not output_complete:
+        row["total_output"] = None
 
     session_dates = [row["first_session"], row["last_session"]]
     for spec in EXTERNAL_SOURCE_SPECS:
