@@ -60,6 +60,7 @@ def overview_token_totals(
     cache_read,
     cache_write,
     metrics_note: str | None = None,
+    tokens_total: int | None = None,
 ) -> dict:
     non_cache_input = tokens_input or 0
     output_available = tokens_output is not None
@@ -69,10 +70,15 @@ def overview_token_totals(
     write = cache_write or 0
     session_tokens = non_cache_input + output
     input_tokens = non_cache_input + read + write
-    total_tokens = session_tokens + read + write
+    if tokens_total is not None:
+        total_token_volume = tokens_total
+        if not output_available:
+            session_tokens = max(total_token_volume - read - write, 0)
+    else:
+        total_token_volume = session_tokens + read + write
     totals = {
         "sessions": sessions,
-        "tokens_total": total_tokens,
+        "tokens_total": total_token_volume,
         "session_tokens": session_tokens,
         "tokens_input": input_tokens,
         "non_cache_input": non_cache_input,
@@ -108,6 +114,7 @@ def _overview_totals_by_source(snapshot: dict) -> dict[str, dict]:
             overview["cache_read"],
             overview["cache_write"],
             overview.get("metrics_note") or spec["metrics_note"],
+            overview.get("total_tokens") if overview.get("total_output") is None else None,
         )
     return source_overviews
 

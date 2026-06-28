@@ -185,6 +185,12 @@ def _sum_available(records: list[dict], key: str) -> int | None:
         return None
     return sum(values)
 
+def _sum_only_when_complete(records: list[dict], key: str) -> int | None:
+    values = [r.get(key) for r in records]
+    if not values or any(value is None for value in values):
+        return None
+    return sum(values)
+
 def _record_tool_source_totals(records: list[dict], source: dict) -> dict:
     item = dict(source)
     matching = [r for r in records if r.get("tool_id") == item["id"]]
@@ -481,7 +487,7 @@ def cursor_overview(days: int | None = None, *, records: list[dict] | None = Non
     if not records:
         return None
     dates = sorted({r["date"] for r in records if r.get("date")})
-    total_output = _sum_available(records, "tokens_output")
+    total_output = _sum_only_when_complete(records, "tokens_output")
     return {
         "total_sessions": len({r["session_id"] for r in records}),
         "total_input": _sum_available(records, "tokens_input") or 0,
@@ -511,7 +517,7 @@ def aggregate_cursor_models(days: int | None = 30, *, records: list[dict] | None
         "sessions": len({r["session_id"] for r in records}),
         "messages": sum(r.get("messages") or 0 for r in records),
         "tokens_input": _sum_available(records, "tokens_input"),
-        "tokens_output": _sum_available(records, "tokens_output"),
+        "tokens_output": _sum_only_when_complete(records, "tokens_output"),
         "tokens_total": _sum_available(records, "tokens_total"),
         "tokens_effective_total": _sum_available(records, "tokens_total") or 0,
         "cache_read": None,

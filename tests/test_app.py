@@ -946,6 +946,49 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIsNone(cursor_source['tokens_output'])
         self.assertEqual(cursor_source['tokens_total'], 4500)
 
+    def test_cursor_mixed_known_and_unknown_output_keeps_output_unavailable(self):
+        self._write_cursor_fixture(session_id='cursor-token-count')
+        timestamp_ms = int(time.time() * 1000) - 1800000
+        conn = sqlite3.connect(self.cursor_fixture_state_path)
+        composer = {
+            'composerId': 'cursor-prompt-context',
+            'name': 'Context only tokens',
+            'createdAt': timestamp_ms,
+            'lastUpdatedAt': timestamp_ms + 60000,
+            'promptTokenBreakdown': {
+                'totalUsedTokens': 4500,
+            },
+            'conversation': [
+                {'type': 1, 'text': 'summarize this repo'},
+                {'type': 2, 'text': 'summary without tokenCount'},
+            ],
+        }
+        conn.execute(
+            "INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)",
+            ('composerData:cursor-prompt-context', json.dumps(composer)),
+        )
+        conn.commit()
+        conn.close()
+
+        records = dashboard_sources.cursor_records(days=30)
+        self.assertEqual(len(records), 2)
+        self.assertIn(None, {record['tokens_output'] for record in records})
+        self.assertIn(500, {record['tokens_output'] for record in records})
+
+        overview = self.client.get('/api/overview?days=30').get_json()
+        cursor_source = next(item for item in overview['tool_sources'] if item['id'] == 'cursor')
+        self.assertEqual(cursor_source['tokens_input'], 6500)
+        self.assertIsNone(cursor_source['tokens_output'])
+        self.assertEqual(cursor_source['tokens_total'], 7000)
+        self.assertEqual(cursor_source['session_tokens'], 7000)
+
+        models = self.client.get('/api/models?days=30').get_json()
+        cursor_model = next(item for item in models if item['tool_id'] == 'cursor')
+        self.assertEqual(cursor_model['tokens_input'], 6500)
+        self.assertIsNone(cursor_model['tokens_output'])
+        self.assertEqual(cursor_model['tokens_total'], 7000)
+        self.assertEqual(cursor_model['tokens_effective_total'], 7000)
+
     def test_cursor_records_respect_days_window(self):
         old_ms = int((time.time() - 40 * 86400) * 1000)
         self._write_cursor_fixture(session_id='cursor-old', timestamp_ms=old_ms)
