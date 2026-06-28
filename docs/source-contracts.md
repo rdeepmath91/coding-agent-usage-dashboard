@@ -48,9 +48,12 @@ does not infer token counts from message text.
 
 ## Cursor
 
-Cursor local data comes from Cursor global storage SQLite state at
-`~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`, table
-`cursorDiskKV`, keys `composerData:*`.
+Cursor local data comes from Cursor global storage SQLite state, table
+`cursorDiskKV`, keys `composerData:*`. The default path is
+`~/.config/Cursor/User/globalStorage/state.vscdb` on Linux and
+`~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` on macOS.
+Set `DASHBOARD_CURSOR_STATE_PATH` when Cursor stores global state somewhere
+else.
 
 The trusted local fields are:
 
@@ -58,8 +61,12 @@ The trusted local fields are:
 - `createdAt` / `lastUpdatedAt` / assistant `timingInfo.*` -> display timestamp windowing
 - assistant conversation item `tokenCount.inputTokens` -> dashboard non-cache input tokens
 - assistant conversation item `tokenCount.outputTokens` -> output tokens
+- `promptTokenBreakdown.totalUsedTokens` -> prompt/context tokens when assistant bubble `tokenCount` rows are absent
+- `contextTokensUsed` -> prompt/context tokens when `promptTokenBreakdown.totalUsedTokens` is absent
 
-The adapter sums assistant-bubble token counts per composer session. Cursor
-local state does not expose trusted cache metrics or model IDs in a stable
-local contract for these sessions, so the dashboard keeps those fields
-unavailable instead of guessing values.
+The adapter prefers summed assistant-bubble token counts per composer session.
+When newer local records omit bubble counts, it uses prompt/context token totals
+as input/session tokens and leaves assistant output unavailable. Cursor local
+state does not expose trusted cache metrics or model IDs in a stable local
+contract for these sessions, so the dashboard keeps those fields unavailable
+instead of guessing values.

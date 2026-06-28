@@ -255,6 +255,30 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(sources['hermes']['source_path'], 'TBD')
         self.assertEqual(sources['hermes']['repo_url'], 'https://github.com/NousResearch/hermes-agent/')
         self.assertIsNone(sources['hermes']['issue'])
+        self.assertEqual(sources['cursor']['status'], 'placeholder')
+        self.assertEqual(sources['cursor']['status_label'], 'Planned adapter')
+        self.assertEqual(sources['cursor']['color'], '#6EE7B7')
+        self.assertEqual(sources['cursor']['source_path'], 'TBD')
+        self.assertEqual(sources['cursor']['repo_url'], 'https://github.com/getcursor/cursor/')
+        self.assertIsNone(sources['cursor']['issue'])
+
+    def test_cursor_default_state_path_is_platform_aware_and_overridable(self):
+        self.assertEqual(
+            dashboard_config.default_cursor_state_path("linux", {}),
+            str(Path.home() / ".config/Cursor/User/globalStorage/state.vscdb"),
+        )
+        self.assertEqual(
+            dashboard_config.default_cursor_state_path("darwin", {}),
+            str(Path.home() / "Library/Application Support/Cursor/User/globalStorage/state.vscdb"),
+        )
+        self.assertEqual(
+            dashboard_config.default_cursor_state_path("win32", {"APPDATA": r"C:\Users\Ray\AppData\Roaming"}),
+            r"C:\Users\Ray\AppData\Roaming/Cursor/User/globalStorage/state.vscdb",
+        )
+        self.assertEqual(
+            dashboard_config.default_cursor_state_path("linux", {"DASHBOARD_CURSOR_STATE_PATH": "~/cursor/custom.vscdb"}),
+            str(Path.home() / "cursor/custom.vscdb"),
+        )
 
     def test_codex_tool_source_filter_returns_empty_result_when_data_missing(self):
         response = self.client.get('/api/daily?days=30&tool_id=codex')
@@ -752,6 +776,173 @@ class DashboardApiTests(unittest.TestCase):
         conn.commit()
         conn.close()
         dashboard_config.HERMES_STATE_PATH = str(state)
+
+    def _write_cursor_fixture(self, *, session_id: str = 'cursor-1', timestamp_ms: int | None = None) -> None:
+        state = self.cursor_fixture_state_path
+        if state.exists():
+            state.unlink()
+        timestamp_ms = timestamp_ms if timestamp_ms is not None else int(time.time() * 1000) - 3600000
+        conn = sqlite3.connect(state)
+        conn.execute("CREATE TABLE cursorDiskKV (key TEXT PRIMARY KEY, value BLOB)")
+        composer = {
+            'composerId': session_id,
+            'name': 'Fix build failure',
+            'createdAt': timestamp_ms,
+            'lastUpdatedAt': timestamp_ms + 120000,
+            'status': 'completed',
+            'context': {
+                'fileSelections': [
+                    {
+                        'uri': {
+                            'fsPath': '/tmp/cursor-project/src/main.py',
+                        }
+                    }
+                ]
+            },
+            'conversation': [
+                {
+                    'type': 1,
+                    'text': 'help fix build',
+                },
+                {
+                    'type': 2,
+                    'text': 'I inspected build failure and applied fix.',
+                    'usageUuid': f'{session_id}-usage-1',
+                    'tokenCount': {'inputTokens': 1200, 'outputTokens': 300},
+                    'timingInfo': {
+                        'clientStartTime': timestamp_ms,
+                        'clientSettleTime': timestamp_ms + 60000,
+                        'clientEndTime': timestamp_ms + 60000,
+                    },
+                },
+                {
+                    'type': 1,
+                    'text': 'also clean warnings',
+                },
+                {
+                    'type': 2,
+                    'text': 'Warnings cleaned.',
+                    'usageUuid': f'{session_id}-usage-2',
+                    'tokenCount': {'inputTokens': 800, 'outputTokens': 200},
+                    'timingInfo': {
+                        'clientStartTime': timestamp_ms + 61000,
+                        'clientSettleTime': timestamp_ms + 120000,
+                        'clientEndTime': timestamp_ms + 120000,
+                    },
+                },
+            ],
+        }
+        conn.execute(
+            "INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)",
+            (f'composerData:{session_id}', json.dumps(composer)),
+        )
+        conn.commit()
+        conn.close()
+        dashboard_config.CURSOR_STATE_PATH = str(state)
+        dashboard_config.CURSOR_SOURCE_PATH = str(state)
+
+    def _write_cursor_prompt_fixture(self, *, session_id: str = 'cursor-prompt', timestamp_ms: int | None = None) -> None:
+        state = self.cursor_fixture_state_path
+        if state.exists():
+            state.unlink()
+        timestamp_ms = timestamp_ms if timestamp_ms is not None else int(time.time() * 1000) - 3600000
+        conn = sqlite3.connect(state)
+        conn.execute("CREATE TABLE cursorDiskKV (key TEXT PRIMARY KEY, value BLOB)")
+        composer = {
+            'composerId': session_id,
+            'name': 'Explain token summary',
+            'createdAt': timestamp_ms,
+            'lastUpdatedAt': timestamp_ms + 60000,
+            'contextTokensUsed': 3200,
+            'promptTokenBreakdown': {
+                'totalUsedTokens': 4500,
+            },
+            'fullConversationHeadersOnly': [
+                {'type': 1, 'createdAt': '2026-06-20T10:00:00.000Z'},
+                {'type': 2, 'createdAt': '2026-06-20T10:01:00.000Z'},
+            ],
+            'conversation': [
+                {'type': 1, 'text': 'summarize this repo'},
+                {'type': 2, 'text': 'summary without tokenCount'},
+            ],
+        }
+        conn.execute(
+            "INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)",
+            (f'composerData:{session_id}', json.dumps(composer)),
+        )
+        conn.commit()
+        conn.close()
+        dashboard_config.CURSOR_STATE_PATH = str(state)
+        dashboard_config.CURSOR_SOURCE_PATH = str(state)
+
+    def test_cursor_records_flow_into_sources_and_history_without_invented_tokens(self):
+        self._write_cursor_fixture()
+
+        overview = self.client.get('/api/overview?days=30').get_json()
+        sources = {item['id']: item for item in overview['tool_sources']}
+        self.assertEqual(sources['cursor']['status'], 'active')
+        self.assertEqual(sources['cursor']['status_label'], 'Active source')
+        self.assertEqual(sources['cursor']['source_type'], 'Cursor global storage SQLite database')
+        self.assertEqual(sources['cursor']['sessions'], 1)
+        self.assertEqual(sources['cursor']['tokens_input'], 2000)
+        self.assertEqual(sources['cursor']['non_cache_input'], 2000)
+        self.assertEqual(sources['cursor']['tokens_output'], 500)
+        self.assertEqual(sources['cursor']['session_tokens'], 2500)
+        self.assertEqual(sources['cursor']['tokens_total'], 2500)
+        self.assertIsNone(sources['cursor']['cache_read'])
+        self.assertIsNone(sources['cursor']['cache_write'])
+        self.assertIn('tokenCount fields', sources['cursor']['metrics_note'])
+
+        models = self.client.get('/api/models?days=30').get_json()
+        cursor_model = next(item for item in models if item['tool_id'] == 'cursor')
+        self.assertEqual(cursor_model['label'], 'Model unavailable (Cursor)')
+        self.assertEqual(cursor_model['sessions'], 1)
+        self.assertEqual(cursor_model['tokens_input'], 2000)
+        self.assertEqual(cursor_model['tokens_output'], 500)
+        self.assertEqual(cursor_model['tokens_total'], 2500)
+        self.assertEqual(cursor_model['tokens_effective_total'], 2500)
+
+        daily = self.client.get('/api/daily?days=30&tool_id=cursor').get_json()
+        self.assertEqual(daily['selected_tool_id'], 'cursor')
+        self.assertEqual(daily['models'][0]['id'], 'cursor/model-unavailable')
+        first_day = daily['dates'][0]
+        self.assertEqual(daily['data'][first_day]['cursor/model-unavailable']['tokens_total'], 2500)
+
+        history = self.client.get('/api/usage-history?limit=20').get_json()
+        cursor_history = next(item for item in history if item['tool_id'] == 'cursor')
+        self.assertEqual(cursor_history['messages'], 4)
+        self.assertEqual(cursor_history['tokens_input'], 2000)
+        self.assertEqual(cursor_history['tokens_output'], 500)
+        self.assertEqual(cursor_history['tokens_total'], 2500)
+        self.assertIn('tokenCount fields', cursor_history['metrics_note'])
+
+    def test_cursor_prompt_context_records_flow_without_invented_output_or_cache(self):
+        self._write_cursor_prompt_fixture()
+
+        records = dashboard_app.cursor_records(days=30)
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record['tokens_input'], 4500)
+        self.assertIsNone(record['tokens_output'])
+        self.assertEqual(record['tokens_total'], 4500)
+        self.assertEqual(record['messages'], 2)
+        self.assertEqual(record['assistant_messages'], 1)
+        self.assertIsNone(record['cache_read'])
+        self.assertIsNone(record['cache_write'])
+        self.assertIn('promptTokenBreakdown.totalUsedTokens', record['metrics_note'])
+
+        overview = self.client.get('/api/overview?days=30').get_json()
+        cursor_source = next(item for item in overview['tool_sources'] if item['id'] == 'cursor')
+        self.assertEqual(cursor_source['tokens_input'], 4500)
+        self.assertIsNone(cursor_source['tokens_output'])
+        self.assertEqual(cursor_source['tokens_total'], 4500)
+
+    def test_cursor_records_respect_days_window(self):
+        old_ms = int((time.time() - 40 * 86400) * 1000)
+        self._write_cursor_fixture(session_id='cursor-old', timestamp_ms=old_ms)
+
+        records = dashboard_app.cursor_records(days=30)
+        self.assertEqual(records, [])
 
     def test_hermes_records_flow_into_sources_models_daily_and_history(self):
         self._write_hermes_fixture()
