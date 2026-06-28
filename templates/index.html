@@ -115,6 +115,93 @@
     margin-top: 4px;
   }
 
+  .app-update-panel {
+    min-width: 0;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-left: 1px solid rgb(56 189 248 / 0.35);
+    padding: 4px 0 4px 22px;
+  }
+  .app-update-title {
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .app-update-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .app-update-button {
+    flex: 0 0 160px;
+    min-height: 44px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+  }
+  .app-update-button[data-update-status="update_available"] {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #041016;
+  }
+  .app-update-button[data-update-status="update_available"]:hover:not(:disabled),
+  .app-update-button[data-update-status="update_available"]:focus-visible:not(:disabled) {
+    outline: none;
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
+  .app-update-button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .app-update-button:disabled {
+    cursor: default;
+    opacity: 1;
+  }
+  .app-update-button[data-update-status="update_available"]:disabled {
+    opacity: 0.72;
+  }
+  .app-update-status {
+    min-height: 17px;
+    margin-top: 7px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .app-update-status.success { color: var(--green); }
+  .app-update-status.warning { color: var(--orange); }
+  .app-update-status.error { color: var(--red); }
+  .app-update-fallback {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .app-update-fallback.visible { display: flex; }
+  .app-update-fallback code {
+    min-width: 0;
+    flex: 1;
+    overflow: auto;
+    white-space: nowrap;
+    color: var(--accent-hover);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
   /* Controls bar */
   .controls {
     display: flex;
@@ -147,7 +234,7 @@
 
   .usage-summary {
     display: grid;
-    grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
+    grid-template-columns: minmax(140px, 180px) minmax(0, 1fr) minmax(260px, 320px);
     gap: 18px;
     align-items: stretch;
     margin-bottom: 18px;
@@ -664,6 +751,8 @@
   }
   .data-table .model-cell { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
   .data-table .num { text-align: right; font-family: var(--font-mono); }
+  .data-table .cost-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+  .data-table .cost-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
   .data-table .token-cell { color: var(--accent); font-weight: 600; }
   .chart-focus-button {
     margin-left: 10px;
@@ -823,12 +912,15 @@
   @media (max-width: 1280px) {
     .stat-cards { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
     .tool-source-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    .usage-summary { grid-template-columns: minmax(140px, 180px) minmax(0, 1fr); }
+    .app-update-panel { grid-column: 1 / -1; border-left: 0; border-top: 1px solid rgb(56 189 248 / 0.35); padding: 14px 0 0; }
   }
 
   @media (max-width: 800px) {
     .app-layout { display: block; }
     .sidebar { display: none; }
     .main-area { padding: 24px 16px; }
+    .app-update-button { width: 100%; }
     .usage-summary { grid-template-columns: 1fr; gap: 10px; }
     .usage-summary-eyebrow { border-right: 0; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
     .stat-cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
@@ -879,6 +971,16 @@
         <div class="usage-summary-line" id="usage-summary-secondary">Pricing and peak-day coverage load with chart data.</div>
         <div class="usage-summary-line" id="usage-summary-next">Next: inspect the dominant model once data loads.</div>
       </div>
+      <aside class="app-update-panel" aria-labelledby="app-update-title">
+        <div class="app-update-title" id="app-update-title">App Update</div>
+        <div class="app-update-main">
+          <button class="app-update-button" id="app-update-button" type="button" disabled>Update App</button>
+        </div>
+        <div class="app-update-status" id="app-update-status" aria-live="polite"></div>
+        <div class="app-update-fallback" id="app-update-fallback">
+          <code id="app-update-command">git pull --ff-only origin main &amp;&amp; uv sync</code>
+        </div>
+      </aside>
     </section>
 
     <!-- Overview cards -->
@@ -910,14 +1012,14 @@
       </div>
     </div>
 
-    <section class="tool-section" aria-labelledby="tool-sources-heading">
+    <section class="tool-section" id="tool-sources" aria-labelledby="tool-sources-heading">
       <h2 id="tool-sources-heading">Tool Sources</h2>
       <div class="subtitle" id="tool-sources-subtitle">Active source and planned tool adapters.</div>
       <div class="tool-source-grid" id="tool-source-grid"></div>
     </section>
 
     <!-- Chart -->
-    <div class="chart-container">
+    <div class="chart-container" id="daily-tokens">
       <div class="chart-header">
         <div>
           <h2>Daily Tokens by Model</h2>
@@ -1017,6 +1119,7 @@ let currentModels = [];
 let currentDaily = null;
 let overviewDailySummary = null;
 let currentCostCoverage = null;
+let currentAppVersion = null;
 const FORMATTER = new Intl.NumberFormat('en-US');
 const DATE_FORMATTER = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
 function fmtNum(n) { return FORMATTER.format(n); }
@@ -1114,6 +1217,112 @@ function fmtDateLabel(dateString) {
 
 function effectiveTokens(value) {
   return Number(value?.tokens_effective_total ?? value?.tokens_total ?? 0);
+}
+
+function setAppUpdateFallback(command, visible = false) {
+  const fallback = document.getElementById('app-update-fallback');
+  const code = document.getElementById('app-update-command');
+  if (!fallback || !code) return;
+  code.textContent = command || 'git pull --ff-only origin main && uv sync';
+  fallback.classList.toggle('visible', Boolean(visible));
+}
+
+function appUpdateButtonLabel(version) {
+  if (!version) return 'Checking...';
+  if (version.status === 'current') return 'Up to Date';
+  if (version.status === 'update_available') return 'Update App';
+  if (version.status === 'blocked_dirty') return 'Blocked';
+  if (version.status === 'manual_required') return 'Manual Update';
+  return 'Check Failed';
+}
+
+function renderAppVersion(version, options = {}) {
+  const button = document.getElementById('app-update-button');
+  const status = document.getElementById('app-update-status');
+  if (!button || !status) return;
+
+  currentAppVersion = version || currentAppVersion;
+  const fallbackCommand = currentAppVersion?.fallback_command || 'git pull --ff-only origin main && uv sync';
+  const canUpdate = currentAppVersion?.status === 'update_available';
+  button.dataset.updateStatus = options.running && canUpdate ? 'update_available' : currentAppVersion?.status || 'checking';
+  button.disabled = Boolean(options.running || !canUpdate);
+  button.textContent = options.running ? 'Updating...' : appUpdateButtonLabel(currentAppVersion);
+  button.title = currentAppVersion
+    ? `${currentAppVersion.message || ''} Current ${currentAppVersion.branch || 'branch'}@${currentAppVersion.sha || 'unknown'}; latest ${currentAppVersion.target_ref || 'origin/main'}@${currentAppVersion.target_sha || 'unknown'}.`.trim()
+    : 'Checking latest main branch.';
+  status.className = `app-update-status ${options.tone || ''}`.trim();
+  status.textContent = options.message || currentAppVersion?.message || 'Checking latest main branch...';
+  setAppUpdateFallback(fallbackCommand, Boolean(options.showFallback));
+}
+
+async function loadAppVersion() {
+  renderAppVersion(null, { message: 'Checking app version...' });
+  try {
+    const response = await fetch('/api/app-version', {
+      headers: { 'X-Dashboard-Update': '1' },
+    });
+    const version = await response.json();
+    renderAppVersion(version);
+  } catch (error) {
+    console.error('app version', error);
+    renderAppVersion(currentAppVersion, {
+      message: 'Unable to check app version.',
+      tone: 'error',
+      showFallback: true,
+    });
+  }
+}
+
+async function updateApp() {
+  renderAppVersion(currentAppVersion, { running: true, message: 'Updating...', tone: '' });
+  try {
+    const response = await fetch('/api/update', {
+      method: 'POST',
+      headers: { 'X-Dashboard-Update': '1' },
+    });
+    const result = await response.json().catch(() => ({}));
+    const fallbackCommand = result.fallback_command || currentAppVersion?.fallback_command || 'git pull --ff-only origin main && uv sync';
+    setAppUpdateFallback(fallbackCommand, false);
+    if (response.ok && result.status === 'updated') {
+      renderAppVersion({ ...currentAppVersion, sha: result.new_sha, target_sha: result.target_sha, status: 'current', update_available: false, dirty: false }, {
+        message: `Updated to ${result.new_sha}. Restart required.`,
+        tone: 'success',
+      });
+      return;
+    }
+    if (response.ok && result.status === 'already_current') {
+      renderAppVersion({ ...currentAppVersion, sha: result.new_sha, target_sha: result.target_sha, status: 'current', update_available: false }, {
+        message: 'Already up to date.',
+        tone: 'success',
+      });
+      return;
+    }
+    if (result.status === 'local_changes') {
+      renderAppVersion({
+        ...currentAppVersion,
+        status: 'blocked_dirty',
+        update_available: true,
+        dirty: true,
+        target_sha: result.target_sha || currentAppVersion?.target_sha,
+      }, {
+        message: 'Local changes detected. Update manually to avoid overwriting work.',
+        tone: 'warning',
+      });
+      return;
+    }
+    renderAppVersion(currentAppVersion, {
+      message: 'Update failed. Run: git pull --ff-only origin main && uv sync',
+      tone: 'error',
+      showFallback: true,
+    });
+  } catch (error) {
+    console.error('update app', error);
+    renderAppVersion(currentAppVersion, {
+      message: 'Update failed. Run: git pull --ff-only origin main && uv sync',
+      tone: 'error',
+      showFallback: true,
+    });
+  }
 }
 
 function computeDailySummary(data) {
@@ -1466,6 +1675,8 @@ document.getElementById('clear-chart-filter').addEventListener('click', () => {
   clearChartModelFilter();
 });
 
+document.getElementById('app-update-button').addEventListener('click', updateApp);
+
 // ── Load everything ─────────────────────────────────────────────────────────
 async function loadAll() {
   await Promise.all([loadOverview(currentDays), loadModels(currentDays), loadDaily(currentDays), loadHistory()]);
@@ -1650,12 +1861,24 @@ function renderModelTable(models = currentModels) {
       ? `input ${fmtCost(breakdown.input)}, output ${fmtCost(breakdown.output)}, cache read ${fmtCost(breakdown.cache_read)}, cache write ${fmtCost(breakdown.cache_write)}`
       : '';
     const sessionAccounting = m.session_accounting_note ? `; ${m.session_accounting_note}` : '';
+    const unpricedTitle = m.pricing_source || `No matched pricing for ${m.pricing_model_id || m.model_id}`;
     costCell.title = m.pricing_status === 'priced'
       ? `${m.pricing_source}: ${m.pricing_model_id}${breakdownTitle ? `; ${breakdownTitle}` : ''}`
       : m.pricing_status === 'partial'
       ? `${m.pricing_source}; known subtotal ${fmtCost(m.partial_cost_usd)}${breakdownTitle ? `; ${breakdownTitle}` : ''}${sessionAccounting}`
-      : `No matched pricing for ${m.pricing_model_id || m.model_id}`;
-    costCell.textContent = fmtCost(m.estimated_cost);
+      : unpricedTitle;
+    if (m.pricing_url && m.estimated_cost !== null && m.estimated_cost !== undefined) {
+      const costLink = document.createElement('a');
+      costLink.className = 'cost-link';
+      costLink.href = m.pricing_url;
+      costLink.target = '_blank';
+      costLink.rel = 'noopener noreferrer';
+      costLink.textContent = fmtCost(m.estimated_cost);
+      costLink.setAttribute('aria-label', `Open pricing reference for ${m.pricing_model_id || m.model_id}`);
+      costCell.appendChild(costLink);
+    } else {
+      costCell.textContent = fmtCost(m.estimated_cost);
+    }
 
     row.append(toolCell, modelCell, sessionsCell, totalCell, inputCell, outputCell, cacheCell, costCell);
     tbody.appendChild(row);
@@ -2109,6 +2332,7 @@ document.addEventListener('keydown', event => {
 });
 
 // ── Init ────────────────────────────────────────────────────────────────────
+loadAppVersion();
 loadAll();
 
 // Auto-refresh every 60s

@@ -9,6 +9,26 @@ from .pricing import QUALITATIVE_COLORS, estimate_cost, normalize_model
 from .token_metrics import effective_token_total
 
 
+SIMULATED_SOURCE_PATHS = {
+    "opencode": "simulated OpenCode database",
+    "codex": "simulated Codex state + rollouts",
+    "hermes": "simulated Hermes session database",
+}
+
+
+def empty_totals() -> dict:
+    return {
+        "sessions": 0,
+        "messages": 0,
+        "tokens_input": 0,
+        "tokens_output": 0,
+        "tokens_total": 0,
+        "tokens_effective_total": 0,
+        "cache_read": 0,
+        "cache_write": 0,
+    }
+
+
 def build_simulated_dataset(days: int | None = 31) -> dict:
     """Deterministic synthetic data for UI checks and screenshots."""
     window_days = days or 31
@@ -22,16 +42,24 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
     ]
 
     model_specs = [
-        {"provider": "opencode-go", "model_id": "deepseek-v4-flash", "base": 180_000, "burst": 1.4, "session_ratio": 0.18},
-        {"provider": "opencode-go", "model_id": "deepseek-v4-pro", "base": 120_000, "burst": 0.9, "session_ratio": 0.12},
-        {"provider": "opencode-go", "model_id": "kimi-k2.5", "base": 90_000, "burst": 0.75, "session_ratio": 0.10},
-        {"provider": "opencode-go", "model_id": "kimi-k2.6", "base": 260_000, "burst": 2.3, "session_ratio": 0.20},
-        {"provider": "opencode-go", "model_id": "minimax-m2.7", "base": 80_000, "burst": 0.65, "session_ratio": 0.09},
-        {"provider": "opencode-go", "model_id": "qwen3.6-plus", "base": 105_000, "burst": 0.82, "session_ratio": 0.11},
+        {"tool": "OpenCode", "tool_id": "opencode", "provider": "opencode", "model_id": "deepseek-v4-flash-free", "base": 210_000, "burst": 2.1, "session_ratio": 0.20},
+        {"tool": "OpenCode", "tool_id": "opencode", "provider": "opencode", "model_id": "qwen3.6-plus-free", "base": 150_000, "burst": 1.3, "session_ratio": 0.18},
+        {"tool": "OpenCode", "tool_id": "opencode", "provider": "opencode", "model_id": "minimax-m3-free", "base": 90_000, "burst": 0.82, "session_ratio": 0.11},
+        {"tool": "Codex CLI", "tool_id": "codex", "provider": "openai", "model_id": "gpt-5.5", "base": 170_000, "burst": 1.7, "session_ratio": 0.16},
+        {"tool": "Codex CLI", "tool_id": "codex", "provider": "openai", "model_id": "gpt-5.4-mini", "base": 95_000, "burst": 0.95, "session_ratio": 0.11},
+        {"tool": "Codex CLI", "tool_id": "codex", "provider": "openai", "model_id": "gpt-5.3-codex-spark", "base": 70_000, "burst": 0.72, "session_ratio": 0.09},
+        {"tool": "Hermes", "tool_id": "hermes", "provider": "nous", "model_id": "nvidia/nemotron-3-ultra:free", "base": 120_000, "burst": 1.05, "session_ratio": 0.13},
+        {"tool": "Hermes", "tool_id": "hermes", "provider": "openai-codex", "model_id": "gpt-5.5", "base": 85_000, "burst": 0.82, "session_ratio": 0.10},
+        {"tool": "Hermes", "tool_id": "hermes", "provider": "openai-codex", "model_id": "gpt-5.4-mini", "base": 65_000, "burst": 0.62, "session_ratio": 0.08},
     ]
 
     daily = {}
     model_totals = {}
+    source_totals = {source_id: empty_totals() for source_id in SIMULATED_SOURCE_PATHS}
+    spec_by_chart_id = {
+        f'{spec["provider"]}/{spec["model_id"]}': spec
+        for spec in model_specs
+    }
     history = []
     session_counter = 0
 
@@ -47,7 +75,7 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
             burst_factor = 0.28
 
         for spec in model_specs:
-            if index > int(window_days * 0.82) and spec["model_id"] not in {"kimi-k2.6", "deepseek-v4-flash"}:
+            if index > int(window_days * 0.82) and spec["model_id"] not in {"deepseek-v4-flash-free", "gpt-5.5", "nvidia/nemotron-3-ultra:free"}:
                 activity_factor = 0.0
             else:
                 activity_factor = 0.82 + rng.random() * 0.42
@@ -76,25 +104,38 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
                 "cache_write": cache_write,
             }
             model_totals[chart_model_id] = model_totals.get(chart_model_id, 0) + tokens_effective_total
+            source_bucket = source_totals[spec["tool_id"]]
+            source_bucket["sessions"] += sessions
+            source_bucket["messages"] += messages
+            source_bucket["tokens_input"] += tokens_input
+            source_bucket["tokens_output"] += tokens_output
+            source_bucket["tokens_total"] += total_tokens
+            source_bucket["tokens_effective_total"] += tokens_effective_total
+            source_bucket["cache_read"] += cache_read
+            source_bucket["cache_write"] += cache_write
 
-            if total_tokens and len(history) < 40:
+            if total_tokens and len(history) < 54:
                 session_counter += 1
                 created_at = datetime.datetime.fromisoformat(dt) + datetime.timedelta(hours=9 + (session_counter % 8), minutes=(session_counter * 7) % 60)
                 history.append({
                     "id": f"sim-{session_counter:04d}",
-                    "tool": "OpenCode",
-                    "tool_id": "opencode",
-                    "tool_color": TOOL_COLOR_MAP.get("opencode", "#64748B"),
-                    "source_path": "simulated dataset",
+                    "tool": spec["tool"],
+                    "tool_id": spec["tool_id"],
+                    "tool_color": TOOL_COLOR_MAP.get(spec["tool_id"], "#64748B"),
+                    "source_path": SIMULATED_SOURCE_PATHS[spec["tool_id"]],
                     "title": f"Simulated {spec['model_id']} run {session_counter}",
                     "created": created_at.strftime("%Y-%m-%d %H:%M:%S"),
                     "updated": (created_at + datetime.timedelta(minutes=15 + session_counter % 35)).strftime("%Y-%m-%d %H:%M:%S"),
+                    "timestamp": int(created_at.timestamp() * 1000),
                     "directory": f"~/sandbox/session-{session_counter:02d}",
                     "model": f"{spec['provider']}/{spec['model_id']}",
                     "messages": messages,
                     "tokens_input": tokens_input,
                     "tokens_output": tokens_output,
                     "tokens_total": total_tokens,
+                    "cache_read": cache_read,
+                    "cache_write": cache_write,
+                    "metrics_note": None,
                     "files_changed": 2 + session_counter % 9,
                     "additions": 40 + session_counter * 5,
                     "deletions": 8 + session_counter * 2,
@@ -104,16 +145,8 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
     ordered_model_ids = sorted(model_totals, key=lambda mid: model_totals[mid], reverse=True)
     for rank, chart_model_id in enumerate(ordered_model_ids):
         provider, model_id = chart_model_id.split("/", 1)
-        aggregate = {
-            "sessions": 0,
-            "messages": 0,
-            "tokens_input": 0,
-            "tokens_output": 0,
-            "tokens_total": 0,
-            "tokens_effective_total": 0,
-            "cache_read": 0,
-            "cache_write": 0,
-        }
+        spec = spec_by_chart_id[chart_model_id]
+        aggregate = empty_totals()
         for day in daily.values():
             row = day.get(chart_model_id, {})
             for key in aggregate:
@@ -121,10 +154,10 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
 
         info = normalize_model(json.dumps({"id": model_id, "providerID": provider}))
         models.append({
-            "tool": "OpenCode",
-            "tool_id": "opencode",
-            "tool_color": TOOL_COLOR_MAP.get("opencode", "#64748B"),
-            "source_path": "simulated dataset",
+            "tool": spec["tool"],
+            "tool_id": spec["tool_id"],
+            "tool_color": TOOL_COLOR_MAP.get(spec["tool_id"], "#64748B"),
+            "source_path": SIMULATED_SOURCE_PATHS[spec["tool_id"]],
             "label": info["label"],
             "provider": info["provider"],
             "model_id": info["id"],
@@ -165,56 +198,48 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
         "first_session": date_keys[0],
         "last_session": date_keys[-1],
         "days": days,
-        "active_tool": "opencode",
-        "active_tool_label": "OpenCode (simulated)",
-        "source_path": "simulated dataset",
+        "active_tool": "multiple",
+        "active_tool_label": "OpenCode + Codex CLI + Hermes (simulated)",
+        "source_path": "simulated multi-source dataset",
         "token_total_definition": "total token volume = input tokens + output tokens; includes cache read/write",
         "input_token_definition": "input tokens = non-cache input + cache read + cache write",
         "session_token_definition": "session tokens = non-cache input + output assistant-message tokens",
         "tool_sources": [],
     }
 
-    overview["active_tool_label"] = "OpenCode (simulated)"
-    overview.setdefault("tool_sources", [])
-
-    opencode_source = next((src for src in current_tool_sources() if src["id"] == "opencode"), {
-        "id": "opencode",
-        "label": "OpenCode",
-        "status": "active",
-        "status_label": "Simulated",
-        "source_type": "Synthetic dataset",
-        "source_path": "simulated dataset",
-        "repo_url": "https://github.com/anomalyco/opencode/",
-        "color": TOOL_COLOR_MAP.get("opencode", "#64748B"),
-        "issue": None,
-    })
-    opencode_item = dict(opencode_source)
-    opencode_item.update({
-        "status_label": "Simulated",
-        "source_path": "simulated dataset",
-        "sessions": total_sessions,
-        "tokens_total": overview["total_tokens"],
-        "tokens_input": total_input_with_cache,
-        "non_cache_input": total_input,
-        "tokens_output": total_output,
-        "session_tokens": session_tokens,
-        "cache_read": cache_read_total,
-        "cache_write": cache_write_total,
-        "cache_total": cache_read_total + cache_write_total,
-        "estimated_cost": None,
-        "actual_cost": None,
-        "cost_status": None,
-        "cost_source": None,
-        "estimated_cost_subtotal": None,
-        "actual_cost_subtotal": None,
-        "pricing_status": "unpriced",
-        "pricing_source": None,
-        "pricing_model_id": None,
-        "cost_basis": "simulated_no_billing",
-        "cost_breakdown": None,
-        "accounted_cost": None,
-    })
-    overview["tool_sources"] = [opencode_item]
+    current_sources = {src["id"]: src for src in current_tool_sources()}
+    for source_id, totals in source_totals.items():
+        source = dict(current_sources[source_id])
+        source_session_tokens = totals["tokens_input"] + totals["tokens_output"]
+        source_cache_total = totals["cache_read"] + totals["cache_write"]
+        source.update({
+            "status": "active",
+            "status_label": "Simulated",
+            "source_path": SIMULATED_SOURCE_PATHS[source_id],
+            "sessions": totals["sessions"],
+            "tokens_total": source_session_tokens + source_cache_total,
+            "tokens_input": totals["tokens_input"] + source_cache_total,
+            "non_cache_input": totals["tokens_input"],
+            "tokens_output": totals["tokens_output"],
+            "session_tokens": source_session_tokens,
+            "cache_read": totals["cache_read"],
+            "cache_write": totals["cache_write"],
+            "cache_total": source_cache_total,
+            "estimated_cost": None,
+            "actual_cost": None,
+            "cost_status": None,
+            "cost_source": None,
+            "estimated_cost_subtotal": None,
+            "actual_cost_subtotal": None,
+            "pricing_status": "unpriced",
+            "pricing_source": None,
+            "pricing_model_id": None,
+            "pricing_url": None,
+            "cost_basis": "simulated_no_billing",
+            "cost_breakdown": None,
+            "accounted_cost": None,
+        })
+        overview["tool_sources"].append(source)
 
     history.sort(key=lambda row: row["created"], reverse=True)
     return {

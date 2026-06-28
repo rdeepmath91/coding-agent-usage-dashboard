@@ -1,0 +1,47 @@
+# Source Contracts
+
+This document records adapter-specific field and token rules for dashboard data sources.
+
+## Codex CLI
+
+The Codex adapter reads session metadata from `~/.codex/state_5.sqlite`, table
+`threads`. The trusted metadata fields are session id, rollout path, created and
+updated timestamps, title/preview, cwd, provider, and model.
+
+Token metrics come from the latest cumulative `total_token_usage` object in each
+referenced rollout JSONL file. The trusted token fields are:
+
+- `input_tokens` -> raw Codex input, including cached input
+- `cached_input_tokens` -> cache read tokens
+- `input_tokens - cached_input_tokens` -> dashboard input, to match OpenCode's non-cache input semantics
+- `output_tokens` -> output tokens
+
+The adapter filters, groups, sorts, and displays Codex records by thread
+`updated_at`, not `created_at`, because token metrics are latest cumulative
+rollout usage for the thread. This keeps long-lived threads updated inside the
+selected range from appearing on out-of-range created dates.
+
+Adapter session tokens remain non-cache input + output. Cache read tokens are
+preserved so the Overview can add them into full `Total Tokens`. Codex local
+JSONL does not expose cache-write tokens, so the dashboard shows cache write as
+unavailable for Codex instead of treating it as zero. The adapter does not infer
+token counts from transcript text.
+
+## Hermes
+
+The Hermes adapter reads session metadata and token metrics from
+`~/.hermes/state.db`, table `sessions`. The trusted metadata fields are session
+id, source, title, started/ended timestamps, message/tool-call counts, provider,
+and model.
+
+The trusted token fields are:
+
+- `input_tokens` -> dashboard non-cache input tokens
+- `output_tokens` -> output tokens
+- `cache_read_tokens` -> cache read tokens
+- `cache_write_tokens` -> cache write tokens
+
+Hermes records are filtered, grouped, sorted, and displayed by `started_at`.
+Adapter session tokens remain input + output. Cache read/write tokens are
+preserved so the Overview can add them into full `Total Tokens`. The adapter
+does not infer token counts from message text.
