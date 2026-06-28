@@ -45,3 +45,33 @@ Hermes records are filtered, grouped, sorted, and displayed by `started_at`.
 Adapter session tokens remain input + output. Cache read/write tokens are
 preserved so the Overview can add them into full `Total Tokens`. The adapter
 does not infer token counts from message text.
+
+## Cursor IDE Composer
+
+Cursor local data comes from Cursor IDE global storage SQLite state, table
+`cursorDiskKV`, keys `composerData:*`. The default path is
+`~/.config/Cursor/User/globalStorage/state.vscdb` on Linux and
+`~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` on macOS.
+Set `DASHBOARD_CURSOR_STATE_PATH` when Cursor stores global state somewhere
+else.
+
+The trusted local fields are:
+
+- `composerId` -> session id
+- `createdAt` / `lastUpdatedAt` / assistant `timingInfo.*` -> display timestamp windowing
+- assistant conversation item `tokenCount.inputTokens` -> dashboard non-cache input tokens
+- assistant conversation item `tokenCount.outputTokens` -> output tokens
+- `promptTokenBreakdown.totalUsedTokens` -> prompt/context tokens when assistant bubble `tokenCount` rows are absent
+- `contextTokensUsed` -> prompt/context tokens when `promptTokenBreakdown.totalUsedTokens` is absent
+
+The adapter prefers summed assistant-bubble token counts per composer session.
+When newer local records omit bubble counts, it uses prompt/context token totals
+as input/session tokens and leaves assistant output unavailable. Cursor local
+state does not expose trusted cache metrics or model IDs in a stable local
+contract for these sessions, so the dashboard keeps those fields unavailable
+instead of guessing values.
+
+Cursor Agent CLI chats are a separate local storage surface under `~/.cursor`.
+PR #37 does not parse those files for token totals because the local transcript
+and chat store observed so far expose message/model provenance but not trusted
+input/output token counters.

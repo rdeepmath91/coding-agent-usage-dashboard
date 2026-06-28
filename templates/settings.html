@@ -61,7 +61,7 @@
 <div class="card">
   <h2>Database Location</h2>
   <div class="path">~/.local/share/opencode/opencode.db</div>
-  <p style="margin-top:8px;">Read directly from local coding-agent usage sources. OpenCode is always supported, Codex CLI becomes active when <code>~/.codex/state_5.sqlite</code> is present, and Hermes becomes active when <code>~/.hermes/state.db</code> is present. The dashboard uses read-only connections and does not modify source data.</p>
+  <p style="margin-top:8px;">Read directly from local coding-agent usage sources. OpenCode is always supported, Codex CLI becomes active when <code>~/.codex/state_5.sqlite</code> is present, Hermes becomes active when <code>~/.hermes/state.db</code> is present, and Cursor IDE Composer becomes active when local global storage has composer token rows. Cursor defaults to <code>~/.config/Cursor/User/globalStorage/state.vscdb</code> on Linux and <code>~/Library/Application Support/Cursor/User/globalStorage/state.vscdb</code> on macOS; set <code>DASHBOARD_CURSOR_STATE_PATH</code> for custom locations. The dashboard uses read-only connections and does not modify source data.</p>
 </div>
 
 <div class="card">
@@ -72,7 +72,7 @@
 
 <div class="card">
   <h2>Source</h2>
-  <p>Built from normalized local session data — model, session timestamps, non-cache input tokens, output tokens, and separate cache read/write metrics where a source exposes them. Overview Total Tokens include session tokens plus cache read/write; table/session totals use session-token semantics when labeled. Raw provider usage can include cached tokens in input; this dashboard preserves cache details for source-to-source consistency. Cost is an API-equivalent estimate from matched provider pricing when available, not necessarily actual subscription billing.</p>
+  <p>Built from normalized local session data — model, session timestamps, non-cache input tokens, output tokens, and separate cache read/write metrics where a source exposes them. Overview Total Tokens include session tokens plus cache read/write; table/session totals use session-token semantics when labeled. Raw provider usage can include cached tokens in input; this dashboard preserves cache details for source-to-source consistency. Cost is an API-equivalent estimate from matched provider pricing when available, not necessarily actual subscription billing. Cursor token totals come from local Cursor IDE Composer <code>tokenCount</code> fields in Cursor global storage, or from <code>promptTokenBreakdown.totalUsedTokens</code> / <code>contextTokensUsed</code> when newer records omit bubble counts; trusted Cursor cache metrics and model IDs are not exposed locally, so those fields stay unavailable instead of inferred. Cursor Agent CLI chats under <code>~/.cursor</code> are not counted as token totals.</p>
 </div>
 </body>
 </html>

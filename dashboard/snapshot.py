@@ -18,9 +18,12 @@ from .config import display_path
 from .pricing import chart_color, estimate_cost, normalize_model
 from .sources import (
     aggregate_codex_models,
+    aggregate_cursor_models,
     aggregate_hermes_models,
     codex_overview,
     codex_records,
+    cursor_overview,
+    cursor_records,
     get_db,
     hermes_overview,
     hermes_records,
@@ -98,6 +101,7 @@ def _snapshot_key(days: int | None) -> tuple:
         *_codex_rollout_signatures(),
         _file_signature(dashboard_config.CODEX_SESSIONS_DIR),
         *_sqlite_live_signatures(dashboard_config.HERMES_STATE_PATH),
+        *_sqlite_live_signatures(dashboard_config.CURSOR_STATE_PATH),
     )
 
 
@@ -394,6 +398,12 @@ def _build_snapshot(days: int | None) -> dict:
     snapshot["hermes_overview"] = hermes_overview(days, records=snapshot["hermes_records"])
     snapshot["hermes_models"] = aggregate_hermes_models(days, records=snapshot["hermes_records"])
     _profile(f"snapshot hermes days={days}", hermes_started)
+
+    cursor_started = perf_counter()
+    snapshot["cursor_records"] = cursor_records(days)
+    snapshot["cursor_overview"] = cursor_overview(days, records=snapshot["cursor_records"])
+    snapshot["cursor_models"] = aggregate_cursor_models(days, records=snapshot["cursor_records"])
+    _profile(f"snapshot cursor days={days}", cursor_started)
 
     _profile(f"snapshot build days={days}", started)
     return snapshot

@@ -1365,6 +1365,26 @@ function pricingCoverageClass(coverage = currentCostCoverage) {
   return coverage && (coverage.unpricedCount > 0 || coverage.partialCount > 0) ? 'usage-warning' : '';
 }
 
+function sourceHasTokenTotals(source) {
+  return source?.tokens_total !== null && source?.tokens_total !== undefined;
+}
+
+function sourceStatusText(source, active) {
+  if (active) return 'Focused';
+  if (source?.status !== 'active') return 'Planned adapter';
+  if (sourceHasTokenTotals(source)) return 'Included in totals';
+  if (source?.sessions === null || source?.sessions === undefined) return `No ${fmtPeriod()} token records`;
+  return 'Session provenance only';
+}
+
+function sourceActionText(source, active) {
+  if (active) return `Showing chart + table for ${source?.label || 'source'}`;
+  if (source?.status !== 'active') return 'Not connected';
+  if (sourceHasTokenTotals(source)) return 'Click to focus chart';
+  if (source?.sessions === null || source?.sessions === undefined) return 'Source detected · no chart data';
+  return 'History only · tokens unavailable';
+}
+
 function renderUsageSummary() {
   const primary = document.getElementById('usage-summary-primary');
   const secondary = document.getElementById('usage-summary-secondary');
@@ -1518,6 +1538,7 @@ function renderToolSources(sources = []) {
     card.className = `tool-source-card ${active ? 'active' : 'placeholder'} ${selectedChartToolId === source.id ? 'active-filter' : ''} ${selectedChartToolId && selectedChartToolId !== source.id && active ? 'dimmed-by-focus' : ''}`.trim();
     card.dataset.toolId = source.id || '';
     card.dataset.activeSource = active ? 'true' : 'false';
+    card.dataset.hasTokenTotals = sourceHasTokenTotals(source) ? 'true' : 'false';
     card.title = source.repo_url ? `Repo: ${source.repo_url}` : '';
     if (active) {
       card.style.borderColor = color;
@@ -1535,7 +1556,7 @@ function renderToolSources(sources = []) {
 
     const status = document.createElement('span');
     status.className = 'tool-source-status';
-    status.textContent = selectedChartToolId === source.id ? 'Focused' : active ? 'Included in totals' : 'Planned adapter';
+    status.textContent = sourceStatusText(source, selectedChartToolId === source.id);
 
     const meta = document.createElement('div');
     meta.className = 'tool-source-meta';
@@ -1544,7 +1565,9 @@ function renderToolSources(sources = []) {
     const summary = document.createElement('span');
     summary.className = 'tool-source-summary';
     summary.textContent = source.sessions !== null && source.sessions !== undefined
-      ? `${fmtNum(source.sessions)} sessions · ${fmtTokens(source.tokens_total || 0)} tokens`
+      ? sourceHasTokenTotals(source)
+        ? `${fmtNum(source.sessions)} sessions · ${fmtTokens(source.tokens_total || 0)} tokens`
+        : `${fmtNum(source.sessions)} sessions · token totals unavailable`
       : (source.status_label || source.status || 'source');
     const detail = document.createElement('span');
     detail.className = 'tool-source-detail meta-info-wrap';
@@ -1566,11 +1589,7 @@ function renderToolSources(sources = []) {
 
     const filterState = document.createElement('span');
     filterState.className = 'tool-source-filter-state';
-    filterState.textContent = selectedChartToolId === source.id
-      ? `Showing chart + table for ${source.label || 'source'}`
-      : active
-      ? 'Click to focus chart'
-      : 'Not connected';
+    filterState.textContent = sourceActionText(source, selectedChartToolId === source.id);
     actions.appendChild(filterState);
 
     const focus = document.createElement('button');
@@ -1998,15 +2017,18 @@ function updateChartFilterUi() {
     const button = card.querySelector('.tool-source-name');
     const status = card.querySelector('.tool-source-status');
     if (status) {
-      status.textContent = active ? 'Focused' : card.dataset.activeSource === 'true' ? 'Included in totals' : 'Planned adapter';
+      status.textContent = sourceStatusText({
+        status: card.dataset.activeSource === 'true' ? 'active' : 'placeholder',
+        tokens_total: card.dataset.hasTokenTotals === 'true' ? 1 : null,
+      }, active);
     }
     const state = card.querySelector('.tool-source-filter-state');
     if (state) {
-      state.textContent = active
-        ? `Showing chart + table for ${button?.textContent || 'source'}`
-        : card.dataset.activeSource === 'true'
-        ? 'Click to focus chart'
-        : 'Not connected';
+      state.textContent = sourceActionText({
+        label: button?.textContent || 'source',
+        status: card.dataset.activeSource === 'true' ? 'active' : 'placeholder',
+        tokens_total: card.dataset.hasTokenTotals === 'true' ? 1 : null,
+      }, active);
     }
     const focus = card.querySelector('.tool-source-focus');
     if (focus) {

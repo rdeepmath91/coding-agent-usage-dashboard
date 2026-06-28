@@ -12,15 +12,21 @@ from flask import Flask, Response, jsonify, render_template, request, send_file
 from dashboard import config as dashboard_config
 from dashboard.config import (
     KNOWN_TOOL_IDS,
-    current_tool_sources,
-    display_path,
     tool_source_label,
 )
 from dashboard.daily import build_daily_from_model_records
 from dashboard.pricing import QUALITATIVE_COLORS, chart_color
 from dashboard.simulation import build_simulated_dataset
 from dashboard.snapshot import load_dashboard_snapshot
-from dashboard.sources import codex_records, get_db, hermes_records
+from dashboard.source_payloads import (
+    CONNECTED_TOOL_IDS,
+    build_history_payload,
+    build_models_payload,
+    build_overview_payload,
+    daily_records_for_tool,
+    empty_daily_payload,
+)
+from dashboard.sources import get_db
 
 app = Flask(__name__)
 
@@ -158,17 +164,7 @@ def parse_top_n(default: int = 8) -> int:
     return max(3, min(raw or default, len(QUALITATIVE_COLORS)))
 
 def empty_daily_response(top_n: int, selected_tool_id: str | None, error_message: str | None = None):
-    return jsonify({
-        "dates": [],
-        "models": [],
-        "data": {},
-        "top_n": top_n,
-        "other_count": 0,
-        "selected_model_id": None,
-        "selected_tool_id": selected_tool_id,
-        "selected_tool_label": tool_source_label(selected_tool_id),
-        "error": error_message,
-    })
+    return jsonify(empty_daily_payload(top_n, selected_tool_id, error_message))
 
 def simulate_enabled() -> bool:
     raw = request.args.get("simulate") or request.args.get("demo") or os.environ.get("DASHBOARD_SIMULATE")
@@ -193,116 +189,8 @@ def api_overview():
     if simulate_enabled():
         return jsonify(build_simulated_dataset(days)["overview"])
     snapshot = load_dashboard_snapshot(days)
-    row = dict(snapshot["opencode"]["overview"])
-    codex = snapshot["codex_overview"]
-    hermes = snapshot["hermes_overview"]
-    row["days"] = days
-
-    def overview_token_totals(sessions, tokens_input, tokens_output, cache_read, cache_write, metrics_note=None):
-        non_cache_input = tokens_input or 0
-        output = tokens_output or 0
-        read = cache_read or 0
-        write = cache_write or 0
-        session_tokens = non_cache_input + output
-        input_tokens = non_cache_input + read + write
-        total_tokens = session_tokens + read + write
-        totals = {
-            "sessions": sessions,
-            "tokens_total": total_tokens,
-            "session_tokens": session_tokens,
-            "tokens_input": input_tokens,
-            "non_cache_input": non_cache_input,
-            "tokens_output": output,
-            "cache_read": read,
-            "cache_write": cache_write,
-            "cache_total": read + write,
-        }
-        if metrics_note:
-            totals["metrics_note"] = metrics_note
-        return totals
-
-    opencode_totals = overview_token_totals(
-        row["total_sessions"],
-        row["total_input"],
-        row["total_output"],
-        row["cache_read"],
-        row["cache_write"],
-    )
-    source_overviews = {"opencode": opencode_totals}
-    if codex:
-        source_overviews["codex"] = overview_token_totals(
-            codex["total_sessions"],
-            codex["total_input"],
-            codex["total_output"],
-            codex["cache_read"],
-            None,
-            "Cache write unavailable in local Codex JSONL.",
-        )
-    if hermes:
-        source_overviews["hermes"] = overview_token_totals(
-            hermes["total_sessions"],
-            hermes["total_input"],
-            hermes["total_output"],
-            hermes["cache_read"],
-            hermes["cache_write"],
-            "Hermes token metrics come from ~/.hermes/state.db sessions columns.",
-        )
-
-    row.update({
-        "total_sessions": 0,
-        "total_input": 0,
-        "non_cache_input": 0,
-        "total_output": 0,
-        "total_tokens": 0,
-        "session_tokens": 0,
-        "cache_read": 0,
-        "cache_write": 0,
-        "cache_total": 0,
-    })
-    for totals in source_overviews.values():
-        row["total_sessions"] += totals["sessions"] or 0
-        row["total_input"] += totals["tokens_input"] or 0
-        row["non_cache_input"] += totals["non_cache_input"] or 0
-        row["total_output"] += totals["tokens_output"] or 0
-        row["total_tokens"] += totals["tokens_total"] or 0
-        row["session_tokens"] += totals["session_tokens"] or 0
-        row["cache_read"] += totals["cache_read"] or 0
-        if totals["cache_write"] is not None:
-            row["cache_write"] += totals["cache_write"] or 0
-        row["cache_total"] += totals["cache_total"] or 0
-
-    session_dates = [row["first_session"], row["last_session"]]
-    for overview in [codex, hermes]:
-        if overview:
-            session_dates.extend([overview["first_session"], overview["last_session"]])
-    session_dates = [d for d in session_dates if d]
-    if session_dates:
-        row["first_session"] = min(session_dates)
-        row["last_session"] = max(session_dates)
-
-    current_sources = current_tool_sources()
-    counted_sources = [source for source in current_sources if source["id"] in source_overviews]
-    row["active_tool"] = "multiple" if len(counted_sources) > 1 else (counted_sources[0]["id"] if counted_sources else "opencode")
-    row["active_tool_label"] = " + ".join(source["label"] for source in counted_sources) if counted_sources else "OpenCode"
-    row["source_path"] = " + ".join(source["source_path"] for source in counted_sources) if counted_sources else display_path(dashboard_config.DB_PATH)
-
-    row["tool_sources"] = []
-    for source in current_sources:
-        item = dict(source)
-        if item["id"] in source_overviews:
-            item.update(source_overviews[item["id"]])
-        else:
-            item.update({
-                "sessions": None,
-                "tokens_total": None,
-                "tokens_input": None,
-                "tokens_output": None,
-                "cache_read": None,
-                "cache_write": None,
-            })
-        row["tool_sources"].append(item)
     profile_endpoint("api_overview", started)
-    return jsonify(row)
+    return jsonify(build_overview_payload(snapshot, days))
 
 
 @app.route("/api/models")
@@ -313,15 +201,8 @@ def api_models():
     if simulate_enabled():
         return jsonify(build_simulated_dataset(days)["models"])
     snapshot = load_dashboard_snapshot(days)
-    models = list(snapshot["opencode"]["models"])
-    models.extend(snapshot["codex_models"])
-    models.extend(snapshot["hermes_models"])
-    models.sort(key=lambda item: item.get("tokens_effective_total") or 0, reverse=True)
-    for rank, model in enumerate(models, start=1):
-        model["rank"] = rank
-        model["color"] = chart_color(rank - 1, model.get("model_id", ""), model.get("provider", ""))
     profile_endpoint("api_models", started)
-    return jsonify(models)
+    return jsonify(build_models_payload(snapshot))
 
 
 @app.route("/api/daily")
@@ -332,7 +213,7 @@ def api_daily():
     top_n = parse_top_n(default=8)
     selected_model_id = request.args.get("model_id") or None
     selected_tool_id = request.args.get("tool_id") or None
-    if selected_tool_id and selected_tool_id not in {"opencode", "codex", "hermes"}:
+    if selected_tool_id and selected_tool_id not in CONNECTED_TOOL_IDS:
         if selected_tool_id in KNOWN_TOOL_IDS:
             source_label = tool_source_label(selected_tool_id) or selected_tool_id
             return empty_daily_response(
@@ -471,23 +352,9 @@ def api_daily():
             "selected_tool_label": tool_source_label(selected_tool_id),
         })
     snapshot = load_dashboard_snapshot(days)
-    if selected_tool_id == "codex":
-        records = snapshot["codex_records"]
-        if not records:
-            return empty_daily_response(top_n, selected_tool_id, error_message="Codex CLI data is unavailable.")
-        profile_endpoint("api_daily", started)
-        return jsonify(build_daily_from_model_records(records, top_n, selected_model_id, selected_tool_id))
-    if selected_tool_id == "hermes":
-        records = snapshot["hermes_records"]
-        if not records:
-            return empty_daily_response(top_n, selected_tool_id, error_message="Hermes data is unavailable.")
-        profile_endpoint("api_daily", started)
-        return jsonify(build_daily_from_model_records(records, top_n, selected_model_id, selected_tool_id))
-
-    records = list(snapshot["opencode"]["daily_records"])
-    if selected_tool_id is None:
-        records.extend(snapshot["codex_records"])
-        records.extend(snapshot["hermes_records"])
+    records, error_message = daily_records_for_tool(snapshot, selected_tool_id)
+    if error_message:
+        return empty_daily_response(top_n, selected_tool_id, error_message=error_message)
     profile_endpoint("api_daily", started)
     return jsonify(build_daily_from_model_records(records, top_n, selected_model_id, selected_tool_id))
 
@@ -506,36 +373,10 @@ def api_usage_history():
         return jsonify(history[start: start + count])
     history_snapshot = load_dashboard_snapshot(None)
     recent_snapshot = load_dashboard_snapshot(30)
-    sessions = list(history_snapshot["opencode"]["history"])
-    for record in recent_snapshot["codex_records"] + recent_snapshot["hermes_records"]:
-        sessions.append({
-            "id": record["id"],
-            "tool": record["tool"],
-            "tool_id": record["tool_id"],
-            "tool_color": record["tool_color"],
-            "source_path": record["source_path"],
-            "title": record["title"],
-            "created": record["created"],
-            "updated": record["updated"],
-            "timestamp": record["timestamp"],
-            "directory": record["directory"],
-            "model": record["model"],
-            "messages": record["messages"],
-            "tokens_input": record["tokens_input"],
-            "tokens_output": record["tokens_output"],
-            "tokens_total": record["tokens_total"],
-            "cache_read": record["cache_read"],
-            "cache_write": record["cache_write"],
-            "metrics_note": record["metrics_note"],
-            "files_changed": None,
-            "additions": None,
-            "deletions": None,
-        })
-    sessions.sort(key=lambda item: item.get("timestamp") or 0, reverse=True)
     start = int(offset or 0)
     count = int(limit or 50)
     profile_endpoint("api_usage_history", started)
-    return jsonify(sessions[start: start + count])
+    return jsonify(build_history_payload(history_snapshot, recent_snapshot, offset=start, limit=count))
 
 
 @app.route("/api/refresh")
