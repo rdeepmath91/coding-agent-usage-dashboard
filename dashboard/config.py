@@ -77,7 +77,7 @@ TOOL_SOURCES = [
         "label": "Cursor",
         "status": "placeholder",
         "status_label": "Planned adapter",
-        "source_type": "Cursor global storage SQLite database",
+        "source_type": "Cursor IDE composer SQLite database",
         "source_path": "TBD",
         "repo_url": "https://github.com/getcursor/cursor/",
         "color": "#6EE7B7",
@@ -153,8 +153,8 @@ def current_tool_sources() -> list[dict]:
         elif item["id"] == "cursor" and cursor_source_available():
             item.update({
                 "status": "active",
-                "status_label": "Active source",
-                "source_type": "Cursor global storage SQLite database",
+                "status_label": "Cursor IDE source detected",
+                "source_type": "Cursor IDE composer SQLite database",
                 "source_path": display_path(CURSOR_SOURCE_PATH),
             })
         sources.append(item)

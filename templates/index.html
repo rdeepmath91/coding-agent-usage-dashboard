@@ -1372,13 +1372,17 @@ function sourceHasTokenTotals(source) {
 function sourceStatusText(source, active) {
   if (active) return 'Focused';
   if (source?.status !== 'active') return 'Planned adapter';
-  return sourceHasTokenTotals(source) ? 'Included in totals' : 'Session provenance only';
+  if (sourceHasTokenTotals(source)) return 'Included in totals';
+  if (source?.sessions === null || source?.sessions === undefined) return `No ${fmtPeriod()} token records`;
+  return 'Session provenance only';
 }
 
 function sourceActionText(source, active) {
   if (active) return `Showing chart + table for ${source?.label || 'source'}`;
   if (source?.status !== 'active') return 'Not connected';
-  return sourceHasTokenTotals(source) ? 'Click to focus chart' : 'History only · tokens unavailable';
+  if (sourceHasTokenTotals(source)) return 'Click to focus chart';
+  if (source?.sessions === null || source?.sessions === undefined) return 'Source detected · no chart data';
+  return 'History only · tokens unavailable';
 }
 
 function renderUsageSummary() {

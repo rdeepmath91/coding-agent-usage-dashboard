@@ -890,8 +890,8 @@ class DashboardApiTests(unittest.TestCase):
         overview = self.client.get('/api/overview?days=30').get_json()
         sources = {item['id']: item for item in overview['tool_sources']}
         self.assertEqual(sources['cursor']['status'], 'active')
-        self.assertEqual(sources['cursor']['status_label'], 'Active source')
-        self.assertEqual(sources['cursor']['source_type'], 'Cursor global storage SQLite database')
+        self.assertEqual(sources['cursor']['status_label'], 'Cursor IDE source detected')
+        self.assertEqual(sources['cursor']['source_type'], 'Cursor IDE composer SQLite database')
         self.assertEqual(sources['cursor']['sessions'], 1)
         self.assertEqual(sources['cursor']['tokens_input'], 2000)
         self.assertEqual(sources['cursor']['non_cache_input'], 2000)
@@ -952,6 +952,14 @@ class DashboardApiTests(unittest.TestCase):
 
         records = dashboard_sources.cursor_records(days=30)
         self.assertEqual(records, [])
+
+        overview = self.client.get('/api/overview?days=30').get_json()
+        sources = {item['id']: item for item in overview['tool_sources']}
+        self.assertEqual(sources['cursor']['status'], 'active')
+        self.assertEqual(sources['cursor']['status_label'], 'Cursor IDE source detected')
+        self.assertIsNone(sources['cursor']['sessions'])
+        self.assertIsNone(sources['cursor']['tokens_total'])
+        self.assertNotIn('Cursor', overview['active_tool_label'])
 
     def test_hermes_records_flow_into_sources_models_daily_and_history(self):
         self._write_hermes_fixture()
@@ -1476,6 +1484,8 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIn('source details', html)
         self.assertIn('tooltip.textContent = `${sourceType} · Source: ${sourcePath}`', html)
         self.assertIn('Included in totals', html)
+        self.assertIn('No ${fmtPeriod()} token records', html)
+        self.assertIn('Source detected · no chart data', html)
         self.assertIn('Focused', html)
         self.assertIn('Click to focus chart', html)
         self.assertIn('Showing chart + table for', html)

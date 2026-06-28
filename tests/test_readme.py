@@ -40,7 +40,8 @@ class ReadmeTests(unittest.TestCase):
 
         self.assertIn('Codex CLI via `~/.codex/state_5.sqlite`', content)
         self.assertIn('Hermes via `~/.hermes/state.db`', content)
-        self.assertIn('Cursor via local global storage', content)
+        self.assertIn('Cursor IDE Composer via local global storage', content)
+        self.assertIn('Cursor Agent CLI chats under `~/.cursor` are a separate storage surface', content)
         self.assertIn('`~/.config/Cursor/User/globalStorage/state.vscdb` on Linux', content)
         self.assertIn('`DASHBOARD_CURSOR_STATE_PATH`', content)
         self.assertIn('Overview `Total Tokens` means full token volume', content)
