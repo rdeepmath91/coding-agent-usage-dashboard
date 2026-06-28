@@ -476,8 +476,8 @@ def cursor_records(days: int | None = None) -> list[dict]:
     return records
 
 
-def cursor_overview(days: int | None = None) -> dict | None:
-    records = cursor_records(days)
+def cursor_overview(days: int | None = None, *, records: list[dict] | None = None) -> dict | None:
+    records = records if records is not None else cursor_records(days)
     if not records:
         return None
     dates = sorted({r["date"] for r in records if r.get("date")})
@@ -495,8 +495,8 @@ def cursor_overview(days: int | None = None) -> dict | None:
     }
 
 
-def aggregate_cursor_models(days: int | None = 30) -> list[dict]:
-    records = cursor_records(days)
+def aggregate_cursor_models(days: int | None = 30, *, records: list[dict] | None = None) -> list[dict]:
+    records = records if records is not None else cursor_records(days)
     if not records:
         return []
     return [{

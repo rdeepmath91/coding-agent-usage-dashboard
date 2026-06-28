@@ -67,8 +67,12 @@ class DashboardApiTests(unittest.TestCase):
         cls.original_codex_sessions_dir = dashboard_config.CODEX_SESSIONS_DIR
         cls.original_codex_source_path = dashboard_config.CODEX_SOURCE_PATH
         cls.original_hermes_state_path = dashboard_config.HERMES_STATE_PATH
+        cls.original_cursor_state_path = dashboard_config.CURSOR_STATE_PATH
+        cls.original_cursor_source_path = dashboard_config.CURSOR_SOURCE_PATH
         cls.codex_state_path = Path(cls.tmpdir.name) / "missing-codex-state.sqlite"
         cls.hermes_state_path = Path(cls.tmpdir.name) / "missing-hermes-state.db"
+        cls.cursor_state_path = Path(cls.tmpdir.name) / "missing-cursor-state.vscdb"
+        cls.cursor_fixture_state_path = Path(cls.tmpdir.name) / "cursor-state.vscdb"
         cls.codex_sessions_dir = Path(cls.tmpdir.name) / "codex-sessions"
         cls._build_test_db(cls.db_path)
         dashboard_config.DB_PATH = str(cls.db_path)
@@ -76,6 +80,8 @@ class DashboardApiTests(unittest.TestCase):
         dashboard_config.CODEX_SESSIONS_DIR = str(cls.codex_sessions_dir)
         dashboard_config.CODEX_SOURCE_PATH = str(cls.codex_state_path)
         dashboard_config.HERMES_STATE_PATH = str(cls.hermes_state_path)
+        dashboard_config.CURSOR_STATE_PATH = str(cls.cursor_state_path)
+        dashboard_config.CURSOR_SOURCE_PATH = str(cls.cursor_state_path)
 
     @classmethod
     def tearDownClass(cls):
@@ -84,6 +90,8 @@ class DashboardApiTests(unittest.TestCase):
         dashboard_config.CODEX_SESSIONS_DIR = cls.original_codex_sessions_dir
         dashboard_config.CODEX_SOURCE_PATH = cls.original_codex_source_path
         dashboard_config.HERMES_STATE_PATH = cls.original_hermes_state_path
+        dashboard_config.CURSOR_STATE_PATH = cls.original_cursor_state_path
+        dashboard_config.CURSOR_SOURCE_PATH = cls.original_cursor_source_path
         cls.tmpdir.cleanup()
 
     @classmethod
@@ -1499,11 +1507,11 @@ class DashboardApiTests(unittest.TestCase):
         overview = self.client.get('/api/overview?simulate=1&days=31')
         self.assertEqual(overview.status_code, 200)
         payload = overview.get_json()
-        self.assertEqual(payload['active_tool_label'], 'OpenCode + Codex CLI + Hermes (simulated)')
+        self.assertEqual(payload['active_tool_label'], 'OpenCode + Codex CLI + Hermes + Cursor (simulated)')
         self.assertEqual(payload['source_path'], 'simulated multi-source dataset')
         self.assertGreater(payload['total_tokens'], 0)
         sources = {item['id']: item for item in payload['tool_sources']}
-        self.assertEqual(set(sources), {'opencode', 'codex', 'hermes'})
+        self.assertEqual(set(sources), {'opencode', 'codex', 'hermes', 'cursor'})
         for source in sources.values():
             self.assertEqual(source['status'], 'active')
             self.assertEqual(source['status_label'], 'Simulated')
@@ -1511,7 +1519,7 @@ class DashboardApiTests(unittest.TestCase):
 
         models = self.client.get('/api/models?simulate=1&days=31').get_json()
         self.assertTrue(models)
-        self.assertEqual({'opencode', 'codex', 'hermes'}, {item['tool_id'] for item in models})
+        self.assertEqual({'opencode', 'codex', 'hermes', 'cursor'}, {item['tool_id'] for item in models})
 
         daily = self.client.get('/api/daily?simulate=1&days=31&top_n=4').get_json()
         self.assertEqual(len(daily['dates']), 31)
