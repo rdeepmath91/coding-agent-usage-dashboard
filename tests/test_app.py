@@ -371,7 +371,11 @@ class DashboardApiTests(unittest.TestCase):
             and item.get('pricing_status') in {'priced', 'partial'}
         ]
         self.assertTrue(api_priced)
-        self.assertTrue(all(item.get('pricing_url', '').startswith('https://openrouter.ai/') for item in api_priced))
+        self.assertTrue(all(
+            item.get('pricing_url', '').startswith('https://openrouter.ai/')
+            or item.get('pricing_url') == dashboard_pricing.OPENAI_PRICING_URL
+            for item in api_priced
+        ))
 
     def test_usage_history_applies_offset_after_merging_sources(self):
         response = self.client.get('/api/usage-history?limit=1&offset=1')
@@ -1150,7 +1154,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(hermes_model['tokens_total'], 6200)
         self.assertEqual(hermes_model['pricing_status'], 'partial')
         self.assertIsNone(hermes_model['estimated_cost'])
-        self.assertIn('OpenRouter /api/v1/models', hermes_model['pricing_source'])
+        self.assertIn('OpenAI official API pricing', hermes_model['pricing_source'])
         self.assertIn('Hermes session accounting covers 1/2 sessions', hermes_model['pricing_source'])
         self.assertEqual(hermes_model['pricing_model_id'], 'openai/gpt-5.5')
         self.assertEqual(hermes_model['partial_cost_usd'], 0.0695)
@@ -1785,6 +1789,33 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(prices["openai/gpt-5.6-sol"]["input_cache_write"], 6.25)
         self.assertNotIn("overrides", prices["openai/gpt-5.6-sol"])
 
+    def test_supported_openai_models_prefer_official_pricing_over_openrouter(self):
+        model_ids = (
+            "gpt-5.3-codex-spark",
+            "gpt-5.5",
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
+        )
+        stale_prices = {
+            f"openai/{model_id.removesuffix('-spark')}": {
+                "prompt": "999",
+                "completion": "999",
+            }
+            for model_id in model_ids
+        }
+        with mock.patch.object(dashboard_pricing, 'openrouter_prices', return_value=stale_prices):
+            results = [
+                dashboard_pricing.estimate_cost("openai", model_id, 1_000_000, 1_000_000)
+                for model_id in model_ids
+            ]
+
+        self.assertTrue(all(result['pricing_status'] == 'priced' for result in results))
+        self.assertTrue(all(result['pricing_source'].startswith('OpenAI official API pricing') for result in results))
+        self.assertTrue(all(result['pricing_url'] == dashboard_pricing.OPENAI_PRICING_URL for result in results))
+        self.assertTrue(all(result['input_price'] != 999.0 for result in results))
+        self.assertTrue(all(result['output_price'] != 999.0 for result in results))
+
     def test_pricing_alias_registry_resolves_target_aliases(self):
         with mock.patch.object(dashboard_pricing, 'openrouter_prices', return_value={}):
             opencode_spark = dashboard_pricing.estimate_cost(
@@ -1836,7 +1867,7 @@ class DashboardApiTests(unittest.TestCase):
 
         self.assertEqual(opencode_spark["pricing_status"], "priced")
         self.assertEqual(opencode_spark["pricing_model_id"], "openai/gpt-5.3-codex")
-        self.assertEqual(opencode_spark["pricing_url"], "https://openrouter.ai/openai/gpt-5.3-codex")
+        self.assertEqual(opencode_spark["pricing_url"], dashboard_pricing.OPENAI_PRICING_URL)
         self.assertIn("alias registry: opencode-go/gpt-5.3-codex-spark -> openai/gpt-5.3-codex", opencode_spark["pricing_source"])
 
         self.assertEqual(codex_spark["pricing_status"], "priced")

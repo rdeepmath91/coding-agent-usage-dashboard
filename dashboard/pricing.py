@@ -13,26 +13,6 @@ TOKENS_PER_MILLION = 1_000_000
 PRICING_CACHE = {"fetched_at": 0, "prices": {}}
 
 HARDCODED_MODEL_PRICES = {
-    "openai/gpt-5.5": {
-        "prompt": "5",
-        "completion": "30",
-        "input_cache_read": "0.5",
-    },
-    "openai/gpt-5.4": {
-        "prompt": "2.5",
-        "completion": "15",
-        "input_cache_read": "0.25",
-    },
-    "openai/gpt-5.4-mini": {
-        "prompt": "0.75",
-        "completion": "4.5",
-        "input_cache_read": "0.075",
-    },
-    "openai/gpt-5.3-codex": {
-        "prompt": "1.75",
-        "completion": "14",
-        "input_cache_read": "0.175",
-    },
     "deepseek/deepseek-v4-flash:free": {
         "prompt": "0",
         "completion": "0",
@@ -79,11 +59,37 @@ HARDCODED_MODEL_PRICES = {
 # these values ahead of aggregator data because provider catalogs can lag an
 # official price change.
 OFFICIAL_MODEL_PRICES = {
+    "openai/gpt-5.3-codex": {
+        "prompt": "1.75",
+        "completion": "14",
+        "input_cache_read": "0.175",
+    },
+    "openai/gpt-5.4": {
+        "prompt": "2.5",
+        "completion": "15",
+        "input_cache_read": "0.25",
+    },
+    "openai/gpt-5.4-mini": {
+        "prompt": "0.75",
+        "completion": "4.5",
+        "input_cache_read": "0.075",
+    },
+    "openai/gpt-5.5": {
+        "prompt": "5",
+        "completion": "30",
+        "input_cache_read": "0.5",
+    },
     "openai/gpt-5.6-sol": {
         "prompt": "5",
         "completion": "30",
         "input_cache_read": "0.5",
         "input_cache_write": "6.25",
+    },
+    "openai/gpt-5.6-terra": {
+        "prompt": "2",
+        "completion": "12",
+        "input_cache_read": "0.2",
+        "input_cache_write": "2.5",
     },
     "openai/gpt-5.6-luna": {
         "prompt": "0.2",
