@@ -1,0 +1,1150 @@
+[
+  {
+    "author": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/3381a0a05eb2bc31e53386c724fab3bc279ee5cb/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T06:03:59Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T06:03:59Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "message": "Clarify overview token cards",
+      "tree": {
+        "sha": "f2fbfaf2bd22d26afdf53ed6f6e38ef6e5ea21de",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/f2fbfaf2bd22d26afdf53ed6f6e38ef6e5ea21de"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/3381a0a05eb2bc31e53386c724fab3bc279ee5cb",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/3381a0a05eb2bc31e53386c724fab3bc279ee5cb",
+    "node_id": "C_kwDOSn9XGdoAKDMzODFhMGEwNWViMmJjMzFlNTMzODZjNzI0ZmFiM2JjMjc5ZWU1Y2I",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/dcfa891e20d4901518afeb37e7fa86b94d9c7577",
+        "sha": "dcfa891e20d4901518afeb37e7fa86b94d9c7577",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/dcfa891e20d4901518afeb37e7fa86b94d9c7577"
+      }
+    ],
+    "sha": "3381a0a05eb2bc31e53386c724fab3bc279ee5cb",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/3381a0a05eb2bc31e53386c724fab3bc279ee5cb"
+  },
+  {
+    "author": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/a022875c0d684af936569d4c4d88e87e576ee36d/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T06:53:24Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T06:53:24Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "message": "Show partial cost estimate badge",
+      "tree": {
+        "sha": "52f3f234217f3f5f3e872e1ffa9318b0844e12c9",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/52f3f234217f3f5f3e872e1ffa9318b0844e12c9"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/a022875c0d684af936569d4c4d88e87e576ee36d",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/a022875c0d684af936569d4c4d88e87e576ee36d",
+    "node_id": "C_kwDOSn9XGdoAKGEwMjI4NzVjMGQ2ODRhZjkzNjU2OWQ0YzRkODhlODdlNTc2ZWUzNmQ",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/3381a0a05eb2bc31e53386c724fab3bc279ee5cb",
+        "sha": "3381a0a05eb2bc31e53386c724fab3bc279ee5cb",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/3381a0a05eb2bc31e53386c724fab3bc279ee5cb"
+      }
+    ],
+    "sha": "a022875c0d684af936569d4c4d88e87e576ee36d",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/a022875c0d684af936569d4c4d88e87e576ee36d"
+  },
+  {
+    "author": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/c809ad70dd30d35d2c3d742864ad97889624b80c/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T08:55:46Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T08:55:46Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "message": "Polish overview card hierarchy",
+      "tree": {
+        "sha": "0e8e521950cef8233a5fd26faf047997d1fd860e",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/0e8e521950cef8233a5fd26faf047997d1fd860e"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/c809ad70dd30d35d2c3d742864ad97889624b80c",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/c809ad70dd30d35d2c3d742864ad97889624b80c",
+    "node_id": "C_kwDOSn9XGdoAKGM4MDlhZDcwZGQzMGQzNWQyYzNkNzQyODY0YWQ5Nzg4OTYyNGI4MGM",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/a022875c0d684af936569d4c4d88e87e576ee36d",
+        "sha": "a022875c0d684af936569d4c4d88e87e576ee36d",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/a022875c0d684af936569d4c4d88e87e576ee36d"
+      }
+    ],
+    "sha": "c809ad70dd30d35d2c3d742864ad97889624b80c",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/c809ad70dd30d35d2c3d742864ad97889624b80c"
+  },
+  {
+    "author": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/d644c8c16557d5a30dd4c290d45eabe1d0282398/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T12:21:02Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T12:21:02Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "message": "Include partial cost in overview card; simulate mode returns one opencode source",
+      "tree": {
+        "sha": "2d47a3e99ccf4325ef1989f1ddd9ba4acb5bd680",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/2d47a3e99ccf4325ef1989f1ddd9ba4acb5bd680"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/d644c8c16557d5a30dd4c290d45eabe1d0282398",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/d644c8c16557d5a30dd4c290d45eabe1d0282398",
+    "node_id": "C_kwDOSn9XGdoAKGQ2NDRjOGMxNjU1N2Q1YTMwZGQ0YzI5MGQ0NWVhYmUxZDAyODIzOTg",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/c809ad70dd30d35d2c3d742864ad97889624b80c",
+        "sha": "c809ad70dd30d35d2c3d742864ad97889624b80c",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/c809ad70dd30d35d2c3d742864ad97889624b80c"
+      }
+    ],
+    "sha": "d644c8c16557d5a30dd4c290d45eabe1d0282398",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/d644c8c16557d5a30dd4c290d45eabe1d0282398"
+  },
+  {
+    "author": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/76932869637fa7a57f9edc108c74e18c49ef3872/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T12:38:18Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T12:38:18Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "message": "Label partial-only cost coverage correctly",
+      "tree": {
+        "sha": "cb3e9c1134cfb1d3addf293aef1ff35b3eecca17",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/cb3e9c1134cfb1d3addf293aef1ff35b3eecca17"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/76932869637fa7a57f9edc108c74e18c49ef3872",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/76932869637fa7a57f9edc108c74e18c49ef3872",
+    "node_id": "C_kwDOSn9XGdoAKDc2OTMyODY5NjM3ZmE3YTU3ZjllZGMxMDhjNzRlMThjNDllZjM4NzI",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/d644c8c16557d5a30dd4c290d45eabe1d0282398",
+        "sha": "d644c8c16557d5a30dd4c290d45eabe1d0282398",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/d644c8c16557d5a30dd4c290d45eabe1d0282398"
+      }
+    ],
+    "sha": "76932869637fa7a57f9edc108c74e18c49ef3872",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/76932869637fa7a57f9edc108c74e18c49ef3872"
+  },
+  {
+    "author": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/2047d84d43cb9acd57fa671beff539dae2264709/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T12:50:16Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T12:50:16Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "message": "Shorten dash copy; add card loading states on range changes",
+      "tree": {
+        "sha": "3f13735e4efafe3e4a3f2598520f294d7a27ba38",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/3f13735e4efafe3e4a3f2598520f294d7a27ba38"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/2047d84d43cb9acd57fa671beff539dae2264709",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/2047d84d43cb9acd57fa671beff539dae2264709",
+    "node_id": "C_kwDOSn9XGdoAKDIwNDdkODRkNDNjYjlhY2Q1N2ZhNjcxYmVmZjUzOWRhZTIyNjQ3MDk",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/76932869637fa7a57f9edc108c74e18c49ef3872",
+        "sha": "76932869637fa7a57f9edc108c74e18c49ef3872",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/76932869637fa7a57f9edc108c74e18c49ef3872"
+      }
+    ],
+    "sha": "2047d84d43cb9acd57fa671beff539dae2264709",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/2047d84d43cb9acd57fa671beff539dae2264709"
+  },
+  {
+    "author": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/6e1e9d17f82e419c5fa65f3e133f9f8bf87b0de3/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T12:58:19Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T12:58:19Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "message": "Shorten visible cost coverage copy",
+      "tree": {
+        "sha": "f696adb0f64aac986e0bc570cc77bc3a460ea7d7",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/f696adb0f64aac986e0bc570cc77bc3a460ea7d7"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/6e1e9d17f82e419c5fa65f3e133f9f8bf87b0de3",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/6e1e9d17f82e419c5fa65f3e133f9f8bf87b0de3",
+    "node_id": "C_kwDOSn9XGdoAKDZlMWU5ZDE3ZjgyZTQxOWM1ZmE2NWYzZTEzM2Y5ZjhiZjg3YjBkZTM",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/2047d84d43cb9acd57fa671beff539dae2264709",
+        "sha": "2047d84d43cb9acd57fa671beff539dae2264709",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/2047d84d43cb9acd57fa671beff539dae2264709"
+      }
+    ],
+    "sha": "6e1e9d17f82e419c5fa65f3e133f9f8bf87b0de3",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/6e1e9d17f82e419c5fa65f3e133f9f8bf87b0de3"
+  },
+  {
+    "author": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/e9308c4f4f72e08e5490fefcadc14cf9b4b6f847/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T15:30:34Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T15:30:34Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "message": "Fix chart top-n loading and partial cost tooltip",
+      "tree": {
+        "sha": "27bdbba60e0d9a6b9a04afc26d668e8672443b83",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/27bdbba60e0d9a6b9a04afc26d668e8672443b83"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/e9308c4f4f72e08e5490fefcadc14cf9b4b6f847",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/e9308c4f4f72e08e5490fefcadc14cf9b4b6f847",
+    "node_id": "C_kwDOSn9XGdoAKGU5MzA4YzRmNGY3MmUwOGU1NDkwZmVmY2FkYzE0Y2Y5YjRiNmY4NDc",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/6e1e9d17f82e419c5fa65f3e133f9f8bf87b0de3",
+        "sha": "6e1e9d17f82e419c5fa65f3e133f9f8bf87b0de3",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/6e1e9d17f82e419c5fa65f3e133f9f8bf87b0de3"
+      }
+    ],
+    "sha": "e9308c4f4f72e08e5490fefcadc14cf9b4b6f847",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/e9308c4f4f72e08e5490fefcadc14cf9b4b6f847"
+  },
+  {
+    "author": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/c15e5ab43ed9ccaa4624afbce14b7a6e9860afb9/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T16:13:14Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T16:13:14Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "message": "Constrain loading shimmer to stat cards",
+      "tree": {
+        "sha": "552f7610dbfbba3461e2756e41ce132291f6739c",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/552f7610dbfbba3461e2756e41ce132291f6739c"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/c15e5ab43ed9ccaa4624afbce14b7a6e9860afb9",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/c15e5ab43ed9ccaa4624afbce14b7a6e9860afb9",
+    "node_id": "C_kwDOSn9XGdoAKGMxNWU1YWI0M2VkOWNjYWE0NjI0YWZiY2UxNGI3YTZlOTg2MGFmYjk",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/e9308c4f4f72e08e5490fefcadc14cf9b4b6f847",
+        "sha": "e9308c4f4f72e08e5490fefcadc14cf9b4b6f847",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/e9308c4f4f72e08e5490fefcadc14cf9b4b6f847"
+      }
+    ],
+    "sha": "c15e5ab43ed9ccaa4624afbce14b7a6e9860afb9",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/c15e5ab43ed9ccaa4624afbce14b7a6e9860afb9"
+  },
+  {
+    "author": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/d429b9b9e8e96b67dba2e8f0310437258a4ad7d7/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T16:20:09Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T16:20:09Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "message": "Add 3d dashboard range filter",
+      "tree": {
+        "sha": "8fe6aa41876beb8ee743a7a87ed0795937ae3054",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/8fe6aa41876beb8ee743a7a87ed0795937ae3054"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/d429b9b9e8e96b67dba2e8f0310437258a4ad7d7",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/d429b9b9e8e96b67dba2e8f0310437258a4ad7d7",
+    "node_id": "C_kwDOSn9XGdoAKGQ0MjliOWI5ZThlOTZiNjdkYmEyZThmMDMxMDQzNzI1OGE0YWQ3ZDc",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/c15e5ab43ed9ccaa4624afbce14b7a6e9860afb9",
+        "sha": "c15e5ab43ed9ccaa4624afbce14b7a6e9860afb9",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/c15e5ab43ed9ccaa4624afbce14b7a6e9860afb9"
+      }
+    ],
+    "sha": "d429b9b9e8e96b67dba2e8f0310437258a4ad7d7",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/d429b9b9e8e96b67dba2e8f0310437258a4ad7d7"
+  },
+  {
+    "author": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/444ac685363d38d8ce66c2332be36330f6e0343f/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T16:24:23Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T16:24:23Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "message": "docs: update PR 22 scope and description",
+      "tree": {
+        "sha": "b3622d0ce2759b9fe5c7ad8372231ea7abd725b1",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/b3622d0ce2759b9fe5c7ad8372231ea7abd725b1"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/444ac685363d38d8ce66c2332be36330f6e0343f",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/444ac685363d38d8ce66c2332be36330f6e0343f",
+    "node_id": "C_kwDOSn9XGdoAKDQ0NGFjNjg1MzYzZDM4ZDhjZTY2YzIzMzJiZTM2MzMwZjZlMDM0M2Y",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/d429b9b9e8e96b67dba2e8f0310437258a4ad7d7",
+        "sha": "d429b9b9e8e96b67dba2e8f0310437258a4ad7d7",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/d429b9b9e8e96b67dba2e8f0310437258a4ad7d7"
+      }
+    ],
+    "sha": "444ac685363d38d8ce66c2332be36330f6e0343f",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/444ac685363d38d8ce66c2332be36330f6e0343f"
+  },
+  {
+    "author": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/095a5c6e1e465b7385b56280a0aec5646826ce20/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T16:24:46Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T16:24:46Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "message": "docs: remove temporary PR body file",
+      "tree": {
+        "sha": "85fb2e2fda0b43913e34ae6e07a63edb034cf080",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/85fb2e2fda0b43913e34ae6e07a63edb034cf080"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/095a5c6e1e465b7385b56280a0aec5646826ce20",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/095a5c6e1e465b7385b56280a0aec5646826ce20",
+    "node_id": "C_kwDOSn9XGdoAKDA5NWE1YzZlMWU0NjViNzM4NWI1NjI4MGEwYWVjNTY0NjgyNmNlMjA",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/444ac685363d38d8ce66c2332be36330f6e0343f",
+        "sha": "444ac685363d38d8ce66c2332be36330f6e0343f",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/444ac685363d38d8ce66c2332be36330f6e0343f"
+      }
+    ],
+    "sha": "095a5c6e1e465b7385b56280a0aec5646826ce20",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/095a5c6e1e465b7385b56280a0aec5646826ce20"
+  },
+  {
+    "author": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/606f0792e28a2666f904da394e83becf6b562348/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T16:38:55Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T16:38:55Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "message": "fix: preserve metric tooltip overflow",
+      "tree": {
+        "sha": "147989e76f8774a7a57776b0d86fdb5f8dc92fe2",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/147989e76f8774a7a57776b0d86fdb5f8dc92fe2"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/606f0792e28a2666f904da394e83becf6b562348",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/606f0792e28a2666f904da394e83becf6b562348",
+    "node_id": "C_kwDOSn9XGdoAKDYwNmYwNzkyZTI4YTI2NjZmOTA0ZGEzOTRlODNiZWNmNmI1NjIzNDg",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/095a5c6e1e465b7385b56280a0aec5646826ce20",
+        "sha": "095a5c6e1e465b7385b56280a0aec5646826ce20",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/095a5c6e1e465b7385b56280a0aec5646826ce20"
+      }
+    ],
+    "sha": "606f0792e28a2666f904da394e83becf6b562348",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/606f0792e28a2666f904da394e83becf6b562348"
+  },
+  {
+    "author": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/38284d577e7ec6d767561fda2fb680b0faf4f7af/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T16:54:30Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T16:54:30Z",
+        "email": "raymond.christopher@gdplabs.id",
+        "name": "Raymond Christopher"
+      },
+      "message": "docs: update PR 22 validation head",
+      "tree": {
+        "sha": "617a870194f66a47f57a813af52ebe69d5dcb2e7",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/617a870194f66a47f57a813af52ebe69d5dcb2e7"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/38284d577e7ec6d767561fda2fb680b0faf4f7af",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    },
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/38284d577e7ec6d767561fda2fb680b0faf4f7af",
+    "node_id": "C_kwDOSn9XGdoAKDM4Mjg0ZDU3N2U3ZWM2ZDc2NzU2MWZkYTJmYjY4MGIwZmFmNGY3YWY",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/606f0792e28a2666f904da394e83becf6b562348",
+        "sha": "606f0792e28a2666f904da394e83becf6b562348",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/606f0792e28a2666f904da394e83becf6b562348"
+      }
+    ],
+    "sha": "38284d577e7ec6d767561fda2fb680b0faf4f7af",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/38284d577e7ec6d767561fda2fb680b0faf4f7af"
+  }
+]

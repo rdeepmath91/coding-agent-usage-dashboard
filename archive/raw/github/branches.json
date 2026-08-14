@@ -1,0 +1,74 @@
+[
+  {
+    "commit": {
+      "sha": "90233de903c5c1d2a32812698ab101f1e5e81c2b",
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/90233de903c5c1d2a32812698ab101f1e5e81c2b"
+    },
+    "name": "chore/enforce-worktree-workflow",
+    "protected": false
+  },
+  {
+    "commit": {
+      "sha": "edd02b199a9b1c7c2b64e7233bb52b6b872af64c",
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/edd02b199a9b1c7c2b64e7233bb52b6b872af64c"
+    },
+    "name": "design/usage-explorer-prototype",
+    "protected": false
+  },
+  {
+    "commit": {
+      "sha": "368d02e6fd6859ea0843efe6705f9e75b23591cf",
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/368d02e6fd6859ea0843efe6705f9e75b23591cf"
+    },
+    "name": "fix/deepseek-provider-pricing",
+    "protected": false
+  },
+  {
+    "commit": {
+      "sha": "6fbcaa30d9c83fe8aea8937b16f6aec04933eafe",
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/6fbcaa30d9c83fe8aea8937b16f6aec04933eafe"
+    },
+    "name": "issue-23-usage-summary",
+    "protected": false
+  },
+  {
+    "commit": {
+      "sha": "d35fe1b3fbc395357070f2af5608a2b621bcfb41",
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/d35fe1b3fbc395357070f2af5608a2b621bcfb41"
+    },
+    "name": "issue-24-performance",
+    "protected": false
+  },
+  {
+    "commit": {
+      "sha": "7d5de34a1751f5f2b3f9d6dd2352e37ca5ada052",
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/7d5de34a1751f5f2b3f9d6dd2352e37ca5ada052"
+    },
+    "name": "issue-25-readme-screenshot",
+    "protected": false
+  },
+  {
+    "commit": {
+      "sha": "da01b3ae0606da3a7af93ba2f4374fde67a76e30",
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/da01b3ae0606da3a7af93ba2f4374fde67a76e30"
+    },
+    "name": "issue-34-update-ux-visuals",
+    "protected": false
+  },
+  {
+    "commit": {
+      "sha": "4bc75fa4e206cffd5e20a969824bc47a042c3bc1",
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/4bc75fa4e206cffd5e20a969824bc47a042c3bc1"
+    },
+    "name": "main",
+    "protected": false
+  },
+  {
+    "commit": {
+      "sha": "7129fe8fa6eecbccabe30556f5dffcc61105aaa6",
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/7129fe8fa6eecbccabe30556f5dffcc61105aaa6"
+    },
+    "name": "test-update-button-doc-note",
+    "protected": false
+  }
+]

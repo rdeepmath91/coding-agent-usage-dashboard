@@ -1,0 +1,62 @@
+{
+  "archived-pr": {
+    "destination_id": 11832655999,
+    "destination_name": "archived-pr",
+    "source_color": "5319e7",
+    "source_name": "archived-pr"
+  },
+  "bug": {
+    "destination_id": 11832562247,
+    "destination_name": "bug",
+    "source_color": "d73a4a",
+    "source_name": "bug"
+  },
+  "documentation": {
+    "destination_id": 11832562257,
+    "destination_name": "documentation",
+    "source_color": "0075ca",
+    "source_name": "documentation"
+  },
+  "duplicate": {
+    "destination_id": 11832562263,
+    "destination_name": "duplicate",
+    "source_color": "cfd3d7",
+    "source_name": "duplicate"
+  },
+  "enhancement": {
+    "destination_id": 11832562271,
+    "destination_name": "enhancement",
+    "source_color": "a2eeef",
+    "source_name": "enhancement"
+  },
+  "good first issue": {
+    "destination_id": 11832562287,
+    "destination_name": "good first issue",
+    "source_color": "7057ff",
+    "source_name": "good first issue"
+  },
+  "help wanted": {
+    "destination_id": 11832562278,
+    "destination_name": "help wanted",
+    "source_color": "008672",
+    "source_name": "help wanted"
+  },
+  "invalid": {
+    "destination_id": 11832562298,
+    "destination_name": "invalid",
+    "source_color": "e4e669",
+    "source_name": "invalid"
+  },
+  "question": {
+    "destination_id": 11832562307,
+    "destination_name": "question",
+    "source_color": "d876e3",
+    "source_name": "question"
+  },
+  "wontfix": {
+    "destination_id": 11832562313,
+    "destination_name": "wontfix",
+    "source_color": "ffffff",
+    "source_name": "wontfix"
+  }
+}

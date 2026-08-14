@@ -1,0 +1,49 @@
+[
+  {
+    "author_association": "OWNER",
+    "body": "Design recommendation: make this an intentional **industrial terminal cockpit** theme system, not a generic SaaS light/dark pass.\n\nDark mode should preserve the current graphite terminal feel with sharper source accents. Light mode should use warm paper/porcelain surfaces with graphite text, still technical and compact, not plain white cards.\n\nImplementation notes:\n\n- Use semantic CSS tokens for surfaces, text, borders, shadows, chart grid, and interaction states.\n- Keep tool/source colors separate from theme surface tokens, e.g. OpenCode, Codex CLI, Hermes accents.\n- Apply `data-theme=\"light\"` / `data-theme=\"dark\"` on `<html>`.\n- Default to `prefers-color-scheme` when no user choice exists.\n- Persist explicit user choice in `localStorage`.\n- Add an accessible toggle with `aria-pressed` and explicit labels such as `Switch to light mode` / `Switch to dark mode`.\n- Update `color-scheme` and `<meta name=\"theme-color\">` for the active theme.\n- Verify dashboard and settings page, including chart, tables, tooltips, focus states, source cards, buttons, and form controls.\n- Keep source-provenance wording and API/data contracts unchanged.\n\nVisual direction:\n\n- Dark: deep graphite, ink-black panels, cyan/amber/yellow tool accents, subtle grid/noise texture.\n- Light: warm paper/porcelain background, graphite text, muted cyan/amber accents, instrument-panel cards rather than flat white SaaS cards.\n- Chart gridlines, legends, tooltip surfaces, and muted text should be tuned separately per theme.\n\nSuggested acceptance criteria additions:\n\n- Theme choice persists across reloads.\n- System preference is respected before user selection.\n- Both themes meet readable contrast for cards, tables, charts, buttons, inputs, tooltips, and focus states.\n- Chart and tool-source colors remain distinguishable in both themes.\n- Browser smoke covers both themes with active OpenCode, Codex CLI, and Hermes source cards.\n- Existing tests pass.",
+    "created_at": "2026-05-31T07:58:21Z",
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/13#issuecomment-4586112911",
+    "id": 4586112911,
+    "issue_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/issues/13",
+    "minimized": null,
+    "node_id": "IC_kwDOSn9XGc8AAAABEVqHjw",
+    "performed_via_github_app": null,
+    "pin": null,
+    "reactions": {
+      "+1": 0,
+      "-1": 0,
+      "confused": 0,
+      "eyes": 0,
+      "heart": 0,
+      "hooray": 0,
+      "laugh": 0,
+      "rocket": 0,
+      "total_count": 0,
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/issues/comments/4586112911/reactions"
+    },
+    "updated_at": "2026-05-31T07:58:21Z",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/issues/comments/4586112911",
+    "user": {
+      "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+      "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+      "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+      "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+      "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+      "gravatar_id": "",
+      "html_url": "https://github.com/raychrisgdp",
+      "id": 171540086,
+      "login": "raychrisgdp",
+      "node_id": "U_kgDOCjl-dg",
+      "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+      "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+      "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+      "site_admin": false,
+      "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+      "type": "User",
+      "url": "https://api.github.com/users/raychrisgdp",
+      "user_view_type": "public"
+    }
+  }
+]

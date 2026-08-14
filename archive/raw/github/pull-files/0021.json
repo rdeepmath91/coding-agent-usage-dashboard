@@ -1,0 +1,62 @@
+[
+  {
+    "additions": 1,
+    "blob_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/90233de903c5c1d2a32812698ab101f1e5e81c2b/.gitignore",
+    "changes": 1,
+    "contents_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/contents/.gitignore?ref=90233de903c5c1d2a32812698ab101f1e5e81c2b",
+    "deletions": 0,
+    "filename": ".gitignore",
+    "patch": "@@ -9,3 +9,4 @@ venv/\n dashboard-snapshots/\n .playwright-mcp/\n dashboard-*.png\n+.worktrees/",
+    "raw_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/raw/90233de903c5c1d2a32812698ab101f1e5e81c2b/.gitignore",
+    "sha": "cbeb7694d1fe38edb36b0efcd390aa75f081ac26",
+    "status": "modified"
+  },
+  {
+    "additions": 7,
+    "blob_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/90233de903c5c1d2a32812698ab101f1e5e81c2b/AGENTS.md",
+    "changes": 7,
+    "contents_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/contents/AGENTS.md?ref=90233de903c5c1d2a32812698ab101f1e5e81c2b",
+    "deletions": 0,
+    "filename": "AGENTS.md",
+    "patch": "@@ -11,6 +11,12 @@ Guidance for agents working in this repo.\n ## Working style\n \n - Prefer small, reviewable PRs. Do not push straight to `main`.\n+- Work in a worktree, not in the `main` checkout. Default location is **outside** the repo (a sibling directory), created with:\n+  ```bash\n+  git worktree add ../worktrees/<branch-slug> -b <branch> origin/main\n+  ```\n+  The on-disk path does not need to be `../worktrees/`, but it must not be inside the repo unless it is also added to `.gitignore` (it is, as `.worktrees/`). When a worktree lives inside the repo, never stage or commit its directory.\n+- Run `scripts/review.sh` from inside the worktree before pushing. The script refuses to run from `main` outside `REVIEW_MODE=docs`, which is the safety net for this rule.\n - Make the smallest change that fully solves the problem.\n - Preserve existing behavior unless the task explicitly changes it.\n - If a request expands scope, capture it as follow-up work instead of quietly folding unrelated refactors into the same PR.\n@@ -99,3 +105,4 @@ Review focus for this repo:\n - Preserve concise, direct wording in UI and docs.\n - When adding planned adapters, prefer honest placeholders such as `TBD` over fake completeness.\n - If a change introduces a new source of truth, document it in README and keep the wording consistent across backend payloads, templates, and tests.\n+- Keep the `main` checkout clean. It exists to receive merges and run `scripts/review.sh`, not to host in-flight work. Use `git worktree list` to see active worktrees and `git worktree remove <path>` to retire them.",
+    "raw_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/raw/90233de903c5c1d2a32812698ab101f1e5e81c2b/AGENTS.md",
+    "sha": "52c140b0e9a17377edc85929e0c9105625ba33ea",
+    "status": "modified"
+  },
+  {
+    "additions": 9,
+    "blob_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/90233de903c5c1d2a32812698ab101f1e5e81c2b/scripts%2Freview.sh",
+    "changes": 9,
+    "contents_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/contents/scripts%2Freview.sh?ref=90233de903c5c1d2a32812698ab101f1e5e81c2b",
+    "deletions": 0,
+    "filename": "scripts/review.sh",
+    "patch": "@@ -7,6 +7,15 @@ cd \"$ROOT_DIR\"\n BASE_REF=${1:-origin/main}\n MODE=${REVIEW_MODE:-full}\n \n+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)\n+if [[ \"$CURRENT_BRANCH\" == \"main\" && \"$MODE\" != \"docs\" ]]; then\n+  printf '\\033[31merror:\\033[0m scripts/review.sh must run from a feature branch, not main.\\n' >&2\n+  printf 'Create a worktree and rerun from there:\\n' >&2\n+  printf '  git worktree add ../worktrees/<branch-slug> -b <branch> origin/main\\n' >&2\n+  printf 'For docs-only or AGENTS.md-only edits, set REVIEW_MODE=docs.\\n' >&2\n+  exit 1\n+fi\n+\n printf '==> Reviewing against %s\\n' \"$BASE_REF\"\n git diff --stat \"$BASE_REF\"...HEAD\n printf '\\n'",
+    "raw_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/raw/90233de903c5c1d2a32812698ab101f1e5e81c2b/scripts%2Freview.sh",
+    "sha": "cef28e6046d086636b856b39d562d61d7800611c",
+    "status": "modified"
+  },
+  {
+    "additions": 58,
+    "blob_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/90233de903c5c1d2a32812698ab101f1e5e81c2b/tests%2Ftest_app.py",
+    "changes": 58,
+    "contents_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/contents/tests%2Ftest_app.py?ref=90233de903c5c1d2a32812698ab101f1e5e81c2b",
+    "deletions": 0,
+    "filename": "tests/test_app.py",
+    "patch": "@@ -1,5 +1,6 @@\n import json\n import sqlite3\n+import subprocess\n import tempfile\n import time\n import unittest\n@@ -826,5 +827,62 @@ def test_estimate_cost_marks_paid_cache_write_without_price_partial(self):\n         self.assertIn(\"input_cache_write\", result[\"missing_price_buckets\"])\n \n \n+class ReviewScriptGuardTests(unittest.TestCase):\n+    def test_review_script_blocks_main_branch_in_full_mode(self):\n+        import os\n+        repo_root = Path(__file__).resolve().parents[1]\n+        script = repo_root / 'scripts' / 'review.sh'\n+        self.assertTrue(script.exists(), 'scripts/review.sh should exist')\n+\n+        # Exercise the guard by faking the git binary with a shim that reports\n+        # the current branch as \"main\" no matter what. This keeps the test\n+        # self-contained and avoids recursing into scripts/review.sh from inside\n+        # the suite it is testing.\n+        with tempfile.TemporaryDirectory() as fake_bin:\n+            shim = Path(fake_bin) / 'git'\n+            shim.write_text('#!/usr/bin/env bash\\necho main\\nexit 0\\n')\n+            shim.chmod(0o755)\n+            env = {**os.environ, 'PATH': f\"{fake_bin}:{os.environ.get('PATH', '')}\", 'REVIEW_MODE': 'full'}\n+\n+            result = subprocess.run(\n+                ['bash', str(script)],\n+                cwd=str(repo_root),\n+                env=env,\n+                capture_output=True, text=True,\n+            )\n+            self.assertNotEqual(result.returncode, 0, msg=result.stdout)\n+            self.assertIn('must run from a feature branch, not main', result.stderr + result.stdout)\n+            self.assertIn('REVIEW_MODE=docs', result.stderr + result.stdout)\n+\n+    def test_review_script_allows_main_branch_in_docs_mode(self):\n+        import os\n+        repo_root = Path(__file__).resolve().parents[1]\n+        script = repo_root / 'scripts' / 'review.sh'\n+\n+        with tempfile.TemporaryDirectory() as fake_bin:\n+            shim = Path(fake_bin) / 'git'\n+            shim.write_text('#!/usr/bin/env bash\\necho main\\nexit 0\\n')\n+            shim.chmod(0o755)\n+            env = {**os.environ, 'PATH': f\"{fake_bin}:{os.environ.get('PATH', '')}\", 'REVIEW_MODE': 'docs'}\n+\n+            result = subprocess.run(\n+                ['bash', str(script)],\n+                cwd=str(repo_root),\n+                env=env,\n+                capture_output=True, text=True,\n+            )\n+            self.assertEqual(result.returncode, 0, msg=result.stderr or result.stdout)\n+            self.assertIn('Docs-only review mode complete', result.stdout)\n+\n+    def test_review_script_guarding_logic_blocks_main_branch(self):\n+        repo_root = Path(__file__).resolve().parents[1]\n+        script = repo_root / 'scripts' / 'review.sh'\n+        content = script.read_text()\n+        self.assertIn('CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)', content)\n+        self.assertIn('[[ \"$CURRENT_BRANCH\" == \"main\" && \"$MODE\" != \"docs\" ]]', content)\n+        self.assertIn('must run from a feature branch, not main', content)\n+        self.assertIn('git worktree add ../worktrees/<branch-slug> -b <branch> origin/main', content)\n+\n+\n if __name__ == '__main__':\n     unittest.main()",
+    "raw_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/raw/90233de903c5c1d2a32812698ab101f1e5e81c2b/tests%2Ftest_app.py",
+    "sha": "e1f499a7d19466078c563ffe6885031c2d7095c7",
+    "status": "modified"
+  },
+  {
+    "additions": 19,
+    "blob_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/90233de903c5c1d2a32812698ab101f1e5e81c2b/tests%2Ftest_readme.py",
+    "changes": 19,
+    "contents_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/contents/tests%2Ftest_readme.py?ref=90233de903c5c1d2a32812698ab101f1e5e81c2b",
+    "deletions": 0,
+    "filename": "tests/test_readme.py",
+    "patch": "@@ -7,6 +7,7 @@\n PYPROJECT = ROOT / 'pyproject.toml'\n UV_LOCK = ROOT / 'uv.lock'\n AGENTS = ROOT / 'AGENTS.md'\n+GITIGNORE = ROOT / '.gitignore'\n \n \n class ReadmeTests(unittest.TestCase):\n@@ -45,6 +46,24 @@ def test_agent_guidance_matches_token_and_source_contract(self):\n         self.assertIn('Total tokens means `non-cache input + output assistant-message tokens`', content)\n         self.assertNotIn('Total tokens means `input + output assistant-message tokens`', content)\n \n+    def test_agent_guidance_requires_worktree_workflow(self):\n+        content = AGENTS.read_text()\n+\n+        self.assertIn('Work in a worktree, not in the `main` checkout.', content)\n+        self.assertIn('git worktree add ../worktrees/<branch-slug> -b <branch> origin/main', content)\n+        self.assertIn('The on-disk path does not need to be `../worktrees/`, but it must not be inside the repo', content)\n+        self.assertIn('When a worktree lives inside the repo, never stage or commit its directory.', content)\n+        self.assertIn('The script refuses to run from `main` outside `REVIEW_MODE=docs`', content)\n+        self.assertIn('Keep the `main` checkout clean.', content)\n+        self.assertIn('`git worktree list`', content)\n+        self.assertIn('`git worktree remove <path>`', content)\n+        self.assertNotIn('Do not push straight to `main`.\\n- Make the smallest change that fully solves the problem.', content)\n+\n+    def test_gitignore_excludes_worktree_directory(self):\n+        self.assertTrue(GITIGNORE.exists(), '.gitignore should be committed')\n+        content = GITIGNORE.read_text()\n+        self.assertIn('.worktrees/', content)\n+\n \n if __name__ == '__main__':\n     unittest.main()",
+    "raw_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/raw/90233de903c5c1d2a32812698ab101f1e5e81c2b/tests%2Ftest_readme.py",
+    "sha": "7ea792b4f0d1d0c2a06b05a7ca6950b6e86bba02",
+    "status": "modified"
+  }
+]

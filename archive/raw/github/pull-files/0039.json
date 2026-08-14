@@ -1,0 +1,14 @@
+[
+  {
+    "additions": 3,
+    "blob_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/7129fe8fa6eecbccabe30556f5dffcc61105aaa6/README.md",
+    "changes": 3,
+    "contents_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/contents/README.md?ref=7129fe8fa6eecbccabe30556f5dffcc61105aaa6",
+    "deletions": 0,
+    "filename": "README.md",
+    "patch": "@@ -47,6 +47,9 @@ Then open:\n http://localhost:8321\n ```\n \n+Once the dashboard is running a version that includes the homepage `Update App` control,\n+future `main` updates can be pulled from the dashboard itself.\n+\n For a deterministic fake dataset that is useful for screenshots and UI checks,\n open:\n ",
+    "raw_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/raw/7129fe8fa6eecbccabe30556f5dffcc61105aaa6/README.md",
+    "sha": "8ff0ce8ef6c9d3f23d317d09acbd80dd84cccdd3",
+    "status": "modified"
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "author": null,
+    "comments_url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/90233de903c5c1d2a32812698ab101f1e5e81c2b/comments",
+    "commit": {
+      "author": {
+        "date": "2026-06-02T05:22:07Z",
+        "email": "opencode@local",
+        "name": "opencode"
+      },
+      "comment_count": 0,
+      "committer": {
+        "date": "2026-06-02T05:22:07Z",
+        "email": "opencode@local",
+        "name": "opencode"
+      },
+      "message": "Document and enforce worktree-based development\n\n- AGENTS.md Working style: work in a worktree, default outside the repo at ../worktrees/<branch-slug>\n- AGENTS.md Repo conventions: keep the main checkout clean and retire worktrees with git worktree remove\n- .gitignore: add .worktrees/ as a safety net for agents that use the in-repo path\n- scripts/review.sh: refuse to run from main outside REVIEW_MODE=docs and point agents at the worktree add command\n- tests/test_readme.py: assert the new AGENTS.md guidance and the .worktrees/ ignore\n- tests/test_app.py: assert the review.sh guard blocks main in full mode and allows it in docs mode, using a stubbed git binary to keep the test self-contained",
+      "tree": {
+        "sha": "3025de902ce0b828cd8eb365cf4182fa51002fe8",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/trees/3025de902ce0b828cd8eb365cf4182fa51002fe8"
+      },
+      "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/git/commits/90233de903c5c1d2a32812698ab101f1e5e81c2b",
+      "verification": {
+        "payload": null,
+        "reason": "unsigned",
+        "signature": null,
+        "verified": false,
+        "verified_at": null
+      }
+    },
+    "committer": null,
+    "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/90233de903c5c1d2a32812698ab101f1e5e81c2b",
+    "node_id": "C_kwDOSn9XGdoAKDkwMjMzZGU5MDNjNWMxZDJhMzI4MTI2OThhYjEwMWYxZTVlODFjMmI",
+    "parents": [
+      {
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/commit/3de26a58428f6205ac97c217539b959d69fb038c",
+        "sha": "3de26a58428f6205ac97c217539b959d69fb038c",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/3de26a58428f6205ac97c217539b959d69fb038c"
+      }
+    ],
+    "sha": "90233de903c5c1d2a32812698ab101f1e5e81c2b",
+    "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/commits/90233de903c5c1d2a32812698ab101f1e5e81c2b"
+  }
+]

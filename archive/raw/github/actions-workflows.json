@@ -1,0 +1,19 @@
+[
+  {
+    "total_count": 1,
+    "workflows": [
+      {
+        "badge_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/workflows/CI/badge.svg",
+        "created_at": "2026-05-27T14:28:40.000+07:00",
+        "html_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/main/.github/workflows/ci.yml",
+        "id": 284025036,
+        "name": "CI",
+        "node_id": "W_kwDOSn9XGc4Q7eDM",
+        "path": ".github/workflows/ci.yml",
+        "state": "active",
+        "updated_at": "2026-05-27T14:46:27.000+07:00",
+        "url": "https://api.github.com/repos/raychrisgdp/coding-agent-usage-dashboard/actions/workflows/284025036"
+      }
+    ]
+  }
+]

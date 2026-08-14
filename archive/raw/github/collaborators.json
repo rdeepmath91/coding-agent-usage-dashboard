@@ -1,0 +1,31 @@
+[
+  {
+    "avatar_url": "https://avatars.githubusercontent.com/u/171540086?v=4",
+    "events_url": "https://api.github.com/users/raychrisgdp/events{/privacy}",
+    "followers_url": "https://api.github.com/users/raychrisgdp/followers",
+    "following_url": "https://api.github.com/users/raychrisgdp/following{/other_user}",
+    "gists_url": "https://api.github.com/users/raychrisgdp/gists{/gist_id}",
+    "gravatar_id": "",
+    "html_url": "https://github.com/raychrisgdp",
+    "id": 171540086,
+    "login": "raychrisgdp",
+    "node_id": "U_kgDOCjl-dg",
+    "organizations_url": "https://api.github.com/users/raychrisgdp/orgs",
+    "permissions": {
+      "admin": true,
+      "maintain": true,
+      "pull": true,
+      "push": true,
+      "triage": true
+    },
+    "received_events_url": "https://api.github.com/users/raychrisgdp/received_events",
+    "repos_url": "https://api.github.com/users/raychrisgdp/repos",
+    "role_name": "admin",
+    "site_admin": false,
+    "starred_url": "https://api.github.com/users/raychrisgdp/starred{/owner}{/repo}",
+    "subscriptions_url": "https://api.github.com/users/raychrisgdp/subscriptions",
+    "type": "User",
+    "url": "https://api.github.com/users/raychrisgdp",
+    "user_view_type": "public"
+  }
+]
