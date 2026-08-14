@@ -1,0 +1,161 @@
+{
+  "checks": {
+    "attachments_reconciled": true,
+    "comment_count": true,
+    "destination_anonymous_404": true,
+    "destination_identity": true,
+    "labels_match": true,
+    "native_open_pr": true,
+    "numbered_coverage": true,
+    "relationships_match": true,
+    "releases_reconciled": true,
+    "source_api_cannot_read_destination": true,
+    "source_identity": true,
+    "source_markers": true,
+    "source_refs_match": true
+  },
+  "destination": "rdeepmath91/coding-agent-usage-dashboard",
+  "destination_comments": 9,
+  "destination_relationships": {
+    "blocked_by": [],
+    "parents": [
+      [
+        9,
+        10
+      ],
+      [
+        9,
+        11
+      ],
+      [
+        32,
+        15
+      ],
+      [
+        32,
+        16
+      ],
+      [
+        32,
+        19
+      ],
+      [
+        32,
+        31
+      ],
+      [
+        43,
+        44
+      ],
+      [
+        43,
+        45
+      ],
+      [
+        43,
+        46
+      ],
+      [
+        43,
+        47
+      ],
+      [
+        52,
+        12
+      ],
+      [
+        52,
+        24
+      ],
+      [
+        52,
+        36
+      ],
+      [
+        54,
+        9
+      ],
+      [
+        54,
+        41
+      ]
+    ]
+  },
+  "exceptions": [
+    "Original GitHub author identities and timestamps cannot be recreated on new objects.",
+    "Pages and rulesets were unavailable to the source exporter and remain explicit archive exceptions.",
+    "Historical PRs are attributed archived issues; only open PR #53 is native.",
+    "Stars, watchers, notifications, Actions run identity/history, audit logs, and secret values are not migrated."
+  ],
+  "generated_at_utc": "2026-08-14T13:24:54.077092Z",
+  "local_cutover": "pending: main worktree has untracked .hermes/ content; no local remotes were rewritten",
+  "ref_mismatches": {},
+  "source": "raychrisgdp/coding-agent-usage-dashboard",
+  "source_comments": 9,
+  "source_relationships": {
+    "blocked_by": [],
+    "parents": [
+      [
+        9,
+        10
+      ],
+      [
+        9,
+        11
+      ],
+      [
+        32,
+        15
+      ],
+      [
+        32,
+        16
+      ],
+      [
+        32,
+        19
+      ],
+      [
+        32,
+        31
+      ],
+      [
+        43,
+        44
+      ],
+      [
+        43,
+        45
+      ],
+      [
+        43,
+        46
+      ],
+      [
+        43,
+        47
+      ],
+      [
+        52,
+        12
+      ],
+      [
+        52,
+        24
+      ],
+      [
+        52,
+        36
+      ],
+      [
+        54,
+        9
+      ],
+      [
+        54,
+        41
+      ]
+    ]
+  },
+  "status": "pass"
+}
