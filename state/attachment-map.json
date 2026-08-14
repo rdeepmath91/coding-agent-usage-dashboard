@@ -1,0 +1,7 @@
+{
+  "status": "complete",
+  "scanned_root": "archive/raw/github",
+  "attachment_url_count": 0,
+  "attachments": [],
+  "note": "No GitHub user-attachment, user-image, or GitHub asset attachment URLs were found in exported issue, PR, comment, review, or event payloads. Repository-hosted images referenced by raw URLs remain available through mirrored Git history."
+}
