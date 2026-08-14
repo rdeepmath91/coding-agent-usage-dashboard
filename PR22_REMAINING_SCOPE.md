@@ -1,8 +1,8 @@
 # PR 22 scope checklist
 
-PR: https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/22
-Issue: https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/20
-Follow-up issue: https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/23
+PR: https://github.com/rdeepmath91/coding-agent-usage-dashboard/issues/22 (archived PR record)
+Issue: https://github.com/rdeepmath91/coding-agent-usage-dashboard/issues/20
+Follow-up issue: https://github.com/rdeepmath91/coding-agent-usage-dashboard/issues/23
 
 ## Recommendation
 

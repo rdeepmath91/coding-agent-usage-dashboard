@@ -1,6 +1,6 @@
 # PR 22 before/after changes
 
-PR: https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/22
+PR: https://github.com/rdeepmath91/coding-agent-usage-dashboard/issues/22 (archived PR record)
 
 ## Implemented in the latest PR 22 update
 
