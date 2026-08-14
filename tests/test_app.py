@@ -1662,9 +1662,9 @@ class DashboardApiTests(unittest.TestCase):
                 "fetched_at": time.time(),
                 "prices": {
                     "openai/gpt-5.5": {
-                        "prompt": "0.000005",
-                        "completion": "0.00003",
-                        "input_cache_read": "0.0000005",
+                        "prompt": "5",
+                        "completion": "30",
+                        "input_cache_read": "0.5",
                         "input_cache_write": "0",
                     }
                 },
@@ -1690,19 +1690,34 @@ class DashboardApiTests(unittest.TestCase):
     def test_official_gpt_5_6_prices_override_stale_openrouter_rates(self):
         stale_openrouter_prices = {
             "openai/gpt-5.6-sol": {
-                "prompt": "0.000005",
-                "completion": "0.00003",
-                "input_cache_read": "0.0000005",
-                "input_cache_write": "0.00000625",
+                "prompt": "1",
+                "completion": "2",
+                "input_cache_read": "0.1",
+                "input_cache_write": "0.2",
             },
             "openai/gpt-5.6-luna": {
-                "prompt": "0.0000001",
-                "completion": "0.0000006",
-                "input_cache_read": "0.00000001",
-                "input_cache_write": "0.000000125",
+                "prompt": "0.05",
+                "completion": "0.1",
+                "input_cache_read": "0.005",
+                "input_cache_write": "0.01",
             },
         }
-        with mock.patch.object(dashboard_pricing, 'openrouter_prices', return_value=stale_openrouter_prices):
+        official_fixture = {
+            "openai/gpt-5.6-sol": {
+                "prompt": "10",
+                "completion": "20",
+                "input_cache_read": "1",
+                "input_cache_write": "2",
+            },
+            "openai/gpt-5.6-luna": {
+                "prompt": "0.4",
+                "completion": "0.8",
+                "input_cache_read": "0.04",
+                "input_cache_write": "0.1",
+            },
+        }
+        with mock.patch.object(dashboard_pricing, 'openrouter_prices', return_value=stale_openrouter_prices), \
+                mock.patch.object(dashboard_pricing, 'OFFICIAL_MODEL_PRICES', official_fixture):
             sol = dashboard_pricing.estimate_cost(
                 "openai",
                 "gpt-5.6-sol",
@@ -1722,19 +1737,53 @@ class DashboardApiTests(unittest.TestCase):
 
         self.assertEqual(sol['pricing_status'], 'priced')
         self.assertEqual(sol['pricing_source'], 'OpenAI official API pricing')
-        self.assertAlmostEqual(sol['estimated_cost'], 41.75)
-        self.assertEqual(sol['input_price'], 0.000005)
-        self.assertEqual(sol['output_price'], 0.00003)
-        self.assertEqual(sol['cache_read_price'], 0.0000005)
-        self.assertEqual(sol['cache_write_price'], 0.00000625)
+        self.assertAlmostEqual(sol['estimated_cost'], 33.0)
+        self.assertEqual(sol['input_price'], 10.0)
+        self.assertEqual(sol['output_price'], 20.0)
+        self.assertEqual(sol['cache_read_price'], 1.0)
+        self.assertEqual(sol['cache_write_price'], 2.0)
+        self.assertEqual(sol['price_unit'], 'USD per 1M tokens')
 
         self.assertEqual(luna['pricing_status'], 'priced')
         self.assertEqual(luna['pricing_source'], 'OpenAI official API pricing')
-        self.assertAlmostEqual(luna['estimated_cost'], 1.67)
-        self.assertEqual(luna['input_price'], 0.0000002)
-        self.assertEqual(luna['output_price'], 0.0000012)
-        self.assertEqual(luna['cache_read_price'], 0.00000002)
-        self.assertEqual(luna['cache_write_price'], 0.00000025)
+        self.assertAlmostEqual(luna['estimated_cost'], 1.34)
+        self.assertEqual(luna['input_price'], 0.4)
+        self.assertEqual(luna['output_price'], 0.8)
+        self.assertEqual(luna['cache_read_price'], 0.04)
+        self.assertEqual(luna['cache_write_price'], 0.1)
+        self.assertEqual(luna['price_unit'], 'USD per 1M tokens')
+
+    def test_openrouter_prices_are_normalized_to_per_million_tokens(self):
+        original_cache = dict(dashboard_pricing.PRICING_CACHE)
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        payload = {
+            "data": [{
+                "id": "openai/gpt-5.6-sol",
+                "pricing": {
+                    "prompt": "0.000005",
+                    "completion": "0.00003",
+                    "input_cache_read": "0.0000005",
+                    "input_cache_write": "0.00000625",
+                    "overrides": [{"prompt": "0.00001"}],
+                },
+            }],
+        }
+        try:
+            dashboard_pricing.PRICING_CACHE.clear()
+            dashboard_pricing.PRICING_CACHE.update({"fetched_at": 0, "prices": {}})
+            with mock.patch.object(dashboard_pricing.urllib.request, 'urlopen', return_value=response), \
+                    mock.patch.object(dashboard_pricing.json, 'load', return_value=payload):
+                prices = dashboard_pricing.openrouter_prices()
+        finally:
+            dashboard_pricing.PRICING_CACHE.clear()
+            dashboard_pricing.PRICING_CACHE.update(original_cache)
+
+        self.assertEqual(prices["openai/gpt-5.6-sol"]["prompt"], 5.0)
+        self.assertEqual(prices["openai/gpt-5.6-sol"]["completion"], 30.0)
+        self.assertEqual(prices["openai/gpt-5.6-sol"]["input_cache_read"], 0.5)
+        self.assertEqual(prices["openai/gpt-5.6-sol"]["input_cache_write"], 6.25)
+        self.assertNotIn("overrides", prices["openai/gpt-5.6-sol"])
 
     def test_pricing_alias_registry_resolves_target_aliases(self):
         with mock.patch.object(dashboard_pricing, 'openrouter_prices', return_value={}):
