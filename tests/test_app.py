@@ -589,6 +589,8 @@ class DashboardApiTests(unittest.TestCase):
         thread_id: str = "codex-1",
         title: str = "Codex adapter spike",
         include_preview: bool = True,
+        model_provider: str = "openai",
+        model_id: str = "gpt-5.5",
     ) -> None:
         state = Path(self.tmpdir.name) / "codex-state.sqlite"
         if state.exists():
@@ -633,7 +635,7 @@ class DashboardApiTests(unittest.TestCase):
                 """,
                 (
                     thread_id, str(rollout), created_ms // 1000, updated_ms // 1000, created_ms, updated_ms,
-                    "cli", "openai", "/tmp/codex-project", title, 1725, "Codex adapter spike", "gpt-5.5",
+                    "cli", model_provider, "/tmp/codex-project", title, 1725, "Codex adapter spike", model_id,
                 ),
             )
         else:
@@ -646,7 +648,7 @@ class DashboardApiTests(unittest.TestCase):
                 """,
                 (
                     thread_id, str(rollout), created_ms // 1000, updated_ms // 1000, created_ms, updated_ms,
-                    "cli", "openai", "/tmp/codex-project", title, 1725, "gpt-5.5",
+                    "cli", model_provider, "/tmp/codex-project", title, 1725, model_id,
                 ),
             )
         conn.commit()
@@ -694,6 +696,69 @@ class DashboardApiTests(unittest.TestCase):
         codex_history = next(item for item in history if item['tool_id'] == 'codex')
         self.assertEqual(codex_history['tokens_input'], 1100)
         self.assertIsNone(codex_history['cache_write'])
+
+    def test_codex_plugin_namespace_overrides_compatibility_provider_and_stays_unpriced(self):
+        self._write_codex_fixture(
+            thread_id="codex-opencode-go",
+            model_provider="openai",
+            model_id="opencode-go/deepseek-v4-flash",
+        )
+
+        records = dashboard_sources.codex_records(days=30)
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record['provider'], 'opencode-go')
+        self.assertEqual(record['model_id'], 'deepseek-v4-flash')
+        self.assertEqual(record['label'], 'deepseek-v4-flash (go)')
+        self.assertEqual(record['chart_model_id'], 'opencode-go/deepseek-v4-flash')
+
+        model = next(
+            item for item in self.client.get('/api/models?days=30').get_json()
+            if item['tool_id'] == 'codex'
+        )
+        self.assertEqual(model['provider'], 'opencode-go')
+        self.assertEqual(model['model_id'], 'deepseek-v4-flash')
+        self.assertEqual(model['label'], 'deepseek-v4-flash (go)')
+        self.assertEqual(model['pricing_status'], 'unpriced')
+        self.assertIsNone(model['estimated_cost'])
+
+    def test_codex_free_plugin_namespace_remains_explicitly_free(self):
+        self._write_codex_fixture(
+            thread_id="codex-opencode-free",
+            model_provider="openai",
+            model_id="opencode-free/deepseek-v4-flash-free",
+        )
+
+        model = next(
+            item for item in self.client.get('/api/models?days=30').get_json()
+            if item['tool_id'] == 'codex'
+        )
+        self.assertEqual(model['provider'], 'opencode-free')
+        self.assertEqual(model['model_id'], 'deepseek-v4-flash-free')
+        self.assertEqual(model['pricing_status'], 'priced')
+        self.assertEqual(model['estimated_cost'], 0.0)
+
+    def test_deepseek_v4_flash_paid_alias_is_unpriced_even_if_remote_pricing_exists(self):
+        with mock.patch.object(
+            dashboard_pricing,
+            'openrouter_prices',
+            return_value={
+                'deepseek/deepseek-v4-flash': {
+                    'prompt': '0.0000001',
+                    'completion': '0.0000002',
+                }
+            },
+        ):
+            result = dashboard_pricing.estimate_cost(
+                'opencode-go',
+                'deepseek-v4-flash',
+                1000,
+                500,
+            )
+
+        self.assertEqual(result['pricing_status'], 'unpriced')
+        self.assertIsNone(result['estimated_cost'])
+        self.assertEqual(result['pricing_model_id'], 'deepseek/deepseek-v4-flash')
 
     def test_codex_records_use_updated_timestamp_for_window_and_display_date(self):
         now_ms = int(time.time() * 1000)
