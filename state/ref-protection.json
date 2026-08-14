@@ -1,0 +1,12 @@
+{
+  "source_main_sha": "4bc75fa4e206cffd5e20a969824bc47a042c3bc1",
+  "destination_main_sha": "0c643299dff197f1e7a0f98cc6a9f15a229daa4a",
+  "source_baseline_ref": "archive/source-baseline/main",
+  "hidden_pull_ref_count": 19,
+  "replacement_bundle": "archive/source-with-pull-refs.bundle",
+  "unique_pr_related_sha_count": 110,
+  "missing_from_replacement_bundle": 0,
+  "missing_from_fresh_destination_mirror": 0,
+  "protected_local_dangling_commit_count": 7,
+  "protected_local_dangling_prefix": "archive/local-dangling/"
+}
