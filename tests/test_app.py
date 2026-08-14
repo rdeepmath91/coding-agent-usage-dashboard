@@ -1687,6 +1687,55 @@ class DashboardApiTests(unittest.TestCase):
         self.assertGreater(result["partial_cost_usd"], 0)
         self.assertIn("input_cache_write", result["missing_price_buckets"])
 
+    def test_official_gpt_5_6_prices_override_stale_openrouter_rates(self):
+        stale_openrouter_prices = {
+            "openai/gpt-5.6-sol": {
+                "prompt": "0.000005",
+                "completion": "0.00003",
+                "input_cache_read": "0.0000005",
+                "input_cache_write": "0.00000625",
+            },
+            "openai/gpt-5.6-luna": {
+                "prompt": "0.0000001",
+                "completion": "0.0000006",
+                "input_cache_read": "0.00000001",
+                "input_cache_write": "0.000000125",
+            },
+        }
+        with mock.patch.object(dashboard_pricing, 'openrouter_prices', return_value=stale_openrouter_prices):
+            sol = dashboard_pricing.estimate_cost(
+                "openai",
+                "gpt-5.6-sol",
+                tokens_input=1_000_000,
+                tokens_output=1_000_000,
+                cache_read=1_000_000,
+                cache_write=1_000_000,
+            )
+            luna = dashboard_pricing.estimate_cost(
+                "openai",
+                "gpt-5.6-luna",
+                tokens_input=1_000_000,
+                tokens_output=1_000_000,
+                cache_read=1_000_000,
+                cache_write=1_000_000,
+            )
+
+        self.assertEqual(sol['pricing_status'], 'priced')
+        self.assertEqual(sol['pricing_source'], 'OpenAI official API pricing')
+        self.assertAlmostEqual(sol['estimated_cost'], 41.75)
+        self.assertEqual(sol['input_price'], 0.000005)
+        self.assertEqual(sol['output_price'], 0.00003)
+        self.assertEqual(sol['cache_read_price'], 0.0000005)
+        self.assertEqual(sol['cache_write_price'], 0.00000625)
+
+        self.assertEqual(luna['pricing_status'], 'priced')
+        self.assertEqual(luna['pricing_source'], 'OpenAI official API pricing')
+        self.assertAlmostEqual(luna['estimated_cost'], 1.67)
+        self.assertEqual(luna['input_price'], 0.0000002)
+        self.assertEqual(luna['output_price'], 0.0000012)
+        self.assertEqual(luna['cache_read_price'], 0.00000002)
+        self.assertEqual(luna['cache_write_price'], 0.00000025)
+
     def test_pricing_alias_registry_resolves_target_aliases(self):
         with mock.patch.object(dashboard_pricing, 'openrouter_prices', return_value={}):
             opencode_spark = dashboard_pricing.estimate_cost(
