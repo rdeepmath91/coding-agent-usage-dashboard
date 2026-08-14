@@ -104,7 +104,8 @@ def main() -> int:
     destination_labels = api(args.personal_gh, f"repos/{args.destination}/labels?per_page=100", paginate=True)
     source_graph = graphql(args.source_gh, "raychrisgdp", "coding-agent-usage-dashboard")
     destination_graph = graphql(args.personal_gh, "rdeepmath91", "coding-agent-usage-dashboard")
-    source_refs = refs("origin")
+    source_git_url = "git@github.com:raychrisgdp/coding-agent-usage-dashboard.git"
+    source_refs = refs(source_git_url)
     destination_refs = refs("destination")
 
     source_numbers = sorted(item["number"] for item in source_items)
@@ -121,6 +122,15 @@ def main() -> int:
     native_pr = api(args.personal_gh, f"repos/{args.destination}/pulls/53")
     source_pr = json.loads((root / "archive/raw/github/pull-details/0053.json").read_text(encoding="utf-8"))
 
+    test_report_path = root / "reports/clean-destination-tests.txt"
+    test_report = test_report_path.read_text(encoding="utf-8") if test_report_path.exists() else ""
+    clean_destination_tests = "Ran 62 tests" in test_report and "OK" in test_report
+    origin_url = subprocess.run(
+        ["git", "-C", "/home/raymond-christopher/coding-agent-usage-dashboard", "remote", "get-url", "origin"],
+        stdout=subprocess.PIPE,
+        text=True,
+        check=True,
+    ).stdout.strip()
     checks = {
         "source_identity": source_repo.get("id") == 1249859353 and source_repo.get("private") is True,
         "destination_identity": destination_repo.get("id") == args.destination_id and destination_repo.get("private") is True and destination_repo.get("permissions", {}).get("admin") is True,
@@ -135,6 +145,8 @@ def main() -> int:
         "relationships_match": source_relationship == destination_relationship,
         "attachments_reconciled": (root / "state/attachment-map.json").exists(),
         "releases_reconciled": len(json.loads((root / "archive/raw/github/releases.json").read_text(encoding="utf-8"))) == 0,
+        "clean_destination_tests": clean_destination_tests,
+        "local_origin_cutover": origin_url == "git@github.com-rdeepmath91:rdeepmath91/coding-agent-usage-dashboard.git",
     }
     result = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -152,7 +164,11 @@ def main() -> int:
             "Historical PRs are attributed archived issues; only open PR #53 is native.",
             "Stars, watchers, notifications, Actions run identity/history, audit logs, and secret values are not migrated.",
         ],
-        "local_cutover": "pending: main worktree has untracked .hermes/ content; no local remotes were rewritten",
+        "local_cutover": (
+            "completed with untracked .hermes/ migration-plan content preserved in the main worktree"
+            if checks["local_origin_cutover"] and checks["clean_destination_tests"]
+            else "pending: origin or clean destination test gate is incomplete"
+        ),
     }
     result["status"] = "pass" if all(checks.values()) else "needs_review"
     output = root / "state/reconciliation.json"

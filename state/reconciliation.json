@@ -1,10 +1,12 @@
 {
   "checks": {
     "attachments_reconciled": true,
+    "clean_destination_tests": true,
     "comment_count": true,
     "destination_anonymous_404": true,
     "destination_identity": true,
     "labels_match": true,
+    "local_origin_cutover": true,
     "native_open_pr": true,
     "numbered_coverage": true,
     "relationships_match": true,
@@ -87,8 +89,8 @@
     "Historical PRs are attributed archived issues; only open PR #53 is native.",
     "Stars, watchers, notifications, Actions run identity/history, audit logs, and secret values are not migrated."
   ],
-  "generated_at_utc": "2026-08-14T13:24:54.077092Z",
-  "local_cutover": "pending: main worktree has untracked .hermes/ content; no local remotes were rewritten",
+  "generated_at_utc": "2026-08-14T13:30:01.699767Z",
+  "local_cutover": "completed with untracked .hermes/ migration-plan content preserved in the main worktree",
   "ref_mismatches": {},
   "source": "raychrisgdp/coding-agent-usage-dashboard",
   "source_comments": 9,

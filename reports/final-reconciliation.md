@@ -1,6 +1,6 @@
-# Final reconciliation (pre-cutover)
+# Final reconciliation
 
-Generated: `2026-08-14T13:24:54.077092Z`
+Generated: `2026-08-14T13:30:01.699767Z`
 
 Status: **pass**
 
@@ -19,6 +19,8 @@ Status: **pass**
 - PASS — `relationships_match`
 - PASS — `attachments_reconciled`
 - PASS — `releases_reconciled`
+- PASS — `clean_destination_tests`
+- PASS — `local_origin_cutover`
 
 ## Counts
 
@@ -36,4 +38,4 @@ Status: **pass**
 
 ## Cutover gate
 
-- pending: main worktree has untracked .hermes/ content; no local remotes were rewritten
+- completed with untracked .hermes/ migration-plan content preserved in the main worktree
