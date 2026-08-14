@@ -1,0 +1,14 @@
+diff --git a/README.md b/README.md
+index 270f424c5f91a9fca99cef084b2510044ee0264d..8ff0ce8ef6c9d3f23d317d09acbd80dd84cccdd3 100644
+--- a/README.md
++++ b/README.md
+@@ -47,6 +47,9 @@ Then open:
+ http://localhost:8321
+ ```
+ 
++Once the dashboard is running a version that includes the homepage `Update App` control,
++future `main` updates can be pulled from the dashboard itself.
++
+ For a deterministic fake dataset that is useful for screenshots and UI checks,
+ open:
+ 

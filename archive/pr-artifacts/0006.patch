@@ -1,0 +1,212 @@
+From 0d1eb36d2e03b63c03450e404340e56091fe9e21 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Wed, 27 May 2026 15:43:51 +0700
+Subject: [PATCH 1/3] docs: add repo agent guidance
+
+---
+ AGENTS.md | 66 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 66 insertions(+)
+ create mode 100644 AGENTS.md
+
+diff --git a/AGENTS.md b/AGENTS.md
+new file mode 100644
+index 0000000..76a57eb
+--- /dev/null
++++ b/AGENTS.md
+@@ -0,0 +1,66 @@
++# AGENTS.md
++
++Guidance for agents working in this repo.
++
++## Scope
++
++- This repo is a local Flask dashboard for coding-agent usage data.
++- The active production data source is OpenCode at `~/.local/share/opencode/opencode.db`.
++- Keep the current product contract explicit: show where totals come from, avoid ambiguous labels, and do not invent data when a source is missing.
++
++## Working style
++
++- Prefer small, reviewable PRs. Do not push straight to `main`.
++- Make the smallest change that fully solves the problem.
++- Preserve existing behavior unless the task explicitly changes it.
++- If a request expands scope, capture it as follow-up work instead of quietly folding unrelated refactors into the same PR.
++
++## Architecture rules
++
++- Keep modules focused. If a file starts carrying multiple unrelated responsibilities, split it.
++- Avoid long files when practical. In particular:
++  - keep Python route, query, formatting, and simulation logic separated by responsibility
++  - move reusable presentation logic out of inline template scripts when it starts growing
++  - avoid packing large CSS, HTML, and JS changes into one monolithic edit when smaller modules/templates/assets would be clearer
++- Prefer DRY code, but do not extract abstractions prematurely. Extract helpers only when logic is reused or the extraction makes the code materially easier to read or test.
++- Keep data-shaping rules centralized. Token definitions, cost rules, source labels, and placeholder semantics should not be duplicated in several places.
++- Favor explicit names over cleverness. Anyone reading the repo should be able to trace how dashboard numbers are derived.
++
++## Data and UX rules
++
++- Source provenance must stay visible. If a chart or summary only reflects OpenCode, say so.
++- Total tokens means `input + output assistant-message tokens`. Cache read/write stays separate unless the task explicitly changes that definition.
++- Unpriced or unsupported models must remain clearly labeled instead of guessed.
++- Simulated/demo mode should stay deterministic enough for screenshots, regression checks, and design review.
++- Tooltips and interactive affordances should work for hover, focus, and tap.
++- Accessibility and keyboard interaction are part of done, not polish.
++
++## Python / Flask guidance
++
++- Keep query code, aggregation code, and response-shaping code straightforward and testable.
++- Prefer small pure helpers for formatting, normalization, and aggregation boundaries.
++- Avoid hidden global state beyond stable app configuration.
++- When adding a new adapter or source, give it a clear boundary rather than scattering source-specific conditionals across unrelated routes.
++
++## Frontend guidance
++
++- Keep the dashboard visually compact, but not at the expense of clarity.
++- Prefer readable dark-theme contrast and stable categorical colors.
++- If inline JS or CSS becomes unwieldy, split it into dedicated static files.
++- Avoid duplicating rendering logic across cards, charts, and filters; shared UI behavior should have one source of truth.
++
++## Testing and verification
++
++- Update or add tests for behavior changes. Do not rely on manual inspection alone.
++- Use the repo's uv-native workflow:
++  - `uv sync`
++  - `uv run python -m unittest tests.test_app tests.test_readme -v`
++  - `uv run python -m py_compile app.py scripts/snapshot_dashboard.py`
++- For UI-affecting changes, also verify the rendered dashboard locally, and use simulated mode when deterministic output helps.
++
++## Repo conventions
++
++- Keep secrets and machine-specific credentials out of the repo.
++- Preserve concise, direct wording in UI and docs.
++- When adding planned adapters, prefer honest placeholders such as `TBD` over fake completeness.
++- If a change introduces a new source of truth, document it in README and keep the wording consistent across backend payloads, templates, and tests.
+-- 
+2.43.0
+
+
+From d77912a6c95805d4a7a43b990ea3fbbd00dc8d01 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Wed, 27 May 2026 15:48:14 +0700
+Subject: [PATCH 2/3] docs: add review workflow guidance
+
+---
+ AGENTS.md | 29 +++++++++++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/AGENTS.md b/AGENTS.md
+index 76a57eb..8bb6273 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -58,6 +58,35 @@ Guidance for agents working in this repo.
+   - `uv run python -m py_compile app.py scripts/snapshot_dashboard.py`
+ - For UI-affecting changes, also verify the rendered dashboard locally, and use simulated mode when deterministic output helps.
+ 
++## Review workflow
++
++- Before opening or updating a PR, review the diff for scope creep, duplicated logic, wording drift, and source-provenance regressions.
++- For AGENTS.md, README, and other instruction/docs edits, check that the guidance matches the real repo commands and current file structure.
++- If an instruction references a command, make sure that command actually works in this repo.
++
++Simple local review pass:
++
++```bash
++git diff --stat origin/main...HEAD
++git diff --check origin/main...HEAD
++uv run python -m unittest tests.test_app tests.test_readme -v
++uv run python -m py_compile app.py scripts/snapshot_dashboard.py
++```
++
++For docs-only or AGENTS.md-only PRs, use this lightweight check:
++
++```bash
++git diff --stat origin/main...HEAD
++git diff --check origin/main...HEAD
++```
++
++Review focus for this repo:
++
++- Does the change keep token definitions, cost wording, and source labels consistent across backend, templates, tests, and README?
++- Does it reduce clarity by hiding provenance or by mixing active data with planned adapters?
++- Does it add file length or inline-script complexity without a good reason?
++- If behavior changed, were tests updated to prove it?
++
+ ## Repo conventions
+ 
+ - Keep secrets and machine-specific credentials out of the repo.
+-- 
+2.43.0
+
+
+From 17a211a91c2576bdc2392ca01483c9fee9737787 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Thu, 28 May 2026 11:43:57 +0700
+Subject: [PATCH 3/3] docs: add review helper script
+
+---
+ AGENTS.md         |  9 +++++++--
+ scripts/review.sh | 26 ++++++++++++++++++++++++++
+ 2 files changed, 33 insertions(+), 2 deletions(-)
+ create mode 100755 scripts/review.sh
+
+diff --git a/AGENTS.md b/AGENTS.md
+index 8bb6273..c4e2cca 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -66,6 +66,12 @@ Guidance for agents working in this repo.
+ 
+ Simple local review pass:
+ 
++```bash
++scripts/review.sh
++```
++
++Equivalent manual commands:
++
+ ```bash
+ git diff --stat origin/main...HEAD
+ git diff --check origin/main...HEAD
+@@ -76,8 +82,7 @@ uv run python -m py_compile app.py scripts/snapshot_dashboard.py
+ For docs-only or AGENTS.md-only PRs, use this lightweight check:
+ 
+ ```bash
+-git diff --stat origin/main...HEAD
+-git diff --check origin/main...HEAD
++REVIEW_MODE=docs scripts/review.sh
+ ```
+ 
+ Review focus for this repo:
+diff --git a/scripts/review.sh b/scripts/review.sh
+new file mode 100755
+index 0000000..d0dd860
+--- /dev/null
++++ b/scripts/review.sh
+@@ -0,0 +1,26 @@
++#!/usr/bin/env bash
++set -euo pipefail
++
++ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
++cd "$ROOT_DIR"
++
++BASE_REF=${1:-origin/main}
++MODE=${REVIEW_MODE:-full}
++
++printf '==> Reviewing against %s\n' "$BASE_REF"
++git diff --stat "$BASE_REF"...HEAD
++printf '\n'
++git diff --check "$BASE_REF"...HEAD
++
++if [[ "$MODE" == "docs" ]]; then
++  printf '\n==> Docs-only review mode complete\n'
++  exit 0
++fi
++
++printf '\n==> Running tests\n'
++uv run python -m unittest tests.test_app tests.test_readme -v
++
++printf '\n==> Compiling Python files\n'
++uv run python -m py_compile app.py scripts/snapshot_dashboard.py
++
++printf '\n==> Full review mode complete\n'
+-- 
+2.43.0
+

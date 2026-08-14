@@ -1,0 +1,575 @@
+{
+  "apply": false,
+  "change_count": 25,
+  "changes": [
+    {
+      "id": 5151954191,
+      "kind": "issue",
+      "number": 54
+    },
+    {
+      "id": 5151953740,
+      "kind": "issue",
+      "number": 53
+    },
+    {
+      "id": 5151952885,
+      "kind": "issue",
+      "number": 52
+    },
+    {
+      "id": 5151952181,
+      "kind": "issue",
+      "number": 51
+    },
+    {
+      "id": 5151950817,
+      "kind": "issue",
+      "number": 49
+    },
+    {
+      "id": 5151949898,
+      "kind": "issue",
+      "number": 48
+    },
+    {
+      "id": 5151945911,
+      "kind": "issue",
+      "number": 42
+    },
+    {
+      "id": 5151944088,
+      "kind": "issue",
+      "number": 39
+    },
+    {
+      "id": 5151941905,
+      "kind": "issue",
+      "number": 38
+    },
+    {
+      "id": 5151940772,
+      "kind": "issue",
+      "number": 37
+    },
+    {
+      "id": 5151935830,
+      "kind": "issue",
+      "number": 30
+    },
+    {
+      "id": 5151934090,
+      "kind": "issue",
+      "number": 27
+    },
+    {
+      "id": 5151933391,
+      "kind": "issue",
+      "number": 26
+    },
+    {
+      "id": 5151930839,
+      "kind": "issue",
+      "number": 22
+    },
+    {
+      "id": 5151930183,
+      "kind": "issue",
+      "number": 21
+    },
+    {
+      "id": 5151925540,
+      "kind": "issue",
+      "number": 14
+    },
+    {
+      "id": 5151921408,
+      "kind": "issue",
+      "number": 8
+    },
+    {
+      "id": 5151920667,
+      "kind": "issue",
+      "number": 7
+    },
+    {
+      "id": 5151919861,
+      "kind": "issue",
+      "number": 6
+    },
+    {
+      "id": 5151916995,
+      "kind": "issue",
+      "number": 2
+    },
+    {
+      "id": 5293686587,
+      "kind": "comment",
+      "number": "https://api.github.com/repos/rdeepmath91/coding-agent-usage-dashboard/issues/9"
+    },
+    {
+      "id": 5293704182,
+      "kind": "comment",
+      "number": "https://api.github.com/repos/rdeepmath91/coding-agent-usage-dashboard/issues/34"
+    },
+    {
+      "id": 5293704322,
+      "kind": "comment",
+      "number": "https://api.github.com/repos/rdeepmath91/coding-agent-usage-dashboard/issues/34"
+    },
+    {
+      "id": 5293704481,
+      "kind": "comment",
+      "number": "https://api.github.com/repos/rdeepmath91/coding-agent-usage-dashboard/issues/34"
+    },
+    {
+      "id": 5293704659,
+      "kind": "comment",
+      "number": "https://api.github.com/repos/rdeepmath91/coding-agent-usage-dashboard/issues/34"
+    }
+  ],
+  "generated_at_utc": "2026-08-14T14:26:47.539476Z",
+  "link_count": 54,
+  "links": {
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/edd02b199a9b1c7c2b64e7233bb52b6b872af64c/docs/prototypes/usage-explorer-desktop.png": {
+      "category": "repository-content",
+      "contexts": [
+        "issue:54",
+        "issue:53"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/edd02b199a9b1c7c2b64e7233bb52b6b872af64c/docs/prototypes/usage-explorer-desktop.png",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/edd02b199a9b1c7c2b64e7233bb52b6b872af64c/docs/prototypes/usage-explorer-desktop.png"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/edd02b199a9b1c7c2b64e7233bb52b6b872af64c/docs/prototypes/usage-explorer-mobile.png": {
+      "category": "repository-content",
+      "contexts": [
+        "issue:54",
+        "issue:53"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/edd02b199a9b1c7c2b64e7233bb52b6b872af64c/docs/prototypes/usage-explorer-mobile.png",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/edd02b199a9b1c7c2b64e7233bb52b6b872af64c/docs/prototypes/usage-explorer-mobile.png"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/edd02b199a9b1c7c2b64e7233bb52b6b872af64c/docs/prototypes/usage-explorer.html": {
+      "category": "repository-content",
+      "contexts": [
+        "issue:54",
+        "issue:53"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/edd02b199a9b1c7c2b64e7233bb52b6b872af64c/docs/prototypes/usage-explorer.html",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/edd02b199a9b1c7c2b64e7233bb52b6b872af64c/docs/prototypes/usage-explorer.html"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/issue-34-update-ux-visuals/docs/issue-34-update-ux/index.html": {
+      "category": "repository-content",
+      "contexts": [
+        "comment:5293704182",
+        "comment:5293704322",
+        "comment:5293704481",
+        "comment:5293704659"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/issue-34-update-ux-visuals/docs/issue-34-update-ux/index.html",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/issue-34-update-ux-visuals/docs/issue-34-update-ux/index.html"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/10": {
+      "category": "numbered-object",
+      "contexts": [
+        "comment:5293686587"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/issues/10",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/10"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/11": {
+      "category": "numbered-object",
+      "contexts": [
+        "comment:5293686587"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/issues/11",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/11"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/12": {
+      "category": "numbered-object",
+      "contexts": [
+        "issue:52"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/issues/12",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/12"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/17": {
+      "category": "numbered-object",
+      "contexts": [
+        "issue:52"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/issues/17",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/17"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/18": {
+      "category": "numbered-object",
+      "contexts": [
+        "issue:52"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/issues/18",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/18"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/24": {
+      "category": "numbered-object",
+      "contexts": [
+        "issue:52"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/issues/24",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/24"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/36": {
+      "category": "numbered-object",
+      "contexts": [
+        "issue:52"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/issues/36",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/36"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/9": {
+      "category": "numbered-object",
+      "contexts": [
+        "issue:52"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/issues/9",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/9"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/14.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:14"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0014.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/14.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/14.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:14"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0014.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/14.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/2.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:2"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0002.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/2.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/2.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:2"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0002.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/2.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/21.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:21"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0021.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/21.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/21.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:21"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0021.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/21.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/22.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:22"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0022.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/22.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/22.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:22"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0022.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/22.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/26.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:26"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0026.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/26.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/26.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:26"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0026.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/26.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/27.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:27"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0027.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/27.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/27.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:27"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0027.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/27.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/30.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:30"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0030.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/30.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/30.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:30"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0030.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/30.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/37.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:37"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0037.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/37.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/37.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:37"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0037.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/37.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/38.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:38"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0038.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/38.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/38.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:38"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0038.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/38.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/39.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:39"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0039.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/39.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/39.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:39"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0039.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/39.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/42.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:42"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0042.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/42.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/42.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:42"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0042.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/42.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/48.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:48"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0048.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/48.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/48.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:48"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0048.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/48.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/49.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:49"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0049.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/49.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/49.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:49"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0049.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/49.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/51.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:51"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0051.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/51.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/51.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:51"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0051.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/51.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/6.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:6"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0006.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/6.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/6.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:6"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0006.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/6.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/7.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:7"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0007.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/7.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/7.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:7"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0007.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/7.patch"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/8.diff": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:8"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0008.diff",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/8.diff"
+    },
+    "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/8.patch": {
+      "category": "historical-pr-artifact",
+      "contexts": [
+        "issue:8"
+      ],
+      "replacement_url": "https://github.com/rdeepmath91/coding-agent-usage-dashboard/blob/migration-archive/archive/pr-artifacts/0008.patch",
+      "source_url": "https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/8.patch"
+    },
+    "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/edd02b199a9b1c7c2b64e7233bb52b6b872af64c/docs/prototypes/usage-explorer-desktop.png": {
+      "category": "raw-repository-content",
+      "contexts": [
+        "issue:54",
+        "issue:53"
+      ],
+      "replacement_url": "https://raw.githubusercontent.com/rdeepmath91/coding-agent-usage-dashboard/edd02b199a9b1c7c2b64e7233bb52b6b872af64c/docs/prototypes/usage-explorer-desktop.png",
+      "source_url": "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/edd02b199a9b1c7c2b64e7233bb52b6b872af64c/docs/prototypes/usage-explorer-desktop.png"
+    },
+    "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-a-footer-chip.svg": {
+      "category": "raw-repository-content",
+      "contexts": [
+        "comment:5293704182"
+      ],
+      "replacement_url": "https://raw.githubusercontent.com/rdeepmath91/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-a-footer-chip.svg",
+      "source_url": "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-a-footer-chip.svg"
+    },
+    "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-b-current-settings-aligned.svg": {
+      "category": "raw-repository-content",
+      "contexts": [
+        "comment:5293704322"
+      ],
+      "replacement_url": "https://raw.githubusercontent.com/rdeepmath91/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-b-current-settings-aligned.svg",
+      "source_url": "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-b-current-settings-aligned.svg"
+    },
+    "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-b-settings-maintenance-card.svg": {
+      "category": "raw-repository-content",
+      "contexts": [
+        "comment:5293704182"
+      ],
+      "replacement_url": "https://raw.githubusercontent.com/rdeepmath91/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-b-settings-maintenance-card.svg",
+      "source_url": "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-b-settings-maintenance-card.svg"
+    },
+    "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-c-header-status-rail.svg": {
+      "category": "raw-repository-content",
+      "contexts": [
+        "comment:5293704182"
+      ],
+      "replacement_url": "https://raw.githubusercontent.com/rdeepmath91/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-c-header-status-rail.svg",
+      "source_url": "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-c-header-status-rail.svg"
+    },
+    "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-d-command-modal.svg": {
+      "category": "raw-repository-content",
+      "contexts": [
+        "comment:5293704182"
+      ],
+      "replacement_url": "https://raw.githubusercontent.com/rdeepmath91/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-d-command-modal.svg",
+      "source_url": "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/option-d-command-modal.svg"
+    },
+    "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/selected-homepage-prominent-update.svg": {
+      "category": "raw-repository-content",
+      "contexts": [
+        "comment:5293704659"
+      ],
+      "replacement_url": "https://raw.githubusercontent.com/rdeepmath91/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/selected-homepage-prominent-update.svg",
+      "source_url": "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/selected-homepage-prominent-update.svg"
+    },
+    "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/selected-homepage-top-level.svg": {
+      "category": "raw-repository-content",
+      "contexts": [
+        "comment:5293704481"
+      ],
+      "replacement_url": "https://raw.githubusercontent.com/rdeepmath91/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/selected-homepage-top-level.svg",
+      "source_url": "https://raw.githubusercontent.com/raychrisgdp/coding-agent-usage-dashboard/issue-34-update-ux-visuals/docs/issue-34-update-ux/selected-homepage-top-level.svg"
+    }
+  },
+  "unresolved": []
+}

@@ -1,0 +1,184 @@
+From 90233de903c5c1d2a32812698ab101f1e5e81c2b Mon Sep 17 00:00:00 2001
+From: opencode <opencode@local>
+Date: Tue, 2 Jun 2026 12:22:07 +0700
+Subject: [PATCH] Document and enforce worktree-based development
+
+- AGENTS.md Working style: work in a worktree, default outside the repo at ../worktrees/<branch-slug>
+- AGENTS.md Repo conventions: keep the main checkout clean and retire worktrees with git worktree remove
+- .gitignore: add .worktrees/ as a safety net for agents that use the in-repo path
+- scripts/review.sh: refuse to run from main outside REVIEW_MODE=docs and point agents at the worktree add command
+- tests/test_readme.py: assert the new AGENTS.md guidance and the .worktrees/ ignore
+- tests/test_app.py: assert the review.sh guard blocks main in full mode and allows it in docs mode, using a stubbed git binary to keep the test self-contained
+---
+ .gitignore           |  1 +
+ AGENTS.md            |  7 ++++++
+ scripts/review.sh    |  9 +++++++
+ tests/test_app.py    | 58 ++++++++++++++++++++++++++++++++++++++++++++
+ tests/test_readme.py | 19 +++++++++++++++
+ 5 files changed, 94 insertions(+)
+
+diff --git a/.gitignore b/.gitignore
+index 687de3b..cbeb769 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -9,3 +9,4 @@ venv/
+ dashboard-snapshots/
+ .playwright-mcp/
+ dashboard-*.png
++.worktrees/
+diff --git a/AGENTS.md b/AGENTS.md
+index c8dac7e..52c140b 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -11,6 +11,12 @@ Guidance for agents working in this repo.
+ ## Working style
+ 
+ - Prefer small, reviewable PRs. Do not push straight to `main`.
++- Work in a worktree, not in the `main` checkout. Default location is **outside** the repo (a sibling directory), created with:
++  ```bash
++  git worktree add ../worktrees/<branch-slug> -b <branch> origin/main
++  ```
++  The on-disk path does not need to be `../worktrees/`, but it must not be inside the repo unless it is also added to `.gitignore` (it is, as `.worktrees/`). When a worktree lives inside the repo, never stage or commit its directory.
++- Run `scripts/review.sh` from inside the worktree before pushing. The script refuses to run from `main` outside `REVIEW_MODE=docs`, which is the safety net for this rule.
+ - Make the smallest change that fully solves the problem.
+ - Preserve existing behavior unless the task explicitly changes it.
+ - If a request expands scope, capture it as follow-up work instead of quietly folding unrelated refactors into the same PR.
+@@ -99,3 +105,4 @@ Review focus for this repo:
+ - Preserve concise, direct wording in UI and docs.
+ - When adding planned adapters, prefer honest placeholders such as `TBD` over fake completeness.
+ - If a change introduces a new source of truth, document it in README and keep the wording consistent across backend payloads, templates, and tests.
++- Keep the `main` checkout clean. It exists to receive merges and run `scripts/review.sh`, not to host in-flight work. Use `git worktree list` to see active worktrees and `git worktree remove <path>` to retire them.
+diff --git a/scripts/review.sh b/scripts/review.sh
+index d0dd860..cef28e6 100755
+--- a/scripts/review.sh
++++ b/scripts/review.sh
+@@ -7,6 +7,15 @@ cd "$ROOT_DIR"
+ BASE_REF=${1:-origin/main}
+ MODE=${REVIEW_MODE:-full}
+ 
++CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
++if [[ "$CURRENT_BRANCH" == "main" && "$MODE" != "docs" ]]; then
++  printf '\033[31merror:\033[0m scripts/review.sh must run from a feature branch, not main.\n' >&2
++  printf 'Create a worktree and rerun from there:\n' >&2
++  printf '  git worktree add ../worktrees/<branch-slug> -b <branch> origin/main\n' >&2
++  printf 'For docs-only or AGENTS.md-only edits, set REVIEW_MODE=docs.\n' >&2
++  exit 1
++fi
++
+ printf '==> Reviewing against %s\n' "$BASE_REF"
+ git diff --stat "$BASE_REF"...HEAD
+ printf '\n'
+diff --git a/tests/test_app.py b/tests/test_app.py
+index bc58e88..e1f499a 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -1,5 +1,6 @@
+ import json
+ import sqlite3
++import subprocess
+ import tempfile
+ import time
+ import unittest
+@@ -826,5 +827,62 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertIn("input_cache_write", result["missing_price_buckets"])
+ 
+ 
++class ReviewScriptGuardTests(unittest.TestCase):
++    def test_review_script_blocks_main_branch_in_full_mode(self):
++        import os
++        repo_root = Path(__file__).resolve().parents[1]
++        script = repo_root / 'scripts' / 'review.sh'
++        self.assertTrue(script.exists(), 'scripts/review.sh should exist')
++
++        # Exercise the guard by faking the git binary with a shim that reports
++        # the current branch as "main" no matter what. This keeps the test
++        # self-contained and avoids recursing into scripts/review.sh from inside
++        # the suite it is testing.
++        with tempfile.TemporaryDirectory() as fake_bin:
++            shim = Path(fake_bin) / 'git'
++            shim.write_text('#!/usr/bin/env bash\necho main\nexit 0\n')
++            shim.chmod(0o755)
++            env = {**os.environ, 'PATH': f"{fake_bin}:{os.environ.get('PATH', '')}", 'REVIEW_MODE': 'full'}
++
++            result = subprocess.run(
++                ['bash', str(script)],
++                cwd=str(repo_root),
++                env=env,
++                capture_output=True, text=True,
++            )
++            self.assertNotEqual(result.returncode, 0, msg=result.stdout)
++            self.assertIn('must run from a feature branch, not main', result.stderr + result.stdout)
++            self.assertIn('REVIEW_MODE=docs', result.stderr + result.stdout)
++
++    def test_review_script_allows_main_branch_in_docs_mode(self):
++        import os
++        repo_root = Path(__file__).resolve().parents[1]
++        script = repo_root / 'scripts' / 'review.sh'
++
++        with tempfile.TemporaryDirectory() as fake_bin:
++            shim = Path(fake_bin) / 'git'
++            shim.write_text('#!/usr/bin/env bash\necho main\nexit 0\n')
++            shim.chmod(0o755)
++            env = {**os.environ, 'PATH': f"{fake_bin}:{os.environ.get('PATH', '')}", 'REVIEW_MODE': 'docs'}
++
++            result = subprocess.run(
++                ['bash', str(script)],
++                cwd=str(repo_root),
++                env=env,
++                capture_output=True, text=True,
++            )
++            self.assertEqual(result.returncode, 0, msg=result.stderr or result.stdout)
++            self.assertIn('Docs-only review mode complete', result.stdout)
++
++    def test_review_script_guarding_logic_blocks_main_branch(self):
++        repo_root = Path(__file__).resolve().parents[1]
++        script = repo_root / 'scripts' / 'review.sh'
++        content = script.read_text()
++        self.assertIn('CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)', content)
++        self.assertIn('[[ "$CURRENT_BRANCH" == "main" && "$MODE" != "docs" ]]', content)
++        self.assertIn('must run from a feature branch, not main', content)
++        self.assertIn('git worktree add ../worktrees/<branch-slug> -b <branch> origin/main', content)
++
++
+ if __name__ == '__main__':
+     unittest.main()
+diff --git a/tests/test_readme.py b/tests/test_readme.py
+index 5f6b353..7ea792b 100644
+--- a/tests/test_readme.py
++++ b/tests/test_readme.py
+@@ -7,6 +7,7 @@ README = ROOT / 'README.md'
+ PYPROJECT = ROOT / 'pyproject.toml'
+ UV_LOCK = ROOT / 'uv.lock'
+ AGENTS = ROOT / 'AGENTS.md'
++GITIGNORE = ROOT / '.gitignore'
+ 
+ 
+ class ReadmeTests(unittest.TestCase):
+@@ -45,6 +46,24 @@ class ReadmeTests(unittest.TestCase):
+         self.assertIn('Total tokens means `non-cache input + output assistant-message tokens`', content)
+         self.assertNotIn('Total tokens means `input + output assistant-message tokens`', content)
+ 
++    def test_agent_guidance_requires_worktree_workflow(self):
++        content = AGENTS.read_text()
++
++        self.assertIn('Work in a worktree, not in the `main` checkout.', content)
++        self.assertIn('git worktree add ../worktrees/<branch-slug> -b <branch> origin/main', content)
++        self.assertIn('The on-disk path does not need to be `../worktrees/`, but it must not be inside the repo', content)
++        self.assertIn('When a worktree lives inside the repo, never stage or commit its directory.', content)
++        self.assertIn('The script refuses to run from `main` outside `REVIEW_MODE=docs`', content)
++        self.assertIn('Keep the `main` checkout clean.', content)
++        self.assertIn('`git worktree list`', content)
++        self.assertIn('`git worktree remove <path>`', content)
++        self.assertNotIn('Do not push straight to `main`.\n- Make the smallest change that fully solves the problem.', content)
++
++    def test_gitignore_excludes_worktree_directory(self):
++        self.assertTrue(GITIGNORE.exists(), '.gitignore should be committed')
++        content = GITIGNORE.read_text()
++        self.assertIn('.worktrees/', content)
++
+ 
+ if __name__ == '__main__':
+     unittest.main()
+-- 
+2.43.0
+

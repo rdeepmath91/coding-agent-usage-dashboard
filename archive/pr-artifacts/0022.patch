@@ -1,0 +1,1681 @@
+From 3381a0a05eb2bc31e53386c724fab3bc279ee5cb Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Tue, 2 Jun 2026 13:03:59 +0700
+Subject: [PATCH 01/14] Clarify overview token cards
+
+---
+ AGENTS.md               |   2 +-
+ README.md               |  13 +++--
+ app.py                  | 108 ++++++++++++++++++++++++++--------------
+ dashboard/simulation.py |  20 ++++++--
+ templates/index.html    |  40 +++++++++------
+ templates/settings.html |   2 +-
+ tests/test_app.py       |  32 ++++++++----
+ tests/test_readme.py    |   3 +-
+ 8 files changed, 146 insertions(+), 74 deletions(-)
+
+diff --git a/AGENTS.md b/AGENTS.md
+index 52c140b..53f6dc7 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -35,7 +35,7 @@ Guidance for agents working in this repo.
+ ## Data and UX rules
+ 
+ - Source provenance must stay visible. If a chart or summary only reflects a subset of OpenCode, Codex CLI, and Hermes, say so.
+-- Total tokens means `non-cache input + output assistant-message tokens`. Cache read/write stays separate unless the task explicitly changes that definition.
++- Overview `Total Tokens` means full token volume: non-cache input + output assistant-message tokens + cache read/write. Session/model-history totals may still use `Session Tokens` semantics (`non-cache input + output`) when explicitly labeled.
+ - Unpriced or unsupported models must remain clearly labeled instead of guessed.
+ - Simulated/demo mode should stay deterministic enough for screenshots, regression checks, and design review.
+ - Tooltips and interactive affordances should work for hover, focus, and tap.
+diff --git a/README.md b/README.md
+index b957306..164ec77 100644
+--- a/README.md
++++ b/README.md
+@@ -86,9 +86,10 @@ review what the dashboard actually showed at capture time.
+ ## Current data rules
+ 
+ - active sources: OpenCode local SQLite DB; Codex local state DB plus rollout JSONL; Hermes local session DB
+-- total tokens = non-cache input + output assistant-message tokens
+-- cache read/write tokens are shown separately and excluded from total tokens
+-- API-equivalent estimated cost can include priced cache read/write tokens even though cache tokens are excluded from total tokens
++- top-level Overview `Total Tokens` = non-cache input + output assistant-message tokens + cache read/write
++- top-level Overview `Input Tokens` = non-cache input + cache read/write
++- session/model-history token totals use session-token semantics: non-cache input + output assistant-message tokens
++- API-equivalent estimated cost can include priced cache read/write tokens, so cost can be driven by cached context as well as fresh input/output
+ - subscription-backed tools may not bill like public API pricing, so estimated cost is not necessarily actual subscription spend
+ - raw provider input can include cached tokens; adapters subtract cache read where needed before reporting dashboard input
+ - unmatched model pricing stays unpriced instead of guessed
+@@ -109,8 +110,7 @@ referenced rollout JSONL file. The trusted token fields are:
+ 
+ The adapter filters, groups, sorts, and displays Codex records by thread `updated_at`, not `created_at`, because token metrics are latest cumulative rollout usage for the thread. This keeps long-lived threads updated inside the selected range from appearing on out-of-range created dates.
+ 
+-Total tokens remain dashboard non-cache input + output. Cache read/write tokens are shown
+-separately and excluded from total tokens. Codex local JSONL does not expose
++Adapter session tokens remain non-cache input + output. Cache read tokens are preserved so the Overview can add them into full `Total Tokens`. Codex local JSONL does not expose
+ cache-write tokens, so the dashboard shows cache write as unavailable for Codex
+ instead of treating it as zero. The adapter does not infer token counts from
+ transcript text.
+@@ -130,8 +130,7 @@ The trusted token fields are:
+ - `cache_write_tokens` → cache write tokens
+ 
+ Hermes records are filtered, grouped, sorted, and displayed by `started_at`.
+-Total tokens remain dashboard input + output. Cache read/write tokens are shown
+-separately and excluded from total tokens. The adapter does not infer token
++Adapter session tokens remain input + output. Cache read/write tokens are preserved so the Overview can add them into full `Total Tokens`. The adapter does not infer token
+ counts from message text.
+ 
+ ## Local verification
+diff --git a/app.py b/app.py
+index b4a54cd..f46ef28 100644
+--- a/app.py
++++ b/app.py
+@@ -130,48 +130,82 @@ def api_overview():
+     codex = codex_overview(days)
+     hermes = hermes_overview(days)
+     row["days"] = days
+-    row["token_total_definition"] = "non-cache input + output assistant-message tokens; cache read/write separate"
+-
+-    opencode_totals = {
+-        "sessions": row["total_sessions"],
+-        "tokens_total": row["total_tokens"],
+-        "tokens_input": row["total_input"],
+-        "tokens_output": row["total_output"],
+-        "cache_read": row["cache_read"],
+-        "cache_write": row["cache_write"],
+-    }
++    row["token_total_definition"] = "total token volume = input tokens + output tokens; includes cache read/write"
++    row["input_token_definition"] = "input tokens = non-cache input + cache read + cache write"
++    row["session_token_definition"] = "session tokens = non-cache input + output assistant-message tokens"
++
++    def overview_token_totals(sessions, tokens_input, tokens_output, cache_read, cache_write, metrics_note=None):
++        non_cache_input = tokens_input or 0
++        output = tokens_output or 0
++        read = cache_read or 0
++        write = cache_write or 0
++        session_tokens = non_cache_input + output
++        input_tokens = non_cache_input + read + write
++        total_tokens = session_tokens + read + write
++        totals = {
++            "sessions": sessions,
++            "tokens_total": total_tokens,
++            "session_tokens": session_tokens,
++            "tokens_input": input_tokens,
++            "non_cache_input": non_cache_input,
++            "tokens_output": output,
++            "cache_read": read,
++            "cache_write": cache_write,
++            "cache_total": read + write,
++        }
++        if metrics_note:
++            totals["metrics_note"] = metrics_note
++        return totals
++
++    opencode_totals = overview_token_totals(
++        row["total_sessions"],
++        row["total_input"],
++        row["total_output"],
++        row["cache_read"],
++        row["cache_write"],
++    )
+     source_overviews = {"opencode": opencode_totals}
+     if codex:
+-        source_overviews["codex"] = {
+-            "sessions": codex["total_sessions"],
+-            "tokens_total": codex["total_tokens"],
+-            "tokens_input": codex["total_input"],
+-            "tokens_output": codex["total_output"],
+-            "cache_read": codex["cache_read"],
+-            "cache_write": None,
+-            "metrics_note": "Cache write unavailable in local Codex JSONL.",
+-        }
++        source_overviews["codex"] = overview_token_totals(
++            codex["total_sessions"],
++            codex["total_input"],
++            codex["total_output"],
++            codex["cache_read"],
++            None,
++            "Cache write unavailable in local Codex JSONL.",
++        )
+     if hermes:
+-        source_overviews["hermes"] = {
+-            "sessions": hermes["total_sessions"],
+-            "tokens_total": hermes["total_tokens"],
+-            "tokens_input": hermes["total_input"],
+-            "tokens_output": hermes["total_output"],
+-            "cache_read": hermes["cache_read"],
+-            "cache_write": hermes["cache_write"],
+-            "metrics_note": "Hermes token metrics come from ~/.hermes/state.db sessions columns.",
+-        }
++        source_overviews["hermes"] = overview_token_totals(
++            hermes["total_sessions"],
++            hermes["total_input"],
++            hermes["total_output"],
++            hermes["cache_read"],
++            hermes["cache_write"],
++            "Hermes token metrics come from ~/.hermes/state.db sessions columns.",
++        )
+ 
+-    for source_id, totals in source_overviews.items():
+-        if source_id == "opencode":
+-            continue
+-        row["total_sessions"] = (row["total_sessions"] or 0) + (totals["sessions"] or 0)
+-        row["total_input"] = (row["total_input"] or 0) + (totals["tokens_input"] or 0)
+-        row["total_output"] = (row["total_output"] or 0) + (totals["tokens_output"] or 0)
+-        row["total_tokens"] = row["total_input"] + row["total_output"]
+-        row["cache_read"] = (row["cache_read"] or 0) + (totals["cache_read"] or 0)
++    row.update({
++        "total_sessions": 0,
++        "total_input": 0,
++        "non_cache_input": 0,
++        "total_output": 0,
++        "total_tokens": 0,
++        "session_tokens": 0,
++        "cache_read": 0,
++        "cache_write": 0,
++        "cache_total": 0,
++    })
++    for totals in source_overviews.values():
++        row["total_sessions"] += totals["sessions"] or 0
++        row["total_input"] += totals["tokens_input"] or 0
++        row["non_cache_input"] += totals["non_cache_input"] or 0
++        row["total_output"] += totals["tokens_output"] or 0
++        row["total_tokens"] += totals["tokens_total"] or 0
++        row["session_tokens"] += totals["session_tokens"] or 0
++        row["cache_read"] += totals["cache_read"] or 0
+         if totals["cache_write"] is not None:
+-            row["cache_write"] = (row["cache_write"] or 0) + (totals["cache_write"] or 0)
++            row["cache_write"] += totals["cache_write"] or 0
++        row["cache_total"] += totals["cache_total"] or 0
+ 
+     session_dates = [row["first_session"], row["last_session"]]
+     for overview in [codex, hermes]:
+diff --git a/dashboard/simulation.py b/dashboard/simulation.py
+index faf9771..4e1cb90 100644
+--- a/dashboard/simulation.py
++++ b/dashboard/simulation.py
+@@ -148,20 +148,29 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
+     cache_read_total = sum(item["cache_read"] for item in models)
+     cache_write_total = sum(item["cache_write"] for item in models)
+ 
++    session_tokens = total_input + total_output
++    total_input_with_cache = total_input + cache_read_total + cache_write_total
++    total_token_volume = session_tokens + cache_read_total + cache_write_total
++
+     overview = {
+         "total_sessions": total_sessions,
+-        "total_input": total_input,
++        "total_input": total_input_with_cache,
++        "non_cache_input": total_input,
+         "total_output": total_output,
+-        "total_tokens": total_input + total_output,
++        "total_tokens": total_token_volume,
++        "session_tokens": session_tokens,
+         "cache_read": cache_read_total,
+         "cache_write": cache_write_total,
++        "cache_total": cache_read_total + cache_write_total,
+         "first_session": date_keys[0],
+         "last_session": date_keys[-1],
+         "days": days,
+         "active_tool": "opencode",
+         "active_tool_label": "OpenCode (simulated)",
+         "source_path": "simulated dataset",
+-        "token_total_definition": "non-cache input + output assistant-message tokens; cache read/write separate",
++        "token_total_definition": "total token volume = input tokens + output tokens; includes cache read/write",
++        "input_token_definition": "input tokens = non-cache input + cache read + cache write",
++        "session_token_definition": "session tokens = non-cache input + output assistant-message tokens",
+         "tool_sources": [],
+     }
+ 
+@@ -173,10 +182,13 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
+                 "source_path": "simulated dataset",
+                 "sessions": total_sessions,
+                 "tokens_total": overview["total_tokens"],
+-                "tokens_input": total_input,
++                "tokens_input": total_input_with_cache,
++                "non_cache_input": total_input,
+                 "tokens_output": total_output,
++                "session_tokens": session_tokens,
+                 "cache_read": cache_read_total,
+                 "cache_write": cache_write_total,
++                "cache_total": cache_read_total + cache_write_total,
+             })
+         else:
+             item.update({
+diff --git a/templates/index.html b/templates/index.html
+index a657ac3..e00d4f6 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -148,7 +148,7 @@
+   /* Cards */
+   .stat-cards {
+     display: grid;
+-    grid-template-columns: repeat(5, minmax(180px, 1fr));
++    grid-template-columns: repeat(5, minmax(160px, 1fr));
+     gap: 16px;
+     margin-bottom: 32px;
+   }
+@@ -731,7 +731,7 @@
+   <main class="main-area">
+     <section id="cost" class="page-header">
+       <h1>Overview</h1>
+-      <div class="subtitle">Primary totals use non-cache input + assistant output tokens. Cache read/write is tracked separately.</div>
++      <div class="subtitle">Top cards show full token volume. Session totals and cache details appear in secondary lines.</div>
+     </section>
+ 
+     <!-- Pill tabs -->
+@@ -759,7 +759,7 @@
+         <div class="sub" id="tokens-sub"></div>
+       </div>
+       <div class="stat-card">
+-        <div class="label">Non-cache Input</div>
++        <div class="label">Input Tokens</div>
+         <div class="value" id="total-input">—</div>
+         <div class="sub" id="input-sub"></div>
+       </div>
+@@ -940,6 +940,13 @@ function createLegendDot(color) {
+   return dot;
+ }
+ 
++function cacheShare(cacheTokens, inputTokens) {
++  const cache = Number(cacheTokens || 0);
++  const input = Number(inputTokens || 0);
++  if (!cache || !input) return '0% cached';
++  return `${Math.round((cache / input) * 100)}% cached`;
++}
++
+ function setCardMeta(id, visible, detail = '') {
+   const el = document.getElementById(id);
+   if (!el) return;
+@@ -1147,17 +1154,22 @@ async function loadOverview(days) {
+     const r = await fetch(`/api/overview?days=${rangeParam()}${simulateQuerySuffix()}`);
+     const d = await r.json();
+ 
++    const sessionTokens = Number(d.session_tokens ?? ((d.non_cache_input || 0) + (d.total_output || 0)));
++    const nonCacheInput = Number(d.non_cache_input ?? d.total_input ?? 0);
++    const cacheRead = Number(d.cache_read || 0);
++    const cacheWrite = Number(d.cache_write || 0);
++    const cacheTotal = Number(d.cache_total ?? (cacheRead + cacheWrite));
++    const totalInput = Number(d.total_input ?? (nonCacheInput + cacheTotal));
++    const totalTokens = Number(d.total_tokens ?? (sessionTokens + cacheTotal));
++
+     document.getElementById('total-sessions').textContent = fmtNum(d.total_sessions);
+-    document.getElementById('total-tokens').textContent = fmtTokens(d.total_tokens);
+-    document.getElementById('total-input').textContent = fmtTokens(d.total_input);
++    document.getElementById('total-tokens').textContent = fmtTokens(totalTokens);
++    document.getElementById('total-input').textContent = fmtTokens(totalInput);
+     document.getElementById('total-output').textContent = fmtTokens(d.total_output);
+ 
+     const sourceLabel = d.active_tool_label || 'OpenCode';
+     const sourcePath = d.source_path || '~/.local/share/opencode/opencode.db';
+     document.getElementById('db-path-display').textContent = `${sourceLabel} · ${sourcePath}`;
+-    const totalAvg = fmtTokens(d.total_tokens / Math.max(d.total_sessions, 1));
+-    const inputAvg = fmtTokens(d.total_input / Math.max(d.total_sessions, 1));
+-    const outputAvg = fmtTokens(d.total_output / Math.max(d.total_sessions, 1));
+     setCardMeta(
+       'sessions-sub',
+       `${d.first_session || '—'} → ${d.last_session || '—'}`,
+@@ -1165,18 +1177,18 @@ async function loadOverview(days) {
+     );
+     setCardMeta(
+       'tokens-sub',
+-      `${fmtTokens(d.cache_read)} read / ${fmtTokens(d.cache_write)} write cache`,
+-      `Canonical total = non-cache input + output. Ranking uses effective volume incl. cache. ${totalAvg} avg/session. Active sources: ${sourceLabel}.`,
++      `${fmtTokens(sessionTokens)} session · ${fmtTokens(cacheTotal)} cached`,
++      `Total token volume = input tokens + output tokens. Includes ${fmtTokens(cacheRead)} cache read and ${fmtTokens(cacheWrite)} cache write. Session tokens = non-cache input + output. Active sources: ${sourceLabel}.`,
+     );
+     setCardMeta(
+       'input-sub',
+-      `${fmtTokens(d.cache_read)} cache read`,
+-      `Input is non-cache prompt/context tokens. Ranking uses effective volume incl. cache; canonical total stays non-cache + output. ${inputAvg} input avg/session.`,
++      `${fmtTokens(nonCacheInput)} fresh · ${fmtTokens(cacheRead)} read · ${fmtTokens(cacheWrite)} write`,
++      `Input tokens = fresh prompt/context + cached context. ${cacheShare(cacheTotal, totalInput)} of input volume is cached.`,
+     );
+     setCardMeta(
+       'output-sub',
+-      `${fmtTokens(d.cache_write)} cache write`,
+-      `Output tokens are assistant response tokens. Cache write is newly cached context and is excluded from output totals. ${outputAvg} output avg/session.`,
++      'assistant-generated',
++      `Output tokens are assistant-generated response tokens. Cache write is provider-side cached context creation, not assistant output.`,
+     );
+     document.getElementById('tool-sources-subtitle').textContent = `Click a source name to focus the chart. Totals currently come from ${sourceLabel}.`;
+     renderToolSources(d.tool_sources || []);
+diff --git a/templates/settings.html b/templates/settings.html
+index 7abdb75..51d8e57 100644
+--- a/templates/settings.html
++++ b/templates/settings.html
+@@ -72,7 +72,7 @@
+ 
+ <div class="card">
+   <h2>Source</h2>
+-  <p>Built from normalized local session data — model, session timestamps, non-cache input tokens, output tokens, and separate cache read/write metrics where a source exposes them. Total tokens are defined as non-cache input + output assistant-message tokens. Raw provider usage can include cached tokens in input; this dashboard subtracts cache read where needed for source-to-source consistency. Cost is an API-equivalent estimate from matched provider pricing when available, not necessarily actual subscription billing.</p>
++  <p>Built from normalized local session data — model, session timestamps, non-cache input tokens, output tokens, and separate cache read/write metrics where a source exposes them. Overview Total Tokens include session tokens plus cache read/write; table/session totals use session-token semantics when labeled. Raw provider usage can include cached tokens in input; this dashboard preserves cache details for source-to-source consistency. Cost is an API-equivalent estimate from matched provider pricing when available, not necessarily actual subscription billing.</p>
+ </div>
+ </body>
+ </html>
+diff --git a/tests/test_app.py b/tests/test_app.py
+index e1f499a..f320139 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -214,8 +214,17 @@ class DashboardApiTests(unittest.TestCase):
+ 
+         self.assertEqual(
+             payload['token_total_definition'],
+-            'non-cache input + output assistant-message tokens; cache read/write separate',
++            'total token volume = input tokens + output tokens; includes cache read/write',
+         )
++        self.assertEqual(payload['input_token_definition'], 'input tokens = non-cache input + cache read + cache write')
++        self.assertEqual(payload['session_token_definition'], 'session tokens = non-cache input + output assistant-message tokens')
++        self.assertEqual(payload['non_cache_input'], 2100)
++        self.assertEqual(payload['total_output'], 5000)
++        self.assertEqual(payload['cache_read'], 375)
++        self.assertEqual(payload['cache_write'], 165)
++        self.assertEqual(payload['session_tokens'], 7100)
++        self.assertEqual(payload['total_input'], 2640)
++        self.assertEqual(payload['total_tokens'], 7640)
+         self.assertEqual(payload['active_tool'], 'opencode')
+         self.assertEqual(payload['active_tool_label'], 'OpenCode')
+         self.assertEqual(payload['source_path'], display_like_app(self.db_path))
+@@ -461,9 +470,11 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertEqual(sources['codex']['status_label'], 'Active source')
+         self.assertEqual(sources['codex']['source_type'], 'SQLite state + JSONL rollouts')
+         self.assertEqual(sources['codex']['sessions'], 1)
+-        self.assertEqual(sources['codex']['tokens_input'], 1100)
++        self.assertEqual(sources['codex']['tokens_input'], 1500)
++        self.assertEqual(sources['codex']['non_cache_input'], 1100)
+         self.assertEqual(sources['codex']['tokens_output'], 225)
+-        self.assertEqual(sources['codex']['tokens_total'], 1325)
++        self.assertEqual(sources['codex']['session_tokens'], 1325)
++        self.assertEqual(sources['codex']['tokens_total'], 1725)
+         self.assertEqual(sources['codex']['cache_read'], 400)
+         self.assertIsNone(sources['codex']['cache_write'])
+ 
+@@ -575,9 +586,11 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertEqual(sources['hermes']['status_label'], 'Active source')
+         self.assertEqual(sources['hermes']['source_type'], 'Hermes session SQLite database')
+         self.assertEqual(sources['hermes']['sessions'], 1)
+-        self.assertEqual(sources['hermes']['tokens_input'], 2000)
++        self.assertEqual(sources['hermes']['tokens_input'], 10125)
++        self.assertEqual(sources['hermes']['non_cache_input'], 2000)
+         self.assertEqual(sources['hermes']['tokens_output'], 500)
+-        self.assertEqual(sources['hermes']['tokens_total'], 2500)
++        self.assertEqual(sources['hermes']['session_tokens'], 2500)
++        self.assertEqual(sources['hermes']['tokens_total'], 10625)
+         self.assertEqual(sources['hermes']['cache_read'], 8000)
+         self.assertEqual(sources['hermes']['cache_write'], 125)
+ 
+@@ -695,8 +708,8 @@ class DashboardApiTests(unittest.TestCase):
+         response = self.client.get('/settings')
+         self.assertEqual(response.status_code, 200)
+         html = response.get_data(as_text=True)
+-        self.assertIn('Total tokens are defined as non-cache input + output assistant-message tokens.', html)
+-        self.assertIn('this dashboard subtracts cache read where needed', html)
++        self.assertIn('Overview Total Tokens include session tokens plus cache read/write', html)
++        self.assertIn('table/session totals use session-token semantics when labeled', html)
+         self.assertIn('Codex CLI becomes active when', html)
+         self.assertIn('Hermes becomes active when', html)
+         self.assertNotIn('OpenCode is the active source today', html)
+@@ -710,8 +723,9 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertIn('class="meta-info-wrap"', html)
+         self.assertIn('class="meta-tooltip"', html)
+         self.assertIn('aria-expanded="false"', html)
+-        self.assertIn('Non-cache Input', html)
+-        self.assertIn('Raw provider usage may include cache reads', html)
++        self.assertIn('Input Tokens', html)
++        self.assertIn('Top cards show full token volume', html)
++        self.assertIn('Total token volume = input tokens + output tokens', html)
+         self.assertIn('bindMetaInfoInteractions', html)
+         self.assertIn('<link rel="icon" href="/favicon.ico" type="image/svg+xml">', html)
+ 
+diff --git a/tests/test_readme.py b/tests/test_readme.py
+index 7ea792b..ab9817e 100644
+--- a/tests/test_readme.py
++++ b/tests/test_readme.py
+@@ -43,7 +43,8 @@ class ReadmeTests(unittest.TestCase):
+ 
+         self.assertIn('Codex CLI via `~/.codex/state_5.sqlite`', content)
+         self.assertIn('Hermes via `~/.hermes/state.db`', content)
+-        self.assertIn('Total tokens means `non-cache input + output assistant-message tokens`', content)
++        self.assertIn('Overview `Total Tokens` means full token volume', content)
++        self.assertIn('Session/model-history totals may still use `Session Tokens` semantics', content)
+         self.assertNotIn('Total tokens means `input + output assistant-message tokens`', content)
+ 
+     def test_agent_guidance_requires_worktree_workflow(self):
+-- 
+2.43.0
+
+
+From a022875c0d684af936569d4c4d88e87e576ee36d Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Tue, 2 Jun 2026 13:53:24 +0700
+Subject: [PATCH 02/14] Show partial cost estimate badge
+
+---
+ templates/index.html | 61 ++++++++++++++++++++++++++++++++++++++++++--
+ tests/test_app.py    |  3 +++
+ 2 files changed, 62 insertions(+), 2 deletions(-)
+
+diff --git a/templates/index.html b/templates/index.html
+index e00d4f6..0e4e2b3 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -174,6 +174,30 @@
+     line-height: 1.45;
+   }
+   .stat-card .meta-main { min-width: 0; overflow-wrap: anywhere; }
++  .estimate-meta {
++    display: inline-flex;
++    align-items: center;
++    flex-wrap: wrap;
++    gap: 6px;
++  }
++  .estimate-badge {
++    display: inline-flex;
++    align-items: center;
++    min-height: 20px;
++    padding: 2px 7px;
++    border: 1px solid rgba(245, 158, 11, 0.55);
++    border-radius: 999px;
++    background: rgba(245, 158, 11, 0.12);
++    color: #FBBF24;
++    font-family: var(--font-mono);
++    font-size: 10px;
++    font-weight: 700;
++    letter-spacing: 0.04em;
++    text-transform: uppercase;
++  }
++  .estimate-coverage {
++    color: var(--text-secondary);
++  }
+   .stat-card .meta-info-wrap {
+     position: relative;
+     display: inline-flex;
+@@ -970,6 +994,38 @@ function setCardMeta(id, visible, detail = '') {
+   bindMetaInfoInteractions(el);
+ }
+ 
++function setCostMeta(id, pricedCount, modelCount, detail = '') {
++  const el = document.getElementById(id);
++  if (!el) return;
++  const priced = Number(pricedCount || 0);
++  const total = Number(modelCount || 0);
++  const partial = priced > 0 && priced < total;
++  const visible = priced
++    ? `${priced} of ${total} models priced`
++    : 'No matched pricing';
++  const detailText = String(detail || '');
++  const tooltipId = `${id}-tooltip`;
++  el.innerHTML = `
++    <span class="estimate-meta">
++      ${partial ? '<span class="estimate-badge">Partial estimate</span>' : ''}
++      <span class="estimate-coverage">${escapeHtml(visible)}</span>
++    </span>
++    ${detailText ? `
++      <span class="meta-info-wrap">
++        <button
++          type="button"
++          class="meta-info"
++          aria-label="More information: ${partial ? 'partial estimate' : escapeHtml(visible)}"
++          aria-expanded="false"
++          aria-describedby="${escapeHtml(tooltipId)}"
++        >i</button>
++        <span class="meta-tooltip" id="${escapeHtml(tooltipId)}" role="tooltip">${escapeHtml(detailText)}</span>
++      </span>
++    ` : ''}
++  `;
++  bindMetaInfoInteractions(el);
++}
++
+ function closeMetaInfo(exceptWrap = null) {
+   document.querySelectorAll('.meta-info-wrap.is-open').forEach(wrap => {
+     if (wrap === exceptWrap) return;
+@@ -1220,9 +1276,10 @@ async function loadModels(days) {
+     }, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+     const unpricedCount = models.length - priced.length;
+     document.getElementById('estimated-cost').textContent = priced.length ? fmtCost(estimatedTotal) : '—';
+-    setCardMeta(
++    setCostMeta(
+       'estimated-cost-sub',
+-      priced.length ? `approx · ${priced.length}/${models.length} priced` : 'No matched pricing',
++      priced.length,
++      models.length,
+       priced.length
+         ? `API-equivalent estimate, not actual subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}. ${unpricedCount} unmatched models.`
+         : 'No OpenRouter or hardcoded pricing matched the active models.',
+diff --git a/tests/test_app.py b/tests/test_app.py
+index f320139..5c8b77c 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -746,6 +746,9 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertIn('role="img" aria-label="Daily effective token volume by model (input + output + cache read + cache write)"', html)
+         self.assertIn('role="group" aria-label="Usage date range"', html)
+         self.assertIn('API-Equivalent Cost', html)
++        self.assertIn('Partial estimate', html)
++        self.assertIn('estimate-badge', html)
++        self.assertIn('of ${total} models priced', html)
+         self.assertIn('Rows show canonical totals: non-cache input + output. Ranking and chart use effective volume including cache. API-equivalent cost is priced from matched provider rates.', html)
+         self.assertIn('Breakdown: input ${fmtCost(costParts.input)}', html)
+         self.assertIn('<meta name="theme-color" content="#08090a">', html)
+-- 
+2.43.0
+
+
+From c809ad70dd30d35d2c3d742864ad97889624b80c Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Tue, 2 Jun 2026 15:55:46 +0700
+Subject: [PATCH 03/14] Polish overview card hierarchy
+
+---
+ templates/index.html | 32 ++++++++++++++++++--------------
+ tests/test_app.py    |  7 +++++++
+ 2 files changed, 25 insertions(+), 14 deletions(-)
+
+diff --git a/templates/index.html b/templates/index.html
+index 0e4e2b3..63541e0 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -173,7 +173,7 @@
+     font-size: 13px;
+     line-height: 1.45;
+   }
+-  .stat-card .meta-main { min-width: 0; overflow-wrap: anywhere; }
++  .stat-card .meta-main { min-width: 0; overflow-wrap: normal; }
+   .estimate-meta {
+     display: inline-flex;
+     align-items: center;
+@@ -772,16 +772,16 @@
+ 
+     <!-- Overview cards -->
+     <div class="stat-cards" id="overview-cards">
+-      <div class="stat-card">
+-        <div class="label">Sessions</div>
+-        <div class="value" id="total-sessions">—</div>
+-        <div class="sub" id="sessions-sub"></div>
+-      </div>
+       <div class="stat-card">
+         <div class="label">Total Tokens</div>
+         <div class="value" id="total-tokens">—</div>
+         <div class="sub" id="tokens-sub"></div>
+       </div>
++      <div class="stat-card">
++        <div class="label">API-Equivalent Cost</div>
++        <div class="value" id="estimated-cost">—</div>
++        <div class="sub" id="estimated-cost-sub">Public provider pricing when matched</div>
++      </div>
+       <div class="stat-card">
+         <div class="label">Input Tokens</div>
+         <div class="value" id="total-input">—</div>
+@@ -793,9 +793,9 @@
+         <div class="sub" id="output-sub"></div>
+       </div>
+       <div class="stat-card">
+-        <div class="label">API-Equivalent Cost</div>
+-        <div class="value" id="estimated-cost">—</div>
+-        <div class="sub" id="estimated-cost-sub">Public provider pricing when matched</div>
++        <div class="label">Sessions</div>
++        <div class="value" id="total-sessions">—</div>
++        <div class="sub" id="sessions-sub"></div>
+       </div>
+     </div>
+ 
+@@ -967,8 +967,12 @@ function createLegendDot(color) {
+ function cacheShare(cacheTokens, inputTokens) {
+   const cache = Number(cacheTokens || 0);
+   const input = Number(inputTokens || 0);
+-  if (!cache || !input) return '0% cached';
+-  return `${Math.round((cache / input) * 100)}% cached`;
++  if (!cache || !input) return '0%\u00a0cached';
++  return `${Math.round((cache / input) * 100)}%\u00a0cached`;
++}
++
++function keepTogether(value, label) {
++  return `${value}\u00a0${label.replaceAll(' ', '\u00a0')}`;
+ }
+ 
+ function setCardMeta(id, visible, detail = '') {
+@@ -1233,12 +1237,12 @@ async function loadOverview(days) {
+     );
+     setCardMeta(
+       'tokens-sub',
+-      `${fmtTokens(sessionTokens)} session · ${fmtTokens(cacheTotal)} cached`,
+-      `Total token volume = input tokens + output tokens. Includes ${fmtTokens(cacheRead)} cache read and ${fmtTokens(cacheWrite)} cache write. Session tokens = non-cache input + output. Active sources: ${sourceLabel}.`,
++      `${keepTogether(fmtTokens(sessionTokens), 'direct')} · ${keepTogether(fmtTokens(cacheTotal), 'cached')} · ${cacheShare(cacheTotal, totalTokens)}`,
++      `Total token volume = input tokens + output tokens. Includes ${fmtTokens(cacheRead)} cache read and ${fmtTokens(cacheWrite)} cache write. Direct/session tokens = non-cache input + output. Active sources: ${sourceLabel}.`,
+     );
+     setCardMeta(
+       'input-sub',
+-      `${fmtTokens(nonCacheInput)} fresh · ${fmtTokens(cacheRead)} read · ${fmtTokens(cacheWrite)} write`,
++      `${keepTogether(fmtTokens(nonCacheInput), 'fresh')} · ${keepTogether(fmtTokens(cacheRead), 'cache read')} · ${keepTogether(fmtTokens(cacheWrite), 'cache write')}`,
+       `Input tokens = fresh prompt/context + cached context. ${cacheShare(cacheTotal, totalInput)} of input volume is cached.`,
+     );
+     setCardMeta(
+diff --git a/tests/test_app.py b/tests/test_app.py
+index 5c8b77c..f2732b3 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -746,9 +746,16 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertIn('role="img" aria-label="Daily effective token volume by model (input + output + cache read + cache write)"', html)
+         self.assertIn('role="group" aria-label="Usage date range"', html)
+         self.assertIn('API-Equivalent Cost', html)
++        self.assertLess(html.index('Total Tokens'), html.index('API-Equivalent Cost'))
++        self.assertLess(html.index('API-Equivalent Cost'), html.index('Input Tokens'))
++        self.assertLess(html.index('Output Tokens'), html.index('Sessions'))
+         self.assertIn('Partial estimate', html)
+         self.assertIn('estimate-badge', html)
+         self.assertIn('of ${total} models priced', html)
++        self.assertIn("keepTogether(fmtTokens(sessionTokens), 'direct')", html)
++        self.assertIn('cacheShare(cacheTotal, totalTokens)', html)
++        self.assertIn("keepTogether(fmtTokens(cacheRead), 'cache read')", html)
++        self.assertIn('Direct/session tokens = non-cache input + output', html)
+         self.assertIn('Rows show canonical totals: non-cache input + output. Ranking and chart use effective volume including cache. API-equivalent cost is priced from matched provider rates.', html)
+         self.assertIn('Breakdown: input ${fmtCost(costParts.input)}', html)
+         self.assertIn('<meta name="theme-color" content="#08090a">', html)
+-- 
+2.43.0
+
+
+From d644c8c16557d5a30dd4c290d45eabe1d0282398 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Tue, 2 Jun 2026 19:21:02 +0700
+Subject: [PATCH 04/14] Include partial cost in overview card; simulate mode
+ returns one opencode source
+
+---
+ dashboard/simulation.py | 67 +++++++++++++++++++++++++----------------
+ templates/index.html    | 16 +++++++---
+ 2 files changed, 52 insertions(+), 31 deletions(-)
+
+diff --git a/dashboard/simulation.py b/dashboard/simulation.py
+index 4e1cb90..9f083bf 100644
+--- a/dashboard/simulation.py
++++ b/dashboard/simulation.py
+@@ -174,32 +174,47 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
+         "tool_sources": [],
+     }
+ 
+-    for source in current_tool_sources():
+-        item = dict(source)
+-        if item["id"] == "opencode":
+-            item.update({
+-                "status_label": "Simulated",
+-                "source_path": "simulated dataset",
+-                "sessions": total_sessions,
+-                "tokens_total": overview["total_tokens"],
+-                "tokens_input": total_input_with_cache,
+-                "non_cache_input": total_input,
+-                "tokens_output": total_output,
+-                "session_tokens": session_tokens,
+-                "cache_read": cache_read_total,
+-                "cache_write": cache_write_total,
+-                "cache_total": cache_read_total + cache_write_total,
+-            })
+-        else:
+-            item.update({
+-                "sessions": None,
+-                "tokens_total": None,
+-                "tokens_input": None,
+-                "tokens_output": None,
+-                "cache_read": None,
+-                "cache_write": None,
+-            })
+-        overview["tool_sources"].append(item)
++    overview["active_tool_label"] = "OpenCode (simulated)"
++    overview.setdefault("tool_sources", [])
++
++    opencode_source = next((src for src in current_tool_sources() if src["id"] == "opencode"), {
++        "id": "opencode",
++        "label": "OpenCode",
++        "status": "active",
++        "status_label": "Simulated",
++        "source_type": "Synthetic dataset",
++        "source_path": "simulated dataset",
++        "repo_url": "https://github.com/anomalyco/opencode/",
++        "color": TOOL_COLOR_MAP.get("opencode", "#64748B"),
++        "issue": None,
++    })
++    opencode_item = dict(opencode_source)
++    opencode_item.update({
++        "status_label": "Simulated",
++        "source_path": "simulated dataset",
++        "sessions": total_sessions,
++        "tokens_total": overview["total_tokens"],
++        "tokens_input": total_input_with_cache,
++        "non_cache_input": total_input,
++        "tokens_output": total_output,
++        "session_tokens": session_tokens,
++        "cache_read": cache_read_total,
++        "cache_write": cache_write_total,
++        "cache_total": cache_read_total + cache_write_total,
++        "estimated_cost": None,
++        "actual_cost": None,
++        "cost_status": None,
++        "cost_source": None,
++        "estimated_cost_subtotal": None,
++        "actual_cost_subtotal": None,
++        "pricing_status": "unpriced",
++        "pricing_source": None,
++        "pricing_model_id": None,
++        "cost_basis": "simulated_no_billing",
++        "cost_breakdown": None,
++        "accounted_cost": None,
++    })
++    overview["tool_sources"] = [opencode_item]
+ 
+     history.sort(key=lambda row: row["created"], reverse=True)
+     return {
+diff --git a/templates/index.html b/templates/index.html
+index 63541e0..5b504bc 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -1268,8 +1268,12 @@ async function loadModels(days) {
+       return;
+     }
+ 
++    const pricedForCount = models.filter(m => (m.estimated_cost != null && m.estimated_cost !== undefined) || (m.partial_cost_usd != null && m.partial_cost_usd !== undefined));
+     const priced = models.filter(m => m.estimated_cost !== null && m.estimated_cost !== undefined);
++    const partialModels = models.filter(m => (m.estimated_cost == null || m.estimated_cost === undefined) && (m.partial_cost_usd != null && m.partial_cost_usd !== undefined));
+     const estimatedTotal = priced.reduce((sum, m) => sum + (m.estimated_cost || 0), 0);
++    const partialTotal = partialModels.reduce((sum, m) => sum + Number(m.partial_cost_usd || 0), 0);
++    const knownTotal = estimatedTotal + partialTotal;
+     const costParts = priced.reduce((parts, m) => {
+       const breakdown = m.cost_breakdown || {};
+       parts.input += Number(breakdown.input || 0);
+@@ -1278,14 +1282,16 @@ async function loadModels(days) {
+       parts.cacheWrite += Number(breakdown.cache_write || 0);
+       return parts;
+     }, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+-    const unpricedCount = models.length - priced.length;
+-    document.getElementById('estimated-cost').textContent = priced.length ? fmtCost(estimatedTotal) : '—';
++    const unpricedCount = models.length - pricedForCount.length;
++    document.getElementById('estimated-cost').textContent = pricedForCount.length ? fmtCost(knownTotal) : '—';
++    const counted = priced.length + partialModels.length;
++    const partialMeta = partialTotal > 0 ? ` Includes ${fmtCost(partialTotal)} from ${partialModels.length} partially priced model(s).` : '';
+     setCostMeta(
+       'estimated-cost-sub',
+-      priced.length,
++      counted,
+       models.length,
+-      priced.length
+-        ? `API-equivalent estimate, not actual subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}. ${unpricedCount} unmatched models.`
++      counted
++        ? `API-equivalent estimate, not actual subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}.${partialMeta} ${unpricedCount} unmatched models.`
+         : 'No OpenRouter or hardcoded pricing matched the active models.',
+     );
+ 
+-- 
+2.43.0
+
+
+From 76932869637fa7a57f9edc108c74e18c49ef3872 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Tue, 2 Jun 2026 19:38:18 +0700
+Subject: [PATCH 05/14] Label partial-only cost coverage correctly
+
+---
+ templates/index.html | 28 +++++++++++++++++++---------
+ tests/test_app.py    |  2 +-
+ 2 files changed, 20 insertions(+), 10 deletions(-)
+
+diff --git a/templates/index.html b/templates/index.html
+index 5b504bc..6a3de4a 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -998,20 +998,29 @@ function setCardMeta(id, visible, detail = '') {
+   bindMetaInfoInteractions(el);
+ }
+ 
+-function setCostMeta(id, pricedCount, modelCount, detail = '') {
++function setCostMeta(id, fullyPricedCount, modelCount, detail = '', partialCount = 0) {
+   const el = document.getElementById(id);
+   if (!el) return;
+-  const priced = Number(pricedCount || 0);
++  const fully = Number(fullyPricedCount || 0);
+   const total = Number(modelCount || 0);
+-  const partial = priced > 0 && priced < total;
+-  const visible = priced
+-    ? `${priced} of ${total} models priced`
+-    : 'No matched pricing';
++  const partial = Number(partialCount || 0);
++  const hasFully = fully > 0;
++  const hasPartial = partial > 0;
++  let visible;
++  if (hasFully && hasPartial) {
++    visible = `${fully} fully priced, ${partial} partially priced of ${total} models`;
++  } else if (hasFully) {
++    visible = `${fully} of ${total} models priced`;
++  } else if (hasPartial) {
++    visible = `${partial} partially priced of ${total} models`;
++  } else {
++    visible = 'No matched pricing';
++  }
+   const detailText = String(detail || '');
+   const tooltipId = `${id}-tooltip`;
+   el.innerHTML = `
+     <span class="estimate-meta">
+-      ${partial ? '<span class="estimate-badge">Partial estimate</span>' : ''}
++      ${hasPartial ? '<span class="estimate-badge">Partial estimate</span>' : ''}
+       <span class="estimate-coverage">${escapeHtml(visible)}</span>
+     </span>
+     ${detailText ? `
+@@ -1019,7 +1028,7 @@ function setCostMeta(id, pricedCount, modelCount, detail = '') {
+         <button
+           type="button"
+           class="meta-info"
+-          aria-label="More information: ${partial ? 'partial estimate' : escapeHtml(visible)}"
++          aria-label="More information: ${hasPartial ? 'partial estimate' : escapeHtml(visible)}"
+           aria-expanded="false"
+           aria-describedby="${escapeHtml(tooltipId)}"
+         >i</button>
+@@ -1288,11 +1297,12 @@ async function loadModels(days) {
+     const partialMeta = partialTotal > 0 ? ` Includes ${fmtCost(partialTotal)} from ${partialModels.length} partially priced model(s).` : '';
+     setCostMeta(
+       'estimated-cost-sub',
+-      counted,
++      priced.length,
+       models.length,
+       counted
+         ? `API-equivalent estimate, not actual subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}.${partialMeta} ${unpricedCount} unmatched models.`
+         : 'No OpenRouter or hardcoded pricing matched the active models.',
++      partialModels.length,
+     );
+ 
+     clearNode(tbody);
+diff --git a/tests/test_app.py b/tests/test_app.py
+index f2732b3..f517643 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -751,7 +751,7 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertLess(html.index('Output Tokens'), html.index('Sessions'))
+         self.assertIn('Partial estimate', html)
+         self.assertIn('estimate-badge', html)
+-        self.assertIn('of ${total} models priced', html)
++        self.assertIn('models priced', html)
+         self.assertIn("keepTogether(fmtTokens(sessionTokens), 'direct')", html)
+         self.assertIn('cacheShare(cacheTotal, totalTokens)', html)
+         self.assertIn("keepTogether(fmtTokens(cacheRead), 'cache read')", html)
+-- 
+2.43.0
+
+
+From 2047d84d43cb9acd57fa671beff539dae2264709 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Tue, 2 Jun 2026 19:50:16 +0700
+Subject: [PATCH 06/14] Shorten dash copy; add card loading states on range
+ changes
+
+---
+ templates/index.html | 74 ++++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 64 insertions(+), 10 deletions(-)
+
+diff --git a/templates/index.html b/templates/index.html
+index 6a3de4a..dfe000e 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -173,7 +173,36 @@
+     font-size: 13px;
+     line-height: 1.45;
+   }
+-  .stat-card .meta-main { min-width: 0; overflow-wrap: normal; }
++  .stat-card .sub,
++  .stat-card .meta-main,
++  .stat-card .meta-meta[data-card-sub-id] .estimate-meta,
++  .stat-card .view-currency {
++    transition: none;
++  }
++  .stat-card.loading .value,
++  .stat-card.loading .sub,
++  .stat-card.loading .estimate-meta,
++  .stat-card.loading .view-currency {
++    visibility: hidden;
++  }
++  .stat-card.loading::after {
++    content: '';
++    position: absolute;
++    inset: 0;
++    background: linear-gradient(
++      90deg,
++      rgba(255, 255, 255, 0.04) 0%,
++      rgba(255, 255, 255, 0.08) 50%,
++      rgba(255, 255, 255, 0.04) 100%
++    );
++    border-radius: inherit;
++    pointer-events: none;
++    animation: shimmer 1.2s infinite linear;
++  }
++  @keyframes shimmer {
++    0% { transform: translateX(-100%); }
++    100% { transform: translateX(100%); }
++  }
+   .estimate-meta {
+     display: inline-flex;
+     align-items: center;
+@@ -1159,6 +1188,19 @@ function renderToolSources(sources = []) {
+   });
+ }
+ 
++const statCardIds = ['total-sessions','total-tokens','total-input','total-output','estimated-cost'];
++function setStatLoading(on) {
++  statCardIds.forEach(id => {
++    document.getElementById(id)?.closest('.stat-card')?.classList.toggle('loading', on);
++  });
++  if (on) {
++    setCardMeta('sessions-sub', '—');
++    setCardMeta('tokens-sub', 'Loading…');
++    setCardMeta('input-sub', 'Loading…');
++    setCardMeta('output-sub', 'Loading…');
++  }
++}
++
+ // ── Range tabs ──────────────────────────────────────────────────────────────
+ let currentDays = 30;
+ const pageSearch = new URLSearchParams(window.location.search);
+@@ -1186,7 +1228,12 @@ document.querySelectorAll('#range-tabs .pill').forEach(btn => {
+     setRangeButtonState(btn);
+     currentDays = parseInt(btn.dataset.days);
+     document.getElementById('custom-days').value = '';
+-    loadAll();
++    setStatLoading(true);
++    document.getElementById('chart-note').textContent = 'Loading…';
++    clearNode(document.getElementById('model-table-body'));
++    renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });
++    renderLegend([]);
++    loadAll().finally(() => setStatLoading(false));
+   });
+ });
+ 
+@@ -1196,7 +1243,12 @@ document.getElementById('apply-custom-days').addEventListener('click', () => {
+   currentDays = days;
+   input.value = days;
+   setRangeButtonState(null);
+-  loadAll();
++  setStatLoading(true);
++  document.getElementById('chart-note').textContent = 'Loading…';
++  clearNode(document.getElementById('model-table-body'));
++  renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });
++  renderLegend([]);
++  loadAll().finally(() => setStatLoading(false));
+ });
+ 
+ document.getElementById('custom-days').addEventListener('keydown', (event) => {
+@@ -1206,7 +1258,9 @@ document.getElementById('custom-days').addEventListener('keydown', (event) => {
+ document.getElementById('top-n-select').addEventListener('change', (event) => {
+   currentTopN = parseInt(event.target.value || '8');
+   hiddenChartModels.clear();
+-  loadDaily(currentDays);
++  setStatLoading(true);
++  document.getElementById('chart-note').textContent = 'Loading…';
++  loadDaily(currentDays).finally(() => setStatLoading(false));
+ });
+ 
+ document.getElementById('clear-chart-filter').addEventListener('click', () => {
+@@ -1251,13 +1305,13 @@ async function loadOverview(days) {
+     );
+     setCardMeta(
+       'input-sub',
+-      `${keepTogether(fmtTokens(nonCacheInput), 'fresh')} · ${keepTogether(fmtTokens(cacheRead), 'cache read')} · ${keepTogether(fmtTokens(cacheWrite), 'cache write')}`,
+-      `Input tokens = fresh prompt/context + cached context. ${cacheShare(cacheTotal, totalInput)} of input volume is cached.`,
++      `${keepTogether(fmtTokens(nonCacheInput), 'non-cache')} · ${keepTogether(fmtTokens(cacheRead), 'cache read')} · ${keepTogether(fmtTokens(cacheWrite), 'cache write')}`,
++      `Input tokens = non-cache input + cache read + cache write. ${cacheShare(cacheTotal, totalInput)} of input volume is cached.`,
+     );
+     setCardMeta(
+       'output-sub',
+-      'assistant-generated',
+-      `Output tokens are assistant-generated response tokens. Cache write is provider-side cached context creation, not assistant output.`,
++      'model output',
++      `Output tokens are model-generated response tokens. Cache write is provider-side cached context creation, not model output.`,
+     );
+     document.getElementById('tool-sources-subtitle').textContent = `Click a source name to focus the chart. Totals currently come from ${sourceLabel}.`;
+     renderToolSources(d.tool_sources || []);
+@@ -1300,8 +1354,8 @@ async function loadModels(days) {
+       priced.length,
+       models.length,
+       counted
+-        ? `API-equivalent estimate, not actual subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}.${partialMeta} ${unpricedCount} unmatched models.`
+-        : 'No OpenRouter or hardcoded pricing matched the active models.',
++        ? `API-equivalent estimate, not subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}.`
++        : 'No matched pricing.',
+       partialModels.length,
+     );
+ 
+-- 
+2.43.0
+
+
+From 6e1e9d17f82e419c5fa65f3e133f9f8bf87b0de3 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Tue, 2 Jun 2026 19:58:19 +0700
+Subject: [PATCH 07/14] Shorten visible cost coverage copy
+
+---
+ templates/index.html | 8 ++++----
+ tests/test_app.py    | 2 +-
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/templates/index.html b/templates/index.html
+index dfe000e..f1c0233 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -1037,13 +1037,13 @@ function setCostMeta(id, fullyPricedCount, modelCount, detail = '', partialCount
+   const hasPartial = partial > 0;
+   let visible;
+   if (hasFully && hasPartial) {
+-    visible = `${fully} fully priced, ${partial} partially priced of ${total} models`;
++    visible = `${fully} full · ${partial} partial`;
+   } else if (hasFully) {
+-    visible = `${fully} of ${total} models priced`;
++    visible = `${fully}/${total} priced`;
+   } else if (hasPartial) {
+-    visible = `${partial} partially priced of ${total} models`;
++    visible = `${partial} partial`;
+   } else {
+-    visible = 'No matched pricing';
++    visible = 'No pricing';
+   }
+   const detailText = String(detail || '');
+   const tooltipId = `${id}-tooltip`;
+diff --git a/tests/test_app.py b/tests/test_app.py
+index f517643..4baaa22 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -751,7 +751,7 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertLess(html.index('Output Tokens'), html.index('Sessions'))
+         self.assertIn('Partial estimate', html)
+         self.assertIn('estimate-badge', html)
+-        self.assertIn('models priced', html)
++        self.assertIn('partial', html)
+         self.assertIn("keepTogether(fmtTokens(sessionTokens), 'direct')", html)
+         self.assertIn('cacheShare(cacheTotal, totalTokens)', html)
+         self.assertIn("keepTogether(fmtTokens(cacheRead), 'cache read')", html)
+-- 
+2.43.0
+
+
+From e9308c4f4f72e08e5490fefcadc14cf9b4b6f847 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Tue, 2 Jun 2026 22:30:34 +0700
+Subject: [PATCH 08/14] Fix chart top-n loading and partial cost tooltip
+
+---
+ templates/index.html | 7 ++++---
+ tests/test_app.py    | 4 ++++
+ 2 files changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/templates/index.html b/templates/index.html
+index f1c0233..f0c4dcc 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -1258,9 +1258,10 @@ document.getElementById('custom-days').addEventListener('keydown', (event) => {
+ document.getElementById('top-n-select').addEventListener('change', (event) => {
+   currentTopN = parseInt(event.target.value || '8');
+   hiddenChartModels.clear();
+-  setStatLoading(true);
+   document.getElementById('chart-note').textContent = 'Loading…';
+-  loadDaily(currentDays).finally(() => setStatLoading(false));
++  renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });
++  renderLegend([]);
++  loadDaily(currentDays);
+ });
+ 
+ document.getElementById('clear-chart-filter').addEventListener('click', () => {
+@@ -1354,7 +1355,7 @@ async function loadModels(days) {
+       priced.length,
+       models.length,
+       counted
+-        ? `API-equivalent estimate, not subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}.`
++        ? `API-equivalent estimate, not subscription billing. Breakdown: input ${fmtCost(costParts.input)}, output ${fmtCost(costParts.output)}, cache read ${fmtCost(costParts.cacheRead)}, cache write ${fmtCost(costParts.cacheWrite)}.${partialMeta}`
+         : 'No matched pricing.',
+       partialModels.length,
+     );
+diff --git a/tests/test_app.py b/tests/test_app.py
+index 4baaa22..5801736 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -758,6 +758,10 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertIn('Direct/session tokens = non-cache input + output', html)
+         self.assertIn('Rows show canonical totals: non-cache input + output. Ranking and chart use effective volume including cache. API-equivalent cost is priced from matched provider rates.', html)
+         self.assertIn('Breakdown: input ${fmtCost(costParts.input)}', html)
++        self.assertIn('cache write ${fmtCost(costParts.cacheWrite)}.${partialMeta}', html)
++        self.assertIn("const partialMeta = partialTotal > 0 ?", html)
++        self.assertIn("renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });\n  renderLegend([]);\n  loadDaily(currentDays);", html)
++        self.assertNotIn("setStatLoading(true);\n  document.getElementById('chart-note').textContent = 'Loading…';\n  loadDaily(currentDays).finally(() => setStatLoading(false));", html)
+         self.assertIn('<meta name="theme-color" content="#08090a">', html)
+         self.assertIn('color-scheme: dark', html)
+         self.assertIn('name="custom-days" type="number"', html)
+-- 
+2.43.0
+
+
+From c15e5ab43ed9ccaa4624afbce14b7a6e9860afb9 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Tue, 2 Jun 2026 23:13:14 +0700
+Subject: [PATCH 09/14] Constrain loading shimmer to stat cards
+
+---
+ templates/index.html | 2 ++
+ tests/test_app.py    | 1 +
+ 2 files changed, 3 insertions(+)
+
+diff --git a/templates/index.html b/templates/index.html
+index f0c4dcc..1f94f35 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -154,6 +154,8 @@
+   }
+ 
+   .stat-card {
++    position: relative;
++    overflow: hidden;
+     background: var(--bg-card);
+     border: 1px solid var(--border);
+     border-radius: var(--radius);
+diff --git a/tests/test_app.py b/tests/test_app.py
+index 5801736..c051ed5 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -764,6 +764,7 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertNotIn("setStatLoading(true);\n  document.getElementById('chart-note').textContent = 'Loading…';\n  loadDaily(currentDays).finally(() => setStatLoading(false));", html)
+         self.assertIn('<meta name="theme-color" content="#08090a">', html)
+         self.assertIn('color-scheme: dark', html)
++        self.assertIn('position: relative;\n    overflow: hidden;\n    background: var(--bg-card);', html)
+         self.assertIn('name="custom-days" type="number"', html)
+         self.assertIn('inputmode="numeric" autocomplete="off" placeholder="e.g. 45…"', html)
+         self.assertNotIn('transition: all', html)
+-- 
+2.43.0
+
+
+From d429b9b9e8e96b67dba2e8f0310437258a4ad7d7 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Tue, 2 Jun 2026 23:20:09 +0700
+Subject: [PATCH 10/14] Add 3d dashboard range filter
+
+---
+ templates/index.html | 1 +
+ tests/test_app.py    | 2 ++
+ 2 files changed, 3 insertions(+)
+
+diff --git a/templates/index.html b/templates/index.html
+index 1f94f35..b30203f 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -791,6 +791,7 @@
+ 
+     <!-- Pill tabs -->
+     <div class="pill-tabs" id="range-tabs" role="group" aria-label="Usage date range">
++      <button class="pill" data-days="3" aria-pressed="false">3d</button>
+       <button class="pill" data-days="7" aria-pressed="false">7d</button>
+       <button class="pill active" data-days="30" aria-pressed="true">30d</button>
+       <button class="pill" data-days="90" aria-pressed="false">90d</button>
+diff --git a/tests/test_app.py b/tests/test_app.py
+index c051ed5..a9ffdb1 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -745,6 +745,8 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertIn("button.textContent = active ? 'Clear focus' : 'Focus chart'", html)
+         self.assertIn('role="img" aria-label="Daily effective token volume by model (input + output + cache read + cache write)"', html)
+         self.assertIn('role="group" aria-label="Usage date range"', html)
++        self.assertIn('data-days="3"', html)
++        self.assertLess(html.index('data-days="3"'), html.index('data-days="7"'))
+         self.assertIn('API-Equivalent Cost', html)
+         self.assertLess(html.index('Total Tokens'), html.index('API-Equivalent Cost'))
+         self.assertLess(html.index('API-Equivalent Cost'), html.index('Input Tokens'))
+-- 
+2.43.0
+
+
+From 444ac685363d38d8ce66c2332be36330f6e0343f Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Tue, 2 Jun 2026 23:24:23 +0700
+Subject: [PATCH 11/14] docs: update PR 22 scope and description
+
+---
+ PR22_BEFORE_AFTER.md    |  86 ++++++++++++++++++++++++++++++++
+ PR22_REMAINING_SCOPE.md | 107 ++++++++++++++++++++++++++++++++++++++++
+ PR_DESCRIPTION.md       |  50 +++++++++++++++++++
+ 3 files changed, 243 insertions(+)
+ create mode 100644 PR22_BEFORE_AFTER.md
+ create mode 100644 PR22_REMAINING_SCOPE.md
+ create mode 100644 PR_DESCRIPTION.md
+
+diff --git a/PR22_BEFORE_AFTER.md b/PR22_BEFORE_AFTER.md
+new file mode 100644
+index 0000000..d939fea
+--- /dev/null
++++ b/PR22_BEFORE_AFTER.md
+@@ -0,0 +1,86 @@
++# PR 22 before/after changes
++
++PR: https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/22
++
++## Implemented in the latest PR 22 update
++
++| # | Area | Before | After |
++|---:|---|---|---|
++| 1 | Card order | `Sessions`, `Total Tokens`, `Input Tokens`, `Output Tokens`, `API-Equivalent Cost` | `Total Tokens`, `API-Equivalent Cost`, `Input Tokens`, `Output Tokens`, `Sessions` |
++| 2 | Total token secondary copy | `757.0M session · 10.6B cached` | `764.8M direct · 10.6B cached · 93% cached` on the current live data |
++| 3 | Total token cache context | Raw cached token count only | Raw cached token count plus cached-share ratio |
++| 4 | Visible token-bucket wording | `session` shown as a visible bucket label | `direct` shown as the visible UI label; tooltip keeps precise `Direct/session tokens = non-cache input + output` wording |
++| 5 | Input token secondary copy | `727.6M fresh · 10.5B read · 19.7M write` | `735.0M fresh · 10.6B cache read · 19.7M cache write` on the current live data |
++| 6 | Secondary-line wrapping | Browser could split phrases like `10.6B cached`, `19.7M write`, or `93% cached` awkwardly | Added non-breaking number+label fragments so each metric phrase stays together when wrapping |
++| 7 | Cost confidence | Muted `approx · 35/64 priced` footnote-style copy | Amber `PARTIAL ESTIMATE` badge plus `35 of 64 models priced` |
++| 8 | Cost card priority | Cost was last among the top metric cards | Cost is second, immediately after `Total Tokens` |
++| 9 | Sessions card priority | Sessions was first and visually over-weighted | Sessions moved last |
++| 10 | Regression tests | Tests checked general accessible dashboard controls and cost badge | Tests now also assert card order, `direct` wording logic, total cached-share logic, and `cache read` wording logic |
++| 11 | Top range controls | Quick filters started at `7d` | Added `3d` before `7d`, rendering `3d`, `7d`, `30d`, `90d`, `All` |
++
++## Final visible card copy pattern
++
++```text
++TOTAL TOKENS
++11.4B
++764.8M direct · 10.6B cached · 93% cached
++```
++
++```text
++API-EQUIVALENT COST
++$6434.95
++PARTIAL ESTIMATE
++35 of 64 models priced
++```
++
++```text
++INPUT TOKENS
++11.4B
++735.0M fresh · 10.6B cache read · 19.7M cache write
++```
++
++```text
++OUTPUT TOKENS
++29.7M
++assistant-generated
++```
++
++```text
++SESSIONS
++1,787
++2026-05-03 → 2026-06-02
++```
++
++Numbers above reflect the live dashboard at verification time; they can move as new local usage lands.
++
++## Still deferred to issue #23
++
++| # | Deferred item | Reason |
++|---:|---|---|
++| 1 | Usage Summary strip | Changes dashboard information architecture |
++| 2 | Source mix summary | Better as part of Usage Summary |
++| 3 | Source-card selected/included states | Interaction/state redesign beyond issue #20 |
++| 4 | Source-card explicit actions | Needs broader source-card UX pass |
++| 5 | Chart focus summary | Chart interpretation work, not card semantics |
++| 6 | Peak-day annotation | Chart interpretation work |
++| 7 | Legend truncation cleanup | Chart/legend UX pass |
++| 8 | Total-volume line overlay | Chart behavior change |
++| 9 | Typography split | Visual-system pass |
++| 10 | H1/spacing cleanup | Page-level layout pass |
++| 11 | Info-icon alignment | Broader component polish |
++| 12 | Previous-window deltas | Requires previous-window data/API design |
++
++## Verification
++
++- `uv run python -m unittest tests.test_app tests.test_readme -v` passed.
++- `scripts/review.sh` passed.
++- Browser smoke on `http://127.0.0.1:8321` passed.
++- Browser console had no JavaScript errors.
++- DOM verified card order: `TOTAL TOKENS`, `API-EQUIVALENT COST`, `INPUT TOKENS`, `OUTPUT TOKENS`, `SESSIONS`.
++
++## Latest update: 3d range filter
++
++- Added `3d` before `7d` in the top Usage date range controls.
++- Added a regression assertion that `data-days="3"` exists and appears before `data-days="7"`.
++- Pushed commit `d429b9b` (`d429b9b9e8e96b67dba2e8f0310437258a4ad7d7`).
++- GitHub CI `test` passed on the latest head.
+diff --git a/PR22_REMAINING_SCOPE.md b/PR22_REMAINING_SCOPE.md
+new file mode 100644
+index 0000000..edd17c9
+--- /dev/null
++++ b/PR22_REMAINING_SCOPE.md
+@@ -0,0 +1,107 @@
++# PR 22 scope checklist
++
++PR: https://github.com/raychrisgdp/coding-agent-usage-dashboard/pull/22
++Issue: https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/20
++Follow-up issue: https://github.com/raychrisgdp/coding-agent-usage-dashboard/issues/23
++
++## Recommendation
++
++Keep PR 22 focused on Overview card semantics, cost-confidence honesty, and last-mile card legibility. Do not add the full decision summary in this PR; that belongs in #23 because it changes dashboard information architecture and chart interactions.
++
++After reviewing the screenshot, I would include card reorder in PR 22. It is a small hierarchy fix, and the screenshot makes the current order visibly wrong: `Sessions` is too prominent and cost appears too late.
++
++## PR 22 checklist
++
++| # | Priority | Item | Status | Why it belongs / does not belong in PR 22 | Suggested implementation |
++|---:|---|---|---:|---|---|
++| 1 | P0 | Make `Total Tokens` mean full token volume | Done | Core issue #20 requirement | `Total Tokens = non-cache input + output + cache read + cache write` |
++| 2 | P0 | Rename top-level `Non-cache Input` to `Input Tokens` | Done | Core issue #20 requirement | `Input Tokens = non-cache input + cache read + cache write` |
++| 3 | P0 | Keep `Output Tokens` as assistant output only | Done | Prevents cache write being misclassified as output | `Output Tokens = assistant output` |
++| 4 | P0 | Preserve `Session Tokens` semantics in details/docs/tests | Done | Keeps backward-compatible accounting language without making it a top-level card | `Session Tokens = non-cache input + output` |
++| 5 | P0 | Avoid top-level `Fresh`, `Canonical`, and `Effective` labels | Done | These are too internal for the Overview cards | Use those only in docs/tooltips if needed, not card labels |
++| 6 | P0 | Make partial API-equivalent cost visually honest | Done | Cost confidence is part of making the metric trustworthy | Amber `PARTIAL ESTIMATE` badge plus `35 of 64 models priced` |
++| 7 | P1 | Add cached-share ratio to `Total Tokens` card | Done | It directly supports issue #20's acceptance point: cache context as raw number plus ratio/share where useful | Change secondary text to `757.0M direct · 10.6B cached · 93% cached` |
++| 8 | P1 | Use friendlier UI wording than `session` in top-card secondary copy | Done | `session` is precise but internal; it can be confused with the Sessions card | Use `direct` in UI, with tooltip: `Direct/session tokens = non-cache input + assistant output.` |
++| 9 | P1 | Fix secondary-line wrapping in token cards | Done | Screenshot shows `10.6B cached` and `19.7M write` wrapping awkwardly even on a huge viewport | Use a more compact/flexible meta layout, or shorten copy while keeping tooltip detail |
++| 10 | P1 | Clarify cache wording in `Input Tokens` secondary line | Done | `read/write` is terse; `cache read/cache write` is clearer, but may crowd the card | Prefer `727.6M fresh · 10.5B cache read · 19.7M cache write` if layout fits; otherwise use `727.6M fresh · 10.5B cached input` and put read/write split in tooltip |
++| 11 | P1 | Reorder cards: Total, Cost, Input, Output, Sessions | Done | Screenshot confirms `Sessions` is too prominent and cost deserves earlier placement | Render order: `Total Tokens`, `API-Equivalent Cost`, `Input Tokens`, `Output Tokens`, `Sessions` |
++| 12 | P2 | Add top decision summary strip | Defer to #23 | Changes dashboard information architecture and requires derived summary fields | `30d usage: 11.3B tokens · 93% cached · OpenCode leads · GPT-5.5 is 50%` |
++| 13 | P2 | Add source mix summary | Defer to #23 | Better as part of decision summary, not token-card semantics | `OpenCode 65% · Codex 22% · Hermes 13%` |
++| 14 | P2 | Replace source-card `ACTIVE SOURCE` states | Defer to #23 | Interaction/state work beyond issue #20 | `Included in totals`, `Focused`, `Click to focus chart` |
++| 15 | P2 | Add source-card action affordances | Defer to #23 | Current `click name to filter repo` is cryptic and should become explicit interaction UI | `Focus chart →` and `Repos →` |
++| 16 | P2 | Add chart focus summary and peak-day annotation | Defer to #23 | Chart interpretation work, not card semantics | `Focus: gpt-5.5 · 50% of 30d volume · peak May 19` and `Peak: May 19 · 989.5M tokens` |
++| 17 | P2 | Improve chart legend truncation | Defer to #23 | Legend labels are cut aggressively; fixing this belongs with chart interaction work | Add hover/full-label tooltip or two-line legend items |
++| 18 | P2 | Add total-volume line over stacked bars | Defer to #23 | Helps trend detection, but changes chart behavior beyond issue #20 | Thin total-volume overlay line above stacked bars |
++| 19 | P3 | Typography split: sans UI text, mono numbers | Defer to #23 | Visual-system pass across dashboard | Keep mono for numbers/code; use sans for headings, labels, prose |
++| 20 | P3 | Reduce H1 dominance and tighten vertical rhythm | Defer to #23 | Screenshot shows `Overview` and top spacing take attention from metrics | Smaller H1, less vertical gap, summary strip can replace explanatory dead space |
++| 21 | P3 | Align info icons consistently | Defer to #23 | Screenshot shows info icons floating at inconsistent positions | Align to card top-right or consistent secondary-line end |
++| 22 | P3 | Previous-window deltas | Defer to later / #23 stretch | Requires previous-window data and API/UI design | `+18% vs previous 30d` |
++| 23 | P1 | Add `3d` quick range before `7d` in the top controls | Done | Keeps the dashboard quick filters aligned with requested short-window review | Render `3d`, `7d`, `30d`, `90d`, `All` and assert `3d` appears before `7d` |
++
++## Suggested final PR 22 scope
++
++I would make these PR 22 changes before merge:
++
++1. Add cached share to the `Total Tokens` secondary line.
++2. Replace `session` with `direct` in visible card copy, while keeping precise `session tokens` wording in tooltip/docs/tests.
++3. Fix secondary-line wrapping in the token cards.
++4. Reorder the metric cards: `Total Tokens`, `API-Equivalent Cost`, `Input Tokens`, `Output Tokens`, `Sessions`.
++5. Clarify `read/write` as `cache read/cache write`.
++6. Add the `3d` quick range before `7d` in the top controls.
++
++Everything else should remain in #23.
++
++## Proposed final card copy for PR 22
++
++```text
++TOTAL TOKENS
++11.3B
++757.0M direct · 10.6B cached · 93% cached
++```
++
++```text
++API-EQUIVALENT COST
++$6367.91
++PARTIAL ESTIMATE
++35 of 64 models priced
++```
++
++```text
++INPUT TOKENS
++11.3B
++727.6M fresh · 10.5B cache read · 19.7M cache write
++```
++
++If that line wraps too much:
++
++```text
++INPUT TOKENS
++11.3B
++727.6M fresh · 10.5B cached input
++```
++
++and keep the exact cache read/write split in the tooltip.
++
++```text
++OUTPUT TOKENS
++29.5M
++assistant-generated
++```
++
++```text
++SESSIONS
++1,777
++2026-05-03 → 2026-06-02
++```
++
++## Current validation status
++
++As of the latest PR 22 update:
++
++- Local unit tests passed: `uv run python -m unittest tests.test_app tests.test_readme -v`
++- Local review script passed: `scripts/review.sh`
++- Browser smoke passed on `http://127.0.0.1:8321`
++- Browser console had no JS errors
++- DOM verified range order: `3d`, `7d`, `30d`, `90d`, `All`
++- GitHub CI `test` passed at `d429b9b9e8e96b67dba2e8f0310437258a4ad7d7`
++- PR 22 is mergeable
+diff --git a/PR_DESCRIPTION.md b/PR_DESCRIPTION.md
+new file mode 100644
+index 0000000..82c84cb
+--- /dev/null
++++ b/PR_DESCRIPTION.md
+@@ -0,0 +1,50 @@
++## Summary
++
++- Make Overview `Total Tokens` the intuitive full token volume including cache read/write.
++- Rename the top-level input card from `Non-cache Input` to `Input Tokens` and show fresh/read/write breakdown in the secondary line.
++- Show partial API-equivalent cost coverage as an amber `PARTIAL ESTIMATE` badge instead of muted footnote copy.
++- Reorder top cards to put `Total Tokens` and cost first, move `Sessions` last, add cached-share percentage, and use `direct` for the visible session-token bucket.
++- Add the `3d` quick range before `7d` in the top Usage date range controls.
++- Keep session-token semantics explicit in details/docs/tests instead of using `Canonical`, `Effective`, or `Fresh` as top-level card language.
++- Update simulated data, settings copy, README, AGENTS guidance, scope logs, and tests to lock the new formulas and UI order.
++
++## Formulas
++
++- `Total Tokens = non-cache input + output + cache read + cache write`
++- `Input Tokens = non-cache input + cache read + cache write`
++- `Output Tokens = assistant output`
++- `Session Tokens = non-cache input + output`
++
++## Fixes in latest update
++
++- Include partial model costs (`partial_cost_usd`) in the Overview cost card total, not just fully priced models.
++- When some models are only partially priced, show their known subtotal in the cost card tooltip metadata.
++- Reduce simulated mode to a single `OpenCode (simulated)` source card so screenshots no longer show empty local `Codex CLI` / `Hermes` cards that have no simulated totals.
++- Make `setCostMeta` distinguish fully priced vs partially priced models with an explicit `partialCount` argument.
++- In all-partial scenarios, the badge still shows `Partial estimate` and the visible copy now says `6 partially priced of 6 models` instead of falsely saying `6 of 6 models priced`.
++- In mixed scenarios, copy reads `X fully priced, Y partially priced of Z models`.
++- Constrain loading shimmer styling to stat cards.
++- Add `3d` before `7d` in the top range controls and assert the order in tests.
++
++Latest patch: `d429b9b`
++
++## Scope notes
++
++- `PR22_REMAINING_SCOPE.md` tracks fixed vs deferred review items.
++- `PR22_BEFORE_AFTER.md` records before/after UI changes and latest validation.
++- Decision-guided Usage Summary and dashboard focus states remain split out to #23.
++
++## Validation
++
++- `uv run python -m unittest tests.test_app tests.test_readme -v`
++- `scripts/review.sh`
++- Browser smoke: `http://127.0.0.1:8321`
++  - cards rendered in order as `Total Tokens`, `API-Equivalent Cost`, `Input Tokens`, `Output Tokens`, `Sessions`
++  - range controls rendered in order as `3d`, `7d`, `30d`, `90d`, `All`
++  - cost card rendered `PARTIAL ESTIMATE` + model coverage copy
++  - `Total Tokens` secondary line renders `direct`, cached raw volume, and cached-share percentage
++  - `Input Tokens` secondary line renders `fresh`, `cache read`, and `cache write` buckets
++  - browser console had no JS errors
++- GitHub CI `test` passed on `d429b9b9e8e96b67dba2e8f0310437258a4ad7d7`.
++
++Closes #20
+-- 
+2.43.0
+
+
+From 095a5c6e1e465b7385b56280a0aec5646826ce20 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Tue, 2 Jun 2026 23:24:46 +0700
+Subject: [PATCH 12/14] docs: remove temporary PR body file
+
+---
+ PR_DESCRIPTION.md | 50 -----------------------------------------------
+ 1 file changed, 50 deletions(-)
+ delete mode 100644 PR_DESCRIPTION.md
+
+diff --git a/PR_DESCRIPTION.md b/PR_DESCRIPTION.md
+deleted file mode 100644
+index 82c84cb..0000000
+--- a/PR_DESCRIPTION.md
++++ /dev/null
+@@ -1,50 +0,0 @@
+-## Summary
+-
+-- Make Overview `Total Tokens` the intuitive full token volume including cache read/write.
+-- Rename the top-level input card from `Non-cache Input` to `Input Tokens` and show fresh/read/write breakdown in the secondary line.
+-- Show partial API-equivalent cost coverage as an amber `PARTIAL ESTIMATE` badge instead of muted footnote copy.
+-- Reorder top cards to put `Total Tokens` and cost first, move `Sessions` last, add cached-share percentage, and use `direct` for the visible session-token bucket.
+-- Add the `3d` quick range before `7d` in the top Usage date range controls.
+-- Keep session-token semantics explicit in details/docs/tests instead of using `Canonical`, `Effective`, or `Fresh` as top-level card language.
+-- Update simulated data, settings copy, README, AGENTS guidance, scope logs, and tests to lock the new formulas and UI order.
+-
+-## Formulas
+-
+-- `Total Tokens = non-cache input + output + cache read + cache write`
+-- `Input Tokens = non-cache input + cache read + cache write`
+-- `Output Tokens = assistant output`
+-- `Session Tokens = non-cache input + output`
+-
+-## Fixes in latest update
+-
+-- Include partial model costs (`partial_cost_usd`) in the Overview cost card total, not just fully priced models.
+-- When some models are only partially priced, show their known subtotal in the cost card tooltip metadata.
+-- Reduce simulated mode to a single `OpenCode (simulated)` source card so screenshots no longer show empty local `Codex CLI` / `Hermes` cards that have no simulated totals.
+-- Make `setCostMeta` distinguish fully priced vs partially priced models with an explicit `partialCount` argument.
+-- In all-partial scenarios, the badge still shows `Partial estimate` and the visible copy now says `6 partially priced of 6 models` instead of falsely saying `6 of 6 models priced`.
+-- In mixed scenarios, copy reads `X fully priced, Y partially priced of Z models`.
+-- Constrain loading shimmer styling to stat cards.
+-- Add `3d` before `7d` in the top range controls and assert the order in tests.
+-
+-Latest patch: `d429b9b`
+-
+-## Scope notes
+-
+-- `PR22_REMAINING_SCOPE.md` tracks fixed vs deferred review items.
+-- `PR22_BEFORE_AFTER.md` records before/after UI changes and latest validation.
+-- Decision-guided Usage Summary and dashboard focus states remain split out to #23.
+-
+-## Validation
+-
+-- `uv run python -m unittest tests.test_app tests.test_readme -v`
+-- `scripts/review.sh`
+-- Browser smoke: `http://127.0.0.1:8321`
+-  - cards rendered in order as `Total Tokens`, `API-Equivalent Cost`, `Input Tokens`, `Output Tokens`, `Sessions`
+-  - range controls rendered in order as `3d`, `7d`, `30d`, `90d`, `All`
+-  - cost card rendered `PARTIAL ESTIMATE` + model coverage copy
+-  - `Total Tokens` secondary line renders `direct`, cached raw volume, and cached-share percentage
+-  - `Input Tokens` secondary line renders `fresh`, `cache read`, and `cache write` buckets
+-  - browser console had no JS errors
+-- GitHub CI `test` passed on `d429b9b9e8e96b67dba2e8f0310437258a4ad7d7`.
+-
+-Closes #20
+-- 
+2.43.0
+
+
+From 606f0792e28a2666f904da394e83becf6b562348 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Tue, 2 Jun 2026 23:38:55 +0700
+Subject: [PATCH 13/14] fix: preserve metric tooltip overflow
+
+---
+ PR22_BEFORE_AFTER.md | 11 +++++++++--
+ templates/index.html |  7 ++++---
+ tests/test_app.py    |  5 ++++-
+ 3 files changed, 17 insertions(+), 6 deletions(-)
+
+diff --git a/PR22_BEFORE_AFTER.md b/PR22_BEFORE_AFTER.md
+index d939fea..81a5127 100644
+--- a/PR22_BEFORE_AFTER.md
++++ b/PR22_BEFORE_AFTER.md
+@@ -78,9 +78,16 @@ Numbers above reflect the live dashboard at verification time; they can move as
+ - Browser console had no JavaScript errors.
+ - DOM verified card order: `TOTAL TOKENS`, `API-EQUIVALENT COST`, `INPUT TOKENS`, `OUTPUT TOKENS`, `SESSIONS`.
+ 
++## Latest update: tooltip clipping fix
++
++- Replaced `.stat-card { overflow: hidden; }` with `.stat-card { overflow: visible; }` so metric tooltips can render outside their cards again.
++- Kept the loading shimmer constrained by animating `background-position` on the card overlay instead of translating an overflowing pseudo-element.
++- Added regression assertions for visible card overflow and background-position shimmer animation.
++- Browser geometry check confirmed the cost tooltip is visible, escapes the card bounds, and remains inside the viewport.
++
+ ## Latest update: 3d range filter
+ 
+ - Added `3d` before `7d` in the top Usage date range controls.
+ - Added a regression assertion that `data-days="3"` exists and appears before `data-days="7"`.
+-- Pushed commit `d429b9b` (`d429b9b9e8e96b67dba2e8f0310437258a4ad7d7`).
+-- GitHub CI `test` passed on the latest head.
++- Pushed commit `095a5c6` (`095a5c6e1e465b7385b56280a0aec5646826ce20`).
++- GitHub CI `test` passed on that head.
+diff --git a/templates/index.html b/templates/index.html
+index b30203f..e1f9b98 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -155,7 +155,7 @@
+ 
+   .stat-card {
+     position: relative;
+-    overflow: hidden;
++    overflow: visible;
+     background: var(--bg-card);
+     border: 1px solid var(--border);
+     border-radius: var(--radius);
+@@ -197,13 +197,14 @@
+       rgba(255, 255, 255, 0.08) 50%,
+       rgba(255, 255, 255, 0.04) 100%
+     );
++    background-size: 200% 100%;
+     border-radius: inherit;
+     pointer-events: none;
+     animation: shimmer 1.2s infinite linear;
+   }
+   @keyframes shimmer {
+-    0% { transform: translateX(-100%); }
+-    100% { transform: translateX(100%); }
++    0% { background-position: 100% 0; }
++    100% { background-position: -100% 0; }
+   }
+   .estimate-meta {
+     display: inline-flex;
+diff --git a/tests/test_app.py b/tests/test_app.py
+index a9ffdb1..babee6e 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -766,7 +766,10 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertNotIn("setStatLoading(true);\n  document.getElementById('chart-note').textContent = 'Loading…';\n  loadDaily(currentDays).finally(() => setStatLoading(false));", html)
+         self.assertIn('<meta name="theme-color" content="#08090a">', html)
+         self.assertIn('color-scheme: dark', html)
+-        self.assertIn('position: relative;\n    overflow: hidden;\n    background: var(--bg-card);', html)
++        self.assertIn('position: relative;\n    overflow: visible;\n    background: var(--bg-card);', html)
++        self.assertIn('background-size: 200% 100%;', html)
++        self.assertIn('0% { background-position: 100% 0; }', html)
++        self.assertNotIn('transform: translateX(-100%)', html)
+         self.assertIn('name="custom-days" type="number"', html)
+         self.assertIn('inputmode="numeric" autocomplete="off" placeholder="e.g. 45…"', html)
+         self.assertNotIn('transition: all', html)
+-- 
+2.43.0
+
+
+From 38284d577e7ec6d767561fda2fb680b0faf4f7af Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Tue, 2 Jun 2026 23:54:30 +0700
+Subject: [PATCH 14/14] docs: update PR 22 validation head
+
+---
+ PR22_REMAINING_SCOPE.md | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/PR22_REMAINING_SCOPE.md b/PR22_REMAINING_SCOPE.md
+index edd17c9..8079081 100644
+--- a/PR22_REMAINING_SCOPE.md
++++ b/PR22_REMAINING_SCOPE.md
+@@ -103,5 +103,5 @@ As of the latest PR 22 update:
+ - Browser smoke passed on `http://127.0.0.1:8321`
+ - Browser console had no JS errors
+ - DOM verified range order: `3d`, `7d`, `30d`, `90d`, `All`
+-- GitHub CI `test` passed at `d429b9b9e8e96b67dba2e8f0310437258a4ad7d7`
+-- PR 22 is mergeable
++- GitHub CI `test` passed at `606f0792e28a2666f904da394e83becf6b562348`
++- PR 22 is mergeable at that head
+-- 
+2.43.0
+

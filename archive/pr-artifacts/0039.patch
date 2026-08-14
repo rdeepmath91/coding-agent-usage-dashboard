@@ -1,0 +1,26 @@
+From 7129fe8fa6eecbccabe30556f5dffcc61105aaa6 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Thu, 25 Jun 2026 13:28:56 +0700
+Subject: [PATCH] Document dashboard update control
+
+---
+ README.md | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/README.md b/README.md
+index 270f424..8ff0ce8 100644
+--- a/README.md
++++ b/README.md
+@@ -47,6 +47,9 @@ Then open:
+ http://localhost:8321
+ ```
+ 
++Once the dashboard is running a version that includes the homepage `Update App` control,
++future `main` updates can be pulled from the dashboard itself.
++
+ For a deterministic fake dataset that is useful for screenshots and UI checks,
+ open:
+ 
+-- 
+2.43.0
+

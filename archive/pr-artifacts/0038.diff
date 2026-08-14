@@ -1,0 +1,892 @@
+diff --git a/app.py b/app.py
+index d7db3a3255f3a6d3bb1cbb073e4c39f3766be4f5..b6a372c006ee0fa670aa935d0145c14d5fc2f3b8 100644
+--- a/app.py
++++ b/app.py
+@@ -3,6 +3,7 @@
+ 
+ import datetime
+ import os
++import subprocess
+ import time
+ from pathlib import Path
+ 
+@@ -36,6 +37,112 @@ from dashboard.sources import (
+ 
+ app = Flask(__name__)
+ 
++REPO_ROOT = Path(__file__).resolve().parent
++UPDATE_REMOTE = "origin"
++UPDATE_BRANCH = "main"
++UPDATE_TARGET_REF = f"{UPDATE_REMOTE}/{UPDATE_BRANCH}"
++UPDATE_FALLBACK_COMMAND = f"git pull --ff-only {UPDATE_REMOTE} {UPDATE_BRANCH} && uv sync"
++UPDATE_HEADER_NAME = "X-Dashboard-Update"
++UPDATE_HEADER_VALUE = "1"
++APP_COMMAND_TIMEOUT_SECONDS = 120
++
++
++def run_app_command(args: list[str], *, timeout: int = APP_COMMAND_TIMEOUT_SECONDS) -> subprocess.CompletedProcess:
++    """Run a fixed app-maintenance command from the repository root."""
++    return subprocess.run(
++        args,
++        cwd=REPO_ROOT,
++        timeout=timeout,
++        capture_output=True,
++        text=True,
++    )
++
++
++def command_text(result: subprocess.CompletedProcess | None) -> str:
++    if result is None:
++        return ""
++    output = "\n".join(part.strip() for part in [result.stdout, result.stderr] if part and part.strip())
++    return output[-1200:]
++
++
++def git_value(args: list[str]) -> str | None:
++    result = run_app_command(["git", *args], timeout=20)
++    if result.returncode != 0:
++        return None
++    value = result.stdout.strip()
++    return value or None
++
++
++def fetch_update_target() -> subprocess.CompletedProcess:
++    return run_app_command(
++        ["git", "fetch", UPDATE_REMOTE, f"{UPDATE_BRANCH}:refs/remotes/{UPDATE_TARGET_REF}", "--quiet"],
++        timeout=60,
++    )
++
++
++def is_git_ancestor(base_ref: str, tip_ref: str) -> bool:
++    result = run_app_command(["git", "merge-base", "--is-ancestor", base_ref, tip_ref], timeout=20)
++    return result.returncode == 0
++
++
++def app_dirty_state() -> tuple[bool, str]:
++    result = run_app_command(["git", "status", "--porcelain"], timeout=20)
++    if result.returncode != 0:
++        return True, command_text(result) or "Unable to inspect local changes."
++    details = result.stdout.strip()
++    return bool(details), details
++
++
++def app_version_payload() -> dict:
++    fetch = fetch_update_target()
++    branch = git_value(["rev-parse", "--abbrev-ref", "HEAD"]) or "unknown"
++    sha = git_value(["rev-parse", "--short", "HEAD"]) or "unknown"
++    full_sha = git_value(["rev-parse", "HEAD"])
++    target_sha = git_value(["rev-parse", "--short", UPDATE_TARGET_REF])
++    target_full_sha = git_value(["rev-parse", UPDATE_TARGET_REF])
++    dirty, dirty_details = app_dirty_state()
++    update_available = False
++    status = "check_failed"
++    message = f"Could not check latest {UPDATE_BRANCH}."
++    if fetch.returncode != 0:
++        message = command_text(fetch) or message
++    elif full_sha and target_full_sha:
++        if full_sha == target_full_sha or is_git_ancestor(UPDATE_TARGET_REF, "HEAD"):
++            status = "current"
++            message = f"Current version · {target_sha or sha}"
++        elif is_git_ancestor("HEAD", UPDATE_TARGET_REF):
++            update_available = True
++            status = "blocked_dirty" if dirty else "update_available"
++            message = (
++                f"New version available · {target_sha} blocked by local changes"
++                if dirty
++                else f"New version available · {target_sha}"
++            )
++        else:
++            status = "manual_required"
++            message = f"Manual update required · {UPDATE_TARGET_REF}"
++    return {
++        "branch": branch,
++        "sha": sha,
++        "target_branch": UPDATE_BRANCH,
++        "target_ref": UPDATE_TARGET_REF,
++        "target_sha": target_sha,
++        "update_available": update_available,
++        "status": status,
++        "message": message,
++        "dirty": dirty,
++        "dirty_details": dirty_details,
++        "fallback_command": UPDATE_FALLBACK_COMMAND,
++    }
++
++
++def is_local_request() -> bool:
++    return (request.remote_addr or "") in {"127.0.0.1", "::1", "localhost"}
++
++
++def has_update_header() -> bool:
++    return request.headers.get(UPDATE_HEADER_NAME) == UPDATE_HEADER_VALUE
++
+ 
+ def parse_days(default: int | None = 30) -> int | None:
+     """Parse a days=N query param. 0/all means all time."""
+@@ -801,6 +908,179 @@ def api_refresh():
+     return jsonify({"last_updated": row["max_ts"] or 0})
+ 
+ 
++@app.route("/api/app-version")
++def api_app_version():
++    """Return local dashboard version metadata for the update control."""
++    if not is_local_request():
++        return (
++            jsonify({
++                "status": "forbidden",
++                "error": "App version is only available from localhost.",
++            }),
++            403,
++        )
++    if not has_update_header():
++        return (
++            jsonify({
++                "status": "forbidden",
++                "error": "App version requires a dashboard UI request.",
++            }),
++            403,
++        )
++    return jsonify(app_version_payload())
++
++
++@app.route("/api/update", methods=["POST"])
++def api_update():
++    """Fast-forward this local dashboard checkout, then sync dependencies."""
++    if not is_local_request():
++        return (
++            jsonify({
++                "status": "forbidden",
++                "error": "Update is only available from localhost.",
++                "fallback_command": UPDATE_FALLBACK_COMMAND,
++            }),
++            403,
++        )
++
++    if not has_update_header():
++        return (
++            jsonify({
++                "status": "forbidden",
++                "error": "Update requires a dashboard UI request.",
++                "fallback_command": UPDATE_FALLBACK_COMMAND,
++            }),
++            403,
++        )
++
++    fetch = fetch_update_target()
++    old_sha = git_value(["rev-parse", "--short", "HEAD"]) or "unknown"
++    old_full_sha = git_value(["rev-parse", "HEAD"])
++    target_sha = git_value(["rev-parse", "--short", UPDATE_TARGET_REF])
++    target_full_sha = git_value(["rev-parse", UPDATE_TARGET_REF])
++    if fetch.returncode != 0 or not old_full_sha or not target_full_sha:
++        return (
++            jsonify({
++                "status": "failure",
++                "old_sha": old_sha,
++                "new_sha": old_sha,
++                "error": f"Could not check latest {UPDATE_BRANCH}.",
++                "output": command_text(fetch),
++                "fallback_command": UPDATE_FALLBACK_COMMAND,
++            }),
++            500,
++        )
++
++    if old_full_sha == target_full_sha or is_git_ancestor(UPDATE_TARGET_REF, "HEAD"):
++        return jsonify({
++            "status": "already_current",
++            "old_sha": old_sha,
++            "new_sha": old_sha,
++            "target_sha": target_sha,
++            "restart_required": False,
++            "output": f"Already up to date with {UPDATE_TARGET_REF}.",
++            "fallback_command": UPDATE_FALLBACK_COMMAND,
++        })
++
++    dirty, dirty_details = app_dirty_state()
++    if dirty:
++        return (
++            jsonify({
++                "status": "local_changes",
++                "old_sha": old_sha,
++                "new_sha": old_sha,
++                "target_sha": target_sha,
++                "error": "Local changes detected. Update manually to avoid overwriting work.",
++                "output": dirty_details,
++                "fallback_command": UPDATE_FALLBACK_COMMAND,
++            }),
++            409,
++        )
++
++    if not is_git_ancestor("HEAD", UPDATE_TARGET_REF):
++        return (
++            jsonify({
++                "status": "manual_required",
++                "old_sha": old_sha,
++                "new_sha": old_sha,
++                "target_sha": target_sha,
++                "error": f"This checkout cannot fast-forward to {UPDATE_TARGET_REF}.",
++                "fallback_command": UPDATE_FALLBACK_COMMAND,
++            }),
++            409,
++        )
++
++    try:
++        pull = run_app_command(["git", "pull", "--ff-only", UPDATE_REMOTE, UPDATE_BRANCH], timeout=120)
++    except subprocess.TimeoutExpired:
++        return (
++            jsonify({
++                "status": "failure",
++                "old_sha": old_sha,
++                "new_sha": old_sha,
++                "target_sha": target_sha,
++                "error": f"Update failed. git pull --ff-only {UPDATE_REMOTE} {UPDATE_BRANCH} timed out.",
++                "fallback_command": UPDATE_FALLBACK_COMMAND,
++            }),
++            500,
++        )
++    if pull.returncode != 0:
++        return (
++            jsonify({
++                "status": "failure",
++                "old_sha": old_sha,
++                "new_sha": old_sha,
++                "target_sha": target_sha,
++                "error": f"Update failed during git pull --ff-only {UPDATE_REMOTE} {UPDATE_BRANCH}.",
++                "output": command_text(pull),
++                "fallback_command": UPDATE_FALLBACK_COMMAND,
++            }),
++            500,
++        )
++
++    try:
++        sync = run_app_command(["uv", "sync"], timeout=180)
++    except subprocess.TimeoutExpired:
++        new_sha = git_value(["rev-parse", "--short", "HEAD"]) or old_sha
++        return (
++            jsonify({
++                "status": "failure",
++                "old_sha": old_sha,
++                "new_sha": new_sha,
++                "target_sha": target_sha,
++                "error": "Update failed. uv sync timed out.",
++                "output": command_text(pull),
++                "fallback_command": UPDATE_FALLBACK_COMMAND,
++            }),
++            500,
++        )
++    new_sha = git_value(["rev-parse", "--short", "HEAD"]) or old_sha
++    if sync.returncode != 0:
++        return (
++            jsonify({
++                "status": "failure",
++                "old_sha": old_sha,
++                "new_sha": new_sha,
++                "target_sha": target_sha,
++                "error": "Update failed during uv sync.",
++                "output": command_text(sync),
++                "fallback_command": UPDATE_FALLBACK_COMMAND,
++            }),
++            500,
++        )
++
++    status = "already_current" if old_sha == new_sha else "updated"
++    return jsonify({
++        "status": status,
++        "old_sha": old_sha,
++        "new_sha": new_sha,
++        "target_sha": target_sha,
++        "restart_required": status == "updated",
++        "output": "\n".join(part for part in [command_text(pull), command_text(sync)] if part),
++        "fallback_command": UPDATE_FALLBACK_COMMAND,
++    })
++
++
+ # ── Page Routes ──────────────────────────────────────────────────────────────
+ 
+ 
+diff --git a/templates/index.html b/templates/index.html
+index 47de21e8b36473e3778d1b161e170ef0b31711de..5a9bb3d6ce2aa04253b4a5e0d6111d18220c6700 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -115,6 +115,93 @@
+     margin-top: 4px;
+   }
+ 
++  .app-update-panel {
++    min-width: 0;
++    align-self: stretch;
++    display: flex;
++    flex-direction: column;
++    justify-content: center;
++    border-left: 1px solid rgb(56 189 248 / 0.35);
++    padding: 4px 0 4px 22px;
++  }
++  .app-update-title {
++    color: var(--text-primary);
++    font-size: 12px;
++    font-weight: 700;
++    line-height: 1.2;
++    margin-bottom: 8px;
++    text-transform: uppercase;
++  }
++  .app-update-main {
++    display: flex;
++    align-items: center;
++    gap: 8px;
++  }
++  .app-update-button {
++    flex: 0 0 160px;
++    min-height: 44px;
++    border: 1px solid var(--border);
++    border-radius: var(--radius);
++    background: var(--bg-secondary);
++    color: var(--text-secondary);
++    font: inherit;
++    font-size: 14px;
++    font-weight: 700;
++    cursor: pointer;
++    transition: background-color 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
++  }
++  .app-update-button[data-update-status="update_available"] {
++    border-color: var(--accent);
++    background: var(--accent);
++    color: #041016;
++  }
++  .app-update-button[data-update-status="update_available"]:hover:not(:disabled),
++  .app-update-button[data-update-status="update_available"]:focus-visible:not(:disabled) {
++    outline: none;
++    background: var(--accent-hover);
++    border-color: var(--accent-hover);
++  }
++  .app-update-button:focus-visible {
++    outline: 2px solid var(--accent);
++    outline-offset: 2px;
++  }
++  .app-update-button:disabled {
++    cursor: default;
++    opacity: 1;
++  }
++  .app-update-button[data-update-status="update_available"]:disabled {
++    opacity: 0.72;
++  }
++  .app-update-status {
++    min-height: 17px;
++    margin-top: 7px;
++    color: var(--text-tertiary);
++    font-size: 12px;
++    line-height: 1.45;
++  }
++  .app-update-status.success { color: var(--green); }
++  .app-update-status.warning { color: var(--orange); }
++  .app-update-status.error { color: var(--red); }
++  .app-update-fallback {
++    display: none;
++    align-items: center;
++    gap: 8px;
++    margin-top: 8px;
++  }
++  .app-update-fallback.visible { display: flex; }
++  .app-update-fallback code {
++    min-width: 0;
++    flex: 1;
++    overflow: auto;
++    white-space: nowrap;
++    color: var(--accent-hover);
++    background: var(--bg-secondary);
++    border: 1px solid var(--border);
++    border-radius: var(--radius);
++    padding: 6px 8px;
++    font-family: var(--font-mono);
++    font-size: 11px;
++  }
+   /* Controls bar */
+   .controls {
+     display: flex;
+@@ -147,7 +234,7 @@
+ 
+   .usage-summary {
+     display: grid;
+-    grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
++    grid-template-columns: minmax(140px, 180px) minmax(0, 1fr) minmax(260px, 320px);
+     gap: 18px;
+     align-items: stretch;
+     margin-bottom: 18px;
+@@ -813,12 +900,15 @@
+   @media (max-width: 1280px) {
+     .stat-cards { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+     .tool-source-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
++    .usage-summary { grid-template-columns: minmax(140px, 180px) minmax(0, 1fr); }
++    .app-update-panel { grid-column: 1 / -1; border-left: 0; border-top: 1px solid rgb(56 189 248 / 0.35); padding: 14px 0 0; }
+   }
+ 
+   @media (max-width: 800px) {
+     .app-layout { display: block; }
+     .sidebar { display: none; }
+     .main-area { padding: 24px 16px; }
++    .app-update-button { width: 100%; }
+     .usage-summary { grid-template-columns: 1fr; gap: 10px; }
+     .usage-summary-eyebrow { border-right: 0; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+     .stat-cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+@@ -869,6 +959,16 @@
+         <div class="usage-summary-line" id="usage-summary-secondary">Pricing and peak-day coverage load with chart data.</div>
+         <div class="usage-summary-line" id="usage-summary-next">Next: inspect the dominant model once data loads.</div>
+       </div>
++      <aside class="app-update-panel" aria-labelledby="app-update-title">
++        <div class="app-update-title" id="app-update-title">App Update</div>
++        <div class="app-update-main">
++          <button class="app-update-button" id="app-update-button" type="button" disabled>Update App</button>
++        </div>
++        <div class="app-update-status" id="app-update-status" aria-live="polite"></div>
++        <div class="app-update-fallback" id="app-update-fallback">
++          <code id="app-update-command">git pull --ff-only origin main &amp;&amp; uv sync</code>
++        </div>
++      </aside>
+     </section>
+ 
+     <!-- Overview cards -->
+@@ -1007,6 +1107,7 @@ let currentModels = [];
+ let currentDaily = null;
+ let overviewDailySummary = null;
+ let currentCostCoverage = null;
++let currentAppVersion = null;
+ const FORMATTER = new Intl.NumberFormat('en-US');
+ const DATE_FORMATTER = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
+ function fmtNum(n) { return FORMATTER.format(n); }
+@@ -1106,6 +1207,112 @@ function effectiveTokens(value) {
+   return Number(value?.tokens_effective_total ?? value?.tokens_total ?? 0);
+ }
+ 
++function setAppUpdateFallback(command, visible = false) {
++  const fallback = document.getElementById('app-update-fallback');
++  const code = document.getElementById('app-update-command');
++  if (!fallback || !code) return;
++  code.textContent = command || 'git pull --ff-only origin main && uv sync';
++  fallback.classList.toggle('visible', Boolean(visible));
++}
++
++function appUpdateButtonLabel(version) {
++  if (!version) return 'Checking...';
++  if (version.status === 'current') return 'Up to Date';
++  if (version.status === 'update_available') return 'Update App';
++  if (version.status === 'blocked_dirty') return 'Blocked';
++  if (version.status === 'manual_required') return 'Manual Update';
++  return 'Check Failed';
++}
++
++function renderAppVersion(version, options = {}) {
++  const button = document.getElementById('app-update-button');
++  const status = document.getElementById('app-update-status');
++  if (!button || !status) return;
++
++  currentAppVersion = version || currentAppVersion;
++  const fallbackCommand = currentAppVersion?.fallback_command || 'git pull --ff-only origin main && uv sync';
++  const canUpdate = currentAppVersion?.status === 'update_available';
++  button.dataset.updateStatus = options.running && canUpdate ? 'update_available' : currentAppVersion?.status || 'checking';
++  button.disabled = Boolean(options.running || !canUpdate);
++  button.textContent = options.running ? 'Updating...' : appUpdateButtonLabel(currentAppVersion);
++  button.title = currentAppVersion
++    ? `${currentAppVersion.message || ''} Current ${currentAppVersion.branch || 'branch'}@${currentAppVersion.sha || 'unknown'}; latest ${currentAppVersion.target_ref || 'origin/main'}@${currentAppVersion.target_sha || 'unknown'}.`.trim()
++    : 'Checking latest main branch.';
++  status.className = `app-update-status ${options.tone || ''}`.trim();
++  status.textContent = options.message || currentAppVersion?.message || 'Checking latest main branch...';
++  setAppUpdateFallback(fallbackCommand, Boolean(options.showFallback));
++}
++
++async function loadAppVersion() {
++  renderAppVersion(null, { message: 'Checking app version...' });
++  try {
++    const response = await fetch('/api/app-version', {
++      headers: { 'X-Dashboard-Update': '1' },
++    });
++    const version = await response.json();
++    renderAppVersion(version);
++  } catch (error) {
++    console.error('app version', error);
++    renderAppVersion(currentAppVersion, {
++      message: 'Unable to check app version.',
++      tone: 'error',
++      showFallback: true,
++    });
++  }
++}
++
++async function updateApp() {
++  renderAppVersion(currentAppVersion, { running: true, message: 'Updating...', tone: '' });
++  try {
++    const response = await fetch('/api/update', {
++      method: 'POST',
++      headers: { 'X-Dashboard-Update': '1' },
++    });
++    const result = await response.json().catch(() => ({}));
++    const fallbackCommand = result.fallback_command || currentAppVersion?.fallback_command || 'git pull --ff-only origin main && uv sync';
++    setAppUpdateFallback(fallbackCommand, false);
++    if (response.ok && result.status === 'updated') {
++      renderAppVersion({ ...currentAppVersion, sha: result.new_sha, target_sha: result.target_sha, status: 'current', update_available: false, dirty: false }, {
++        message: `Updated to ${result.new_sha}. Restart required.`,
++        tone: 'success',
++      });
++      return;
++    }
++    if (response.ok && result.status === 'already_current') {
++      renderAppVersion({ ...currentAppVersion, sha: result.new_sha, target_sha: result.target_sha, status: 'current', update_available: false }, {
++        message: 'Already up to date.',
++        tone: 'success',
++      });
++      return;
++    }
++    if (result.status === 'local_changes') {
++      renderAppVersion({
++        ...currentAppVersion,
++        status: 'blocked_dirty',
++        update_available: true,
++        dirty: true,
++        target_sha: result.target_sha || currentAppVersion?.target_sha,
++      }, {
++        message: 'Local changes detected. Update manually to avoid overwriting work.',
++        tone: 'warning',
++      });
++      return;
++    }
++    renderAppVersion(currentAppVersion, {
++      message: 'Update failed. Run: git pull --ff-only origin main && uv sync',
++      tone: 'error',
++      showFallback: true,
++    });
++  } catch (error) {
++    console.error('update app', error);
++    renderAppVersion(currentAppVersion, {
++      message: 'Update failed. Run: git pull --ff-only origin main && uv sync',
++      tone: 'error',
++      showFallback: true,
++    });
++  }
++}
++
+ function computeDailySummary(data) {
+   const dates = data?.dates || [];
+   let peak = { date: null, total: 0 };
+@@ -1451,6 +1658,8 @@ document.getElementById('clear-chart-filter').addEventListener('click', () => {
+   clearChartModelFilter();
+ });
+ 
++document.getElementById('app-update-button').addEventListener('click', updateApp);
++
+ // ── Load everything ─────────────────────────────────────────────────────────
+ async function loadAll() {
+   await Promise.all([loadOverview(currentDays), loadModels(currentDays), loadDaily(currentDays), loadHistory()]);
+@@ -2089,6 +2298,7 @@ document.addEventListener('keydown', event => {
+ });
+ 
+ // ── Init ────────────────────────────────────────────────────────────────────
++loadAppVersion();
+ loadAll();
+ 
+ // Auto-refresh every 60s
+diff --git a/tests/test_app.py b/tests/test_app.py
+index c52093871c35e7391baea7f5fa25672a622cc291..e8f79a31431b17feae2942e5e0ccef7599771342 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -4,6 +4,7 @@ import subprocess
+ import tempfile
+ import time
+ import unittest
++from unittest import mock
+ from pathlib import Path
+ 
+ import app as dashboard_app
+@@ -13,6 +14,7 @@ from dashboard.daily import build_daily_from_model_records
+ 
+ 
+ HOME_PREFIX = f"{Path.home()}/"
++UPDATE_HEADERS = {"X-Dashboard-Update": "1"}
+ 
+ 
+ def display_like_app(path: Path) -> str:
+@@ -828,6 +830,26 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertIn('active sources:', html)
+         self.assertIn("document.getElementById('db-path-display').textContent = `${sourceLabel} · ${sourcePath}`", html)
+         self.assertNotIn('OpenCode · ~/.local/share/opencode/opencode.db</span>', html)
++        self.assertIn('App Update', html)
++        self.assertIn('id="app-update-button"', html)
++        self.assertIn("fetch('/api/app-version', {", html)
++        self.assertIn("headers: { 'X-Dashboard-Update': '1' }", html)
++        self.assertIn("fetch('/api/update', {", html)
++        self.assertIn("method: 'POST'", html)
++        self.assertIn("headers: { 'X-Dashboard-Update': '1' }", html)
++        self.assertIn('Local changes detected. Update manually to avoid overwriting work.', html)
++        self.assertIn('Update failed. Run: git pull --ff-only origin main && uv sync', html)
++        self.assertIn('Updated to ${result.new_sha}. Restart required.', html)
++        self.assertIn('function appUpdateButtonLabel(version)', html)
++        self.assertIn("if (version.status === 'current') return 'Up to Date';", html)
++        self.assertIn("if (version.status === 'update_available') return 'Update App';", html)
++        self.assertNotIn('id="app-version-pill"', html)
++        self.assertNotIn('id="app-update-copy-command"', html)
++        self.assertIn('flex: 0 0 160px;', html)
++        self.assertIn('min-height: 44px;', html)
++        self.assertIn('data-update-status="update_available"', html)
++        self.assertIn('background: var(--bg-secondary);', html)
++        self.assertIn('font-size: 12px;', html)
+ 
+     def test_dashboard_template_includes_cost_breakdown_tooltip_logic(self):
+         response = self.client.get('/')
+@@ -840,6 +862,261 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertIn("const sessionAccounting = m.session_accounting_note ? `; ${m.session_accounting_note}` : '';", html)
+         self.assertIn("known subtotal ${fmtCost(m.partial_cost_usd)}", html)
+ 
++    def _fake_command_runner(self, command_results, calls):
++        def runner(args, *, timeout=dashboard_app.APP_COMMAND_TIMEOUT_SECONDS):
++            args = tuple(args)
++            calls.append(args)
++            if args not in command_results:
++                raise AssertionError(f'unexpected command: {args!r}')
++            result = command_results[args]
++            if isinstance(result, list):
++                if not result:
++                    raise AssertionError(f'no command result left for {args!r}')
++                result = result.pop(0)
++            return subprocess.CompletedProcess(
++                list(args),
++                result.get('returncode', 0),
++                stdout=result.get('stdout', ''),
++                stderr=result.get('stderr', ''),
++            )
++        return runner
++
++    def test_app_version_checks_origin_main_and_reports_blocked_dirty_update(self):
++        calls = []
++        command_results = {
++            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
++            ('git', 'rev-parse', '--abbrev-ref', 'HEAD'): {'stdout': 'main\n'},
++            ('git', 'rev-parse', '--short', 'HEAD'): {'stdout': 'abc1234\n'},
++            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
++            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'def5678\n'},
++            ('git', 'rev-parse', 'origin/main'): {'stdout': 'def5678-full\n'},
++            ('git', 'status', '--porcelain'): {'stdout': ' M app.py\n'},
++            ('git', 'merge-base', '--is-ancestor', 'origin/main', 'HEAD'): {'returncode': 1},
++            ('git', 'merge-base', '--is-ancestor', 'HEAD', 'origin/main'): {'returncode': 0},
++        }
++        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
++            response = self.client.get('/api/app-version', headers=UPDATE_HEADERS)
++
++        self.assertEqual(response.status_code, 200)
++        payload = response.get_json()
++        self.assertEqual(payload['branch'], 'main')
++        self.assertEqual(payload['sha'], 'abc1234')
++        self.assertEqual(payload['target_ref'], 'origin/main')
++        self.assertEqual(payload['target_branch'], 'main')
++        self.assertEqual(payload['target_sha'], 'def5678')
++        self.assertEqual(payload['status'], 'blocked_dirty')
++        self.assertTrue(payload['update_available'])
++        self.assertTrue(payload['dirty'])
++        self.assertIn('M app.py', payload['dirty_details'])
++        self.assertEqual(payload['fallback_command'], 'git pull --ff-only origin main && uv sync')
++
++    def test_app_version_reports_current_even_when_worktree_is_dirty(self):
++        calls = []
++        command_results = {
++            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
++            ('git', 'rev-parse', '--abbrev-ref', 'HEAD'): {'stdout': 'issue-34-update-app\n'},
++            ('git', 'rev-parse', '--short', 'HEAD'): {'stdout': 'abc1234\n'},
++            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
++            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'abc1234\n'},
++            ('git', 'rev-parse', 'origin/main'): {'stdout': 'abc1234-full\n'},
++            ('git', 'status', '--porcelain'): {'stdout': ' M templates/index.html\n'},
++        }
++        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
++            response = self.client.get('/api/app-version', headers=UPDATE_HEADERS)
++
++        self.assertEqual(response.status_code, 200)
++        payload = response.get_json()
++        self.assertEqual(payload['status'], 'current')
++        self.assertFalse(payload['update_available'])
++        self.assertTrue(payload['dirty'])
++        self.assertEqual(payload['message'], 'Current version · abc1234')
++
++    def test_app_version_rejects_non_local_requests_without_running_git(self):
++        calls = []
++        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner({}, calls)):
++            response = self.client.get('/api/app-version', environ_base={'REMOTE_ADDR': '192.0.2.10'})
++
++        self.assertEqual(response.status_code, 403)
++        payload = response.get_json()
++        self.assertEqual(payload['status'], 'forbidden')
++        self.assertIn('localhost', payload['error'])
++        self.assertEqual(calls, [])
++
++    def test_app_version_rejects_missing_dashboard_header_without_running_git(self):
++        calls = []
++        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner({}, calls)):
++            response = self.client.get('/api/app-version')
++
++        self.assertEqual(response.status_code, 403)
++        payload = response.get_json()
++        self.assertEqual(payload['status'], 'forbidden')
++        self.assertIn('dashboard UI request', payload['error'])
++        self.assertEqual(calls, [])
++
++    def test_update_rejects_missing_dashboard_header_without_running_git(self):
++        calls = []
++        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner({}, calls)):
++            response = self.client.post('/api/update')
++
++        self.assertEqual(response.status_code, 403)
++        payload = response.get_json()
++        self.assertEqual(payload['status'], 'forbidden')
++        self.assertIn('dashboard UI request', payload['error'])
++        self.assertEqual(calls, [])
++
++    def test_update_refuses_dirty_worktree_when_main_update_is_available(self):
++        calls = []
++        command_results = {
++            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
++            ('git', 'rev-parse', '--short', 'HEAD'): {'stdout': 'abc1234\n'},
++            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
++            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'def5678\n'},
++            ('git', 'rev-parse', 'origin/main'): {'stdout': 'def5678-full\n'},
++            ('git', 'merge-base', '--is-ancestor', 'origin/main', 'HEAD'): {'returncode': 1},
++            ('git', 'status', '--porcelain'): {'stdout': ' M app.py\n'},
++        }
++        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
++            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
++
++        self.assertEqual(response.status_code, 409)
++        payload = response.get_json()
++        self.assertEqual(payload['status'], 'local_changes')
++        self.assertEqual(payload['old_sha'], 'abc1234')
++        self.assertEqual(payload['new_sha'], 'abc1234')
++        self.assertIn('Local changes detected', payload['error'])
++        self.assertNotIn(('git', 'pull', '--ff-only', 'origin', 'main'), calls)
++        self.assertNotIn(('uv', 'sync'), calls)
++
++    def test_update_refuses_checkout_that_cannot_fast_forward_to_main(self):
++        calls = []
++        command_results = {
++            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
++            ('git', 'rev-parse', '--short', 'HEAD'): {'stdout': 'abc1234\n'},
++            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
++            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'def5678\n'},
++            ('git', 'rev-parse', 'origin/main'): {'stdout': 'def5678-full\n'},
++            ('git', 'merge-base', '--is-ancestor', 'origin/main', 'HEAD'): {'returncode': 1},
++            ('git', 'status', '--porcelain'): {'stdout': ''},
++            ('git', 'merge-base', '--is-ancestor', 'HEAD', 'origin/main'): {'returncode': 1},
++        }
++        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
++            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
++
++        self.assertEqual(response.status_code, 409)
++        payload = response.get_json()
++        self.assertEqual(payload['status'], 'manual_required')
++        self.assertEqual(payload['old_sha'], 'abc1234')
++        self.assertIn('cannot fast-forward to origin/main', payload['error'])
++        self.assertNotIn(('git', 'pull', '--ff-only', 'origin', 'main'), calls)
++        self.assertNotIn(('uv', 'sync'), calls)
++
++    def test_update_runs_fast_forward_pull_then_uv_sync_success(self):
++        calls = []
++        command_results = {
++            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
++            ('git', 'rev-parse', '--short', 'HEAD'): [
++                {'stdout': 'abc1234\n'},
++                {'stdout': 'def5678\n'},
++            ],
++            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
++            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'def5678\n'},
++            ('git', 'rev-parse', 'origin/main'): {'stdout': 'def5678-full\n'},
++            ('git', 'merge-base', '--is-ancestor', 'origin/main', 'HEAD'): {'returncode': 1},
++            ('git', 'status', '--porcelain'): {'stdout': ''},
++            ('git', 'merge-base', '--is-ancestor', 'HEAD', 'origin/main'): {'returncode': 0},
++            ('git', 'pull', '--ff-only', 'origin', 'main'): {'stdout': 'Fast-forward\n'},
++            ('uv', 'sync'): {'stdout': 'Resolved 1 package\n'},
++        }
++        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
++            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
++
++        self.assertEqual(response.status_code, 200)
++        payload = response.get_json()
++        self.assertEqual(payload['status'], 'updated')
++        self.assertEqual(payload['old_sha'], 'abc1234')
++        self.assertEqual(payload['new_sha'], 'def5678')
++        self.assertTrue(payload['restart_required'])
++        self.assertLess(calls.index(('git', 'pull', '--ff-only', 'origin', 'main')), calls.index(('uv', 'sync')))
++
++    def test_update_reports_already_current_without_running_pull_or_uv_sync(self):
++        calls = []
++        command_results = {
++            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
++            ('git', 'rev-parse', '--short', 'HEAD'): {'stdout': 'abc1234\n'},
++            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
++            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'abc1234\n'},
++            ('git', 'rev-parse', 'origin/main'): {'stdout': 'abc1234-full\n'},
++        }
++        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
++            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
++
++        self.assertEqual(response.status_code, 200)
++        payload = response.get_json()
++        self.assertEqual(payload['status'], 'already_current')
++        self.assertFalse(payload['restart_required'])
++        self.assertNotIn(('git', 'pull', '--ff-only', 'origin', 'main'), calls)
++        self.assertNotIn(('uv', 'sync'), calls)
++
++    def test_update_reports_git_pull_failure_without_uv_sync(self):
++        calls = []
++        command_results = {
++            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
++            ('git', 'rev-parse', '--short', 'HEAD'): {'stdout': 'abc1234\n'},
++            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
++            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'def5678\n'},
++            ('git', 'rev-parse', 'origin/main'): {'stdout': 'def5678-full\n'},
++            ('git', 'merge-base', '--is-ancestor', 'origin/main', 'HEAD'): {'returncode': 1},
++            ('git', 'status', '--porcelain'): {'stdout': ''},
++            ('git', 'merge-base', '--is-ancestor', 'HEAD', 'origin/main'): {'returncode': 0},
++            ('git', 'pull', '--ff-only', 'origin', 'main'): {'returncode': 128, 'stderr': 'fatal: not possible to fast-forward\n'},
++        }
++        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
++            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
++
++        self.assertEqual(response.status_code, 500)
++        payload = response.get_json()
++        self.assertEqual(payload['status'], 'failure')
++        self.assertIn('git pull --ff-only', payload['error'])
++        self.assertIn('fatal: not possible to fast-forward', payload['output'])
++        self.assertNotIn(('uv', 'sync'), calls)
++
++    def test_update_reports_uv_sync_failure_after_successful_pull(self):
++        calls = []
++        command_results = {
++            ('git', 'fetch', 'origin', 'main:refs/remotes/origin/main', '--quiet'): {'stdout': ''},
++            ('git', 'rev-parse', '--short', 'HEAD'): [
++                {'stdout': 'abc1234\n'},
++                {'stdout': 'def5678\n'},
++            ],
++            ('git', 'rev-parse', 'HEAD'): {'stdout': 'abc1234-full\n'},
++            ('git', 'rev-parse', '--short', 'origin/main'): {'stdout': 'def5678\n'},
++            ('git', 'rev-parse', 'origin/main'): {'stdout': 'def5678-full\n'},
++            ('git', 'merge-base', '--is-ancestor', 'origin/main', 'HEAD'): {'returncode': 1},
++            ('git', 'status', '--porcelain'): {'stdout': ''},
++            ('git', 'merge-base', '--is-ancestor', 'HEAD', 'origin/main'): {'returncode': 0},
++            ('git', 'pull', '--ff-only', 'origin', 'main'): {'stdout': 'Fast-forward\n'},
++            ('uv', 'sync'): {'returncode': 2, 'stderr': 'sync failed\n'},
++        }
++        with mock.patch.object(dashboard_app, 'run_app_command', self._fake_command_runner(command_results, calls)):
++            response = self.client.post('/api/update', headers=UPDATE_HEADERS)
++
++        self.assertEqual(response.status_code, 500)
++        payload = response.get_json()
++        self.assertEqual(payload['status'], 'failure')
++        self.assertEqual(payload['old_sha'], 'abc1234')
++        self.assertEqual(payload['new_sha'], 'def5678')
++        self.assertIn('uv sync', payload['error'])
++        self.assertIn('sync failed', payload['output'])
++        self.assertLess(calls.index(('git', 'pull', '--ff-only', 'origin', 'main')), calls.index(('uv', 'sync')))
++
++    def test_update_rejects_non_local_requests(self):
++        response = self.client.post('/api/update', headers=UPDATE_HEADERS, environ_base={'REMOTE_ADDR': '192.0.2.10'})
++
++        self.assertEqual(response.status_code, 403)
++        payload = response.get_json()
++        self.assertEqual(payload['status'], 'forbidden')
++        self.assertIn('localhost', payload['error'])
++
+     def test_tool_source_render_moves_source_path_into_info_tooltip(self):
+         response = self.client.get('/')
+         self.assertEqual(response.status_code, 200)

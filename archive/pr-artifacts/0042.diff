@@ -1,0 +1,1218 @@
+diff --git a/app.py b/app.py
+index b6a372c006ee0fa670aa935d0145c14d5fc2f3b8..ac9def1af83d2ffa31c701ed8672fe04eeef6436 100644
+--- a/app.py
++++ b/app.py
+@@ -9,31 +9,18 @@ from pathlib import Path
+ 
+ from flask import Flask, Response, jsonify, render_template, request, send_file
+ 
++from dashboard import config as dashboard_config
+ from dashboard.config import (
+-    DB_PATH,
+-    CODEX_STATE_PATH,
+-    CODEX_SESSIONS_DIR,
+-    CODEX_SOURCE_PATH,
+-    HERMES_STATE_PATH,
+     KNOWN_TOOL_IDS,
+-    TOOL_COLOR_MAP,
+     current_tool_sources,
+     display_path,
+     tool_source_label,
+ )
+ from dashboard.daily import build_daily_from_model_records
+-from dashboard.pricing import QUALITATIVE_COLORS, chart_color, estimate_cost, normalize_model
++from dashboard.pricing import QUALITATIVE_COLORS, chart_color
+ from dashboard.simulation import build_simulated_dataset
+-from dashboard.token_metrics import effective_token_total
+-from dashboard.sources import (
+-    aggregate_codex_models,
+-    aggregate_hermes_models,
+-    codex_overview,
+-    codex_records,
+-    get_db,
+-    hermes_overview,
+-    hermes_records,
+-)
++from dashboard.snapshot import load_dashboard_snapshot
++from dashboard.sources import codex_records, get_db, hermes_records
+ 
+ app = Flask(__name__)
+ 
+@@ -190,56 +177,26 @@ def simulate_enabled() -> bool:
+     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+ 
+ 
++def profile_endpoint(name: str, start: float) -> None:
++    if str(os.environ.get("DASHBOARD_PROFILE", "")).strip().lower() in {"1", "true", "yes", "on"}:
++        app.logger.info("%s total %.1fms", name, (time.perf_counter() - start) * 1000)
++
++
+ # ── API Routes ──────────────────────────────────────────────────────────────
+ 
+ 
+ @app.route("/api/overview")
+ def api_overview():
+     """Aggregate totals for a selected range; days=0/all means all time."""
++    started = time.perf_counter()
+     days = parse_days(default=None)
+     if simulate_enabled():
+         return jsonify(build_simulated_dataset(days)["overview"])
+-    where, params = since_clause(days)
+-    msg_where = where.replace("time_created", "m.time_created")
+-    conn = get_db()
+-    cur = conn.execute(f"""
+-        WITH session_stats AS (
+-            SELECT
+-                COUNT(*) as total_sessions,
+-                MIN(date(time_created / 1000, 'unixepoch', 'localtime')) as first_session,
+-                MAX(date(time_created / 1000, 'unixepoch', 'localtime')) as last_session
+-            FROM session
+-            {where}
+-        ), message_stats AS (
+-            SELECT
+-                COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0) as total_input,
+-                COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as total_output,
+-                COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0) as cache_read,
+-                COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0) as cache_write
+-            FROM message m
+-            {msg_where + " AND" if msg_where else "WHERE"}
+-              json_valid(m.data)
+-              AND json_extract(m.data, '$.role') = 'assistant'
+-              AND json_extract(m.data, '$.modelID') IS NOT NULL
+-        )
+-        SELECT
+-            session_stats.total_sessions,
+-            message_stats.total_input,
+-            message_stats.total_output,
+-            message_stats.total_input + message_stats.total_output as total_tokens,
+-            message_stats.cache_read,
+-            message_stats.cache_write,
+-            session_stats.first_session,
+-            session_stats.last_session
+-        FROM session_stats CROSS JOIN message_stats
+-    """, params + params)
+-    row = dict(cur.fetchone())
+-    codex = codex_overview(days)
+-    hermes = hermes_overview(days)
++    snapshot = load_dashboard_snapshot(days)
++    row = dict(snapshot["opencode"]["overview"])
++    codex = snapshot["codex_overview"]
++    hermes = snapshot["hermes_overview"]
+     row["days"] = days
+-    row["token_total_definition"] = "total token volume = input tokens + output tokens; includes cache read/write"
+-    row["input_token_definition"] = "input tokens = non-cache input + cache read + cache write"
+-    row["session_token_definition"] = "session tokens = non-cache input + output assistant-message tokens"
+ 
+     def overview_token_totals(sessions, tokens_input, tokens_output, cache_read, cache_write, metrics_note=None):
+         non_cache_input = tokens_input or 0
+@@ -327,7 +284,7 @@ def api_overview():
+     counted_sources = [source for source in current_sources if source["id"] in source_overviews]
+     row["active_tool"] = "multiple" if len(counted_sources) > 1 else (counted_sources[0]["id"] if counted_sources else "opencode")
+     row["active_tool_label"] = " + ".join(source["label"] for source in counted_sources) if counted_sources else "OpenCode"
+-    row["source_path"] = " + ".join(source["source_path"] for source in counted_sources) if counted_sources else display_path(DB_PATH)
++    row["source_path"] = " + ".join(source["source_path"] for source in counted_sources) if counted_sources else display_path(dashboard_config.DB_PATH)
+ 
+     row["tool_sources"] = []
+     for source in current_sources:
+@@ -344,89 +301,33 @@ def api_overview():
+                 "cache_write": None,
+             })
+         row["tool_sources"].append(item)
+-    conn.close()
++    profile_endpoint("api_overview", started)
+     return jsonify(row)
+ 
+ 
+ @app.route("/api/models")
+ def api_models():
+     """Session and token totals per model, attributed per assistant message."""
++    started = time.perf_counter()
+     days = parse_days(default=30)
+     if simulate_enabled():
+         return jsonify(build_simulated_dataset(days)["models"])
+-    where, params = since_clause(days)
+-    msg_where = where.replace("time_created", "m.time_created")
+-
+-    conn = get_db()
+-    cur = conn.execute(f"""
+-        SELECT
+-            json_extract(m.data, '$.modelID') as model_id,
+-            json_extract(m.data, '$.providerID') as provider,
+-            COUNT(*) as messages,
+-          COUNT(DISTINCT m.session_id) as sessions,
+-          COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0) as tokens_input,
+-          COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as tokens_output,
+-          COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0) as cache_read,
+-          COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0) as cache_write
+-        FROM message m
+-        {msg_where + " AND" if msg_where else "WHERE"}
+-          json_valid(m.data)
+-          AND json_extract(m.data, '$.role') = 'assistant'
+-          AND json_extract(m.data, '$.modelID') IS NOT NULL
+-        GROUP BY model_id, provider
+-        ORDER BY (
+-            COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0)
+-          + COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0)
+-          + COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0)
+-          + COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0)
+-        ) DESC
+-    """, params)
+-
+-    models = []
+-    for rank, row in enumerate(cur.fetchall()):
+-        raw = {"id": row["model_id"], "providerID": row["provider"]}
+-        import json
+-        info = normalize_model(json.dumps(raw))
+-        total = (row["tokens_input"] or 0) + (row["tokens_output"] or 0)
+-        tokens_input = row["tokens_input"] or 0
+-        tokens_output = row["tokens_output"] or 0
+-        cache_read = row["cache_read"] or 0
+-        cache_write = row["cache_write"] or 0
+-        tokens_effective_total = effective_token_total(total, cache_read, cache_write)
+-        models.append({
+-            "tool": "OpenCode",
+-            "tool_id": "opencode",
+-            "tool_color": TOOL_COLOR_MAP.get("opencode", "#64748B"),
+-            "source_path": display_path(DB_PATH),
+-            "label": info["label"],
+-            "provider": info["provider"],
+-            "model_id": info["id"],
+-            "chart_model_id": f"{info['provider']}/{info['id']}",
+-            "rank": rank + 1,
+-            "sessions": row["sessions"] or 0,
+-            "messages": row["messages"] or 0,
+-            "tokens_input": tokens_input,
+-            "tokens_output": tokens_output,
+-            "tokens_total": total,
+-            "tokens_effective_total": tokens_effective_total,
+-            "cache_read": cache_read,
+-            "cache_write": cache_write,
+-            "color": QUALITATIVE_COLORS[rank] if rank < len(QUALITATIVE_COLORS) else "#64748B",
+-            **estimate_cost(info["provider"], info["id"], tokens_input, tokens_output, cache_read, cache_write),
+-        })
+-    conn.close()
+-    models.extend(aggregate_codex_models(days))
+-    models.extend(aggregate_hermes_models(days))
++    snapshot = load_dashboard_snapshot(days)
++    models = list(snapshot["opencode"]["models"])
++    models.extend(snapshot["codex_models"])
++    models.extend(snapshot["hermes_models"])
+     models.sort(key=lambda item: item.get("tokens_effective_total") or 0, reverse=True)
+     for rank, model in enumerate(models, start=1):
+         model["rank"] = rank
+         model["color"] = chart_color(rank - 1, model.get("model_id", ""), model.get("provider", ""))
++    profile_endpoint("api_models", started)
+     return jsonify(models)
+ 
+ 
+ @app.route("/api/daily")
+ def api_daily():
+     """Daily token breakdown by model, attributed per assistant message."""
++    started = time.perf_counter()
+     days = parse_days(default=31)
+     top_n = parse_top_n(default=8)
+     selected_model_id = request.args.get("model_id") or None
+@@ -569,233 +470,32 @@ def api_daily():
+             "selected_tool_id": selected_tool_id,
+             "selected_tool_label": tool_source_label(selected_tool_id),
+         })
++    snapshot = load_dashboard_snapshot(days)
+     if selected_tool_id == "codex":
+-        records = codex_records(days)
++        records = snapshot["codex_records"]
+         if not records:
+             return empty_daily_response(top_n, selected_tool_id, error_message="Codex CLI data is unavailable.")
++        profile_endpoint("api_daily", started)
+         return jsonify(build_daily_from_model_records(records, top_n, selected_model_id, selected_tool_id))
+     if selected_tool_id == "hermes":
+-        records = hermes_records(days)
++        records = snapshot["hermes_records"]
+         if not records:
+             return empty_daily_response(top_n, selected_tool_id, error_message="Hermes data is unavailable.")
++        profile_endpoint("api_daily", started)
+         return jsonify(build_daily_from_model_records(records, top_n, selected_model_id, selected_tool_id))
+ 
+-    where, params = since_clause(days)
+-    msg_where = where.replace("time_created", "m.time_created")
+-
+-    conn = get_db()
+-    cur = conn.execute(f"""
+-        SELECT
+-            date(m.time_created / 1000, 'unixepoch', 'localtime') as dt,
+-            json_extract(m.data, '$.modelID') as model_id,
+-            json_extract(m.data, '$.providerID') as provider,
+-            COUNT(*) as messages,
+-            COUNT(DISTINCT m.session_id) as sessions,
+-            COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0) as tokens_input,
+-            COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as tokens_output,
+-            COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0) as cache_read,
+-            COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0) as cache_write
+-        FROM message m
+-        {msg_where + " AND" if msg_where else "WHERE"}
+-          json_valid(m.data)
+-          AND json_extract(m.data, '$.role') = 'assistant'
+-          AND json_extract(m.data, '$.modelID') IS NOT NULL
+-        GROUP BY dt, model_id, provider
+-        ORDER BY dt, (
+-          COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0)
+-          + COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0)
+-          + COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0)
+-          + COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0)
+-        ) DESC
+-    """, params)
+-
+-    daily_data = {}
+-    model_map = {}
+-    all_models_ordered = []
+-
+-    import json
+-    for row in cur.fetchall():
+-        raw = {"id": row["model_id"], "providerID": row["provider"]}
+-        info = normalize_model(json.dumps(raw))
+-        dt = row["dt"]
+-        model_id = f"{info['provider']}/{info['id']}"
+-        label = info["label"]
+-        total = (row["tokens_input"] or 0) + (row["tokens_output"] or 0)
+-        cache_read = row["cache_read"] or 0
+-        cache_write = row["cache_write"] or 0
+-        tokens_effective_total = effective_token_total(total, cache_read, cache_write)
+-
+-        if model_id not in model_map:
+-            model_map[model_id] = {
+-                "label": label,
+-                "model_id": info["id"],
+-                "provider": info["provider"],
+-                "color": "#64748B",
+-            }
+-            all_models_ordered.append(model_id)
+-
+-        daily_data.setdefault(dt, {})
+-        daily_data[dt][model_id] = {
+-            "sessions": row["sessions"] or 0,
+-            "messages": row["messages"] or 0,
+-            "tokens_input": row["tokens_input"] or 0,
+-            "tokens_output": row["tokens_output"] or 0,
+-            "tokens_total": total,
+-            "tokens_effective_total": tokens_effective_total,
+-            "cache_read": cache_read,
+-            "cache_write": cache_write,
+-        }
+-
++    records = list(snapshot["opencode"]["daily_records"])
+     if selected_tool_id is None:
+-        for record in codex_records(days) + hermes_records(days):
+-            dt = record.get("date")
+-            if not dt:
+-                continue
+-            mid = record["chart_model_id"]
+-            if mid not in model_map:
+-                model_map[mid] = {
+-                    "label": record["label"],
+-                    "model_id": record["model_id"],
+-                    "provider": record["provider"],
+-                    "color": "#64748B",
+-                }
+-                all_models_ordered.append(mid)
+-            daily_data.setdefault(dt, {})
+-            bucket = daily_data[dt].setdefault(mid, {
+-                "sessions": 0,
+-                "messages": 0,
+-                "tokens_input": 0,
+-                "tokens_output": 0,
+-                "tokens_total": 0,
+-                "tokens_effective_total": 0,
+-                "cache_read": 0,
+-                "cache_write": 0,
+-            })
+-            bucket["sessions"] += 1
+-            bucket["messages"] += record.get("messages") or 0
+-            bucket["tokens_input"] += record.get("tokens_input") or 0
+-            bucket["tokens_output"] += record.get("tokens_output") or 0
+-            bucket["tokens_total"] += record.get("tokens_total") or 0
+-            bucket["tokens_effective_total"] += record.get("tokens_effective_total") or 0
+-            bucket["cache_read"] += record.get("cache_read") or 0
+-            bucket["cache_write"] += record.get("cache_write") or 0
+-
+-    dates = sorted(daily_data.keys())
+-    for dt in dates:
+-        for mid in all_models_ordered:
+-            daily_data[dt].setdefault(mid, {
+-                "sessions": 0,
+-                "messages": 0,
+-                "tokens_input": 0,
+-                "tokens_output": 0,
+-                "tokens_total": 0,
+-                "tokens_effective_total": 0,
+-                "cache_read": 0,
+-                "cache_write": 0,
+-            })
+-
+-    conn.close()
+-
+-    model_totals = {}
+-    model_total_display = {}
+-    for dt in dates:
+-        for mid in all_models_ordered:
+-            model_totals[mid] = model_totals.get(mid, 0) + daily_data[dt][mid]["tokens_effective_total"]
+-            model_total_display[mid] = model_total_display.get(mid, 0) + daily_data[dt][mid]["tokens_total"]
+-    all_models_ordered.sort(key=lambda m: model_totals.get(m, 0), reverse=True)
+-
+-    active_models = [m for m in all_models_ordered if model_totals.get(m, 0) > 0]
+-    top_models = [selected_model_id] if selected_model_id in active_models else active_models[:top_n]
+-    other_models = [m for m in all_models_ordered if m not in top_models]
+-
+-    chart_data = {}
+-    for dt in dates:
+-        chart_data[dt] = {
+-            mid: daily_data[dt].get(mid, {
+-                "sessions": 0,
+-                "messages": 0,
+-                "tokens_input": 0,
+-                "tokens_output": 0,
+-                "tokens_total": 0,
+-                "tokens_effective_total": 0,
+-                "cache_read": 0,
+-                "cache_write": 0,
+-            })
+-            for mid in top_models
+-        }
+-        other = {
+-            "sessions": 0,
+-            "messages": 0,
+-            "tokens_input": 0,
+-            "tokens_output": 0,
+-            "tokens_total": 0,
+-            "tokens_effective_total": 0,
+-            "cache_read": 0,
+-            "cache_write": 0,
+-        }
+-        for mid in other_models:
+-            row = daily_data[dt].get(mid)
+-            if not row:
+-                continue
+-            other["sessions"] += row["sessions"]
+-            other["messages"] += row["messages"]
+-            other["tokens_input"] += row["tokens_input"]
+-            other["tokens_output"] += row["tokens_output"]
+-            other["tokens_total"] += row["tokens_total"]
+-            other["tokens_effective_total"] += row.get("tokens_effective_total", 0) if isinstance(row, dict) else row["tokens_effective_total"]
+-            other["cache_read"] += row.get("cache_read", 0) if isinstance(row, dict) else row["cache_read"]
+-            other["cache_write"] += row.get("cache_write", 0) if isinstance(row, dict) else row["cache_write"]
+-        if not selected_model_id and (other["tokens_total"] > 0 or other["sessions"] > 0):
+-            chart_data[dt]["other"] = other
+-
+-    chart_models = []
+-    for index, mid in enumerate(top_models):
+-        rank = active_models.index(mid) if mid in active_models else index
+-        meta = model_map[mid]
+-        chart_models.append({
+-            "id": mid,
+-            "label": meta["label"],
+-            "color": chart_color(rank, meta["model_id"], meta["provider"]),
+-            "tokens_total": model_total_display.get(mid, 0),
+-            "tokens_effective_total": model_totals.get(mid, 0),
+-            "rank": rank + 1,
+-        })
+-    if not selected_model_id and any("other" in chart_data[dt] for dt in dates):
+-        chart_models.append({
+-            "id": "other",
+-            "label": f"Other ({len(other_models)} models)",
+-            "color": "#64748B",
+-            "tokens_total": sum(model_total_display.get(mid, 0) for mid in other_models),
+-            "tokens_effective_total": sum(model_totals.get(mid, 0) for mid in other_models),
+-            "rank": None,
+-        })
+-        for dt in dates:
+-            chart_data[dt].setdefault("other", {
+-                "sessions": 0,
+-                "messages": 0,
+-                "tokens_input": 0,
+-                "tokens_output": 0,
+-                "tokens_total": 0,
+-                "tokens_effective_total": 0,
+-                "cache_read": 0,
+-                "cache_write": 0,
+-            })
+-
+-    return jsonify({
+-        "dates": dates,
+-        "models": chart_models,
+-        "data": chart_data,
+-        "top_n": top_n,
+-        "other_count": 0 if selected_model_id else len(other_models),
+-        "selected_model_id": selected_model_id if selected_model_id in active_models else None,
+-        "selected_tool_id": selected_tool_id,
+-        "selected_tool_label": tool_source_label(selected_tool_id),
+-    })
++        records.extend(snapshot["codex_records"])
++        records.extend(snapshot["hermes_records"])
++    profile_endpoint("api_daily", started)
++    return jsonify(build_daily_from_model_records(records, top_n, selected_model_id, selected_tool_id))
+ 
+ 
+ @app.route("/api/usage-history")
+ def api_usage_history():
+     """Recent sessions feed."""
++    started = time.perf_counter()
+     limit = request.args.get("limit", "50", type=int)
+     offset = request.args.get("offset", "0", type=int)
+ 
+@@ -804,67 +504,10 @@ def api_usage_history():
+         start = int(offset or 0)
+         count = int(limit or 50)
+         return jsonify(history[start: start + count])
+-
+-    conn = get_db()
+-    cur = conn.execute("""
+-        WITH session_models AS (
+-            SELECT
+-                session_id,
+-                group_concat(DISTINCT json_extract(data, '$.providerID') || '/' || json_extract(data, '$.modelID')) as models,
+-                COUNT(*) as messages
+-            FROM message
+-            WHERE json_valid(data)
+-              AND json_extract(data, '$.role') = 'assistant'
+-              AND json_extract(data, '$.modelID') IS NOT NULL
+-            GROUP BY session_id
+-        )
+-        SELECT
+-            s.time_created,
+-            datetime(s.time_created / 1000, 'unixepoch', 'localtime') as created,
+-            datetime(s.time_updated / 1000, 'unixepoch', 'localtime') as updated,
+-            s.id,
+-            s.title,
+-            s.directory,
+-            s.model,
+-            sm.models,
+-            sm.messages,
+-            s.tokens_input,
+-            s.tokens_output,
+-            s.summary_files,
+-            s.summary_additions,
+-            s.summary_deletions
+-        FROM session s
+-        LEFT JOIN session_models sm ON sm.session_id = s.id
+-        WHERE s.model IS NOT NULL AND s.model != ''
+-        ORDER BY s.time_created DESC
+-    """)
+-
+-    sessions = []
+-    for row in cur.fetchall():
+-        info = normalize_model(row["model"])
+-        model_label = row["models"] or info["label"]
+-        sessions.append({
+-            "id": row["id"],
+-            "tool": "OpenCode",
+-            "tool_id": "opencode",
+-            "tool_color": TOOL_COLOR_MAP.get("opencode", "#64748B"),
+-            "source_path": display_path(DB_PATH),
+-            "title": row["title"],
+-            "created": row["created"],
+-            "updated": row["updated"],
+-            "timestamp": row["time_created"],
+-            "directory": row["directory"],
+-            "model": model_label,
+-            "messages": row["messages"] or 0,
+-            "tokens_input": row["tokens_input"] or 0,
+-            "tokens_output": row["tokens_output"] or 0,
+-            "tokens_total": (row["tokens_input"] or 0) + (row["tokens_output"] or 0),
+-            "files_changed": row["summary_files"],
+-            "additions": row["summary_additions"],
+-            "deletions": row["summary_deletions"],
+-        })
+-    conn.close()
+-    for record in codex_records(30) + hermes_records(30):
++    history_snapshot = load_dashboard_snapshot(None)
++    recent_snapshot = load_dashboard_snapshot(30)
++    sessions = list(history_snapshot["opencode"]["history"])
++    for record in recent_snapshot["codex_records"] + recent_snapshot["hermes_records"]:
+         sessions.append({
+             "id": record["id"],
+             "tool": record["tool"],
+@@ -891,6 +534,7 @@ def api_usage_history():
+     sessions.sort(key=lambda item: item.get("timestamp") or 0, reverse=True)
+     start = int(offset or 0)
+     count = int(limit or 50)
++    profile_endpoint("api_usage_history", started)
+     return jsonify(sessions[start: start + count])
+ 
+ 
+@@ -1108,5 +752,5 @@ def favicon():
+ if __name__ == "__main__":
+     port = int(os.environ.get("PORT", 8321))
+     print(f"◆ Coding Agent Usage Dashboard → http://localhost:{port}")
+-    print(f"◆ Database: {DB_PATH}")
++    print(f"◆ Database: {dashboard_config.DB_PATH}")
+     app.run(host="0.0.0.0", port=port, debug=True)
+diff --git a/dashboard/snapshot.py b/dashboard/snapshot.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4fead9a5571e50a649873c10a2fe5e3e7a505493
+--- /dev/null
++++ b/dashboard/snapshot.py
+@@ -0,0 +1,453 @@
++"""Cached dashboard snapshots and OpenCode aggregation helpers."""
++
++from __future__ import annotations
++
++import datetime
++import json
++import logging
++import os
++import sqlite3
++import time
++import threading
++from collections import defaultdict, OrderedDict
++from pathlib import Path
++from time import perf_counter
++
++from . import config as dashboard_config
++from .config import display_path
++from .pricing import chart_color, estimate_cost, normalize_model
++from .sources import (
++    aggregate_codex_models,
++    aggregate_hermes_models,
++    codex_overview,
++    codex_records,
++    get_db,
++    hermes_overview,
++    hermes_records,
++)
++from .token_metrics import effective_token_total
++
++logger = logging.getLogger(__name__)
++
++PROFILE_REQUESTS = str(os.environ.get("DASHBOARD_PROFILE", "")).strip().lower() in {"1", "true", "yes", "on"}
++SNAPSHOT_CACHE_LIMIT = 8
++SNAPSHOT_RELATIVE_RANGE_TTL_SECONDS = 300
++
++_SNAPSHOT_CACHE: OrderedDict[tuple, dict] = OrderedDict()
++_SNAPSHOT_IN_FLIGHT: dict[tuple, threading.Event] = {}
++_SNAPSHOT_LOCK = threading.Lock()
++
++
++def _profile(message: str, start: float) -> None:
++    if PROFILE_REQUESTS:
++        logger.info("%s %.1fms", message, (perf_counter() - start) * 1000)
++
++
++def _file_signature(path: str) -> tuple[str, int | None, int | None]:
++    file_path = Path(path)
++    try:
++        stat = file_path.stat()
++    except OSError:
++        return (str(file_path), None, None)
++    return (str(file_path), stat.st_mtime_ns, stat.st_size)
++
++
++def _sqlite_live_signatures(path: str) -> tuple[tuple[str, int | None, int | None], ...]:
++    return (
++        _file_signature(path),
++        _file_signature(f"{path}-wal"),
++    )
++
++
++def _codex_rollout_signatures() -> tuple[tuple[str, int | None, int | None], ...]:
++    codex_state_path = dashboard_config.CODEX_STATE_PATH
++    if not codex_state_path or not Path(codex_state_path).exists():
++        return ()
++    try:
++        conn = sqlite3.connect(f"file:{codex_state_path}?mode=ro", uri=True)
++    except (OSError, sqlite3.Error):
++        return ()
++    try:
++        rows = conn.execute(
++            """
++            SELECT DISTINCT rollout_path
++            FROM threads
++            WHERE rollout_path IS NOT NULL AND rollout_path != ''
++            """
++        ).fetchall()
++    except (OSError, sqlite3.Error):
++        return ()
++    finally:
++        conn.close()
++    signatures = tuple(sorted({_file_signature(row[0]) for row in rows if row and row[0]}))
++    return signatures
++
++
++def _snapshot_relative_range_bucket(days: int | None) -> int | None:
++    if days is None:
++        return None
++    return int(time.time() // SNAPSHOT_RELATIVE_RANGE_TTL_SECONDS)
++
++
++def _snapshot_key(days: int | None) -> tuple:
++    return (
++        days,
++        _snapshot_relative_range_bucket(days),
++        *_sqlite_live_signatures(dashboard_config.DB_PATH),
++        *_sqlite_live_signatures(dashboard_config.CODEX_STATE_PATH),
++        *_codex_rollout_signatures(),
++        _file_signature(dashboard_config.CODEX_SESSIONS_DIR),
++        *_sqlite_live_signatures(dashboard_config.HERMES_STATE_PATH),
++    )
++
++
++def _since_clause(days: int | None) -> tuple[str, tuple]:
++    if days is None:
++        return "", ()
++    since = (
++        datetime.datetime.now() - datetime.timedelta(days=days)
++    ).timestamp() * 1000
++    return "WHERE time_created >= ?", (since,)
++
++
++def _safe_int(value, default: int = 0) -> int:
++    if value is None:
++        return default
++    try:
++        return int(value)
++    except (TypeError, ValueError):
++        return default
++
++
++def _load_opencode_sessions(days: int | None) -> list[dict]:
++    where, params = _since_clause(days)
++    conn = get_db()
++    try:
++        rows = conn.execute(f"""
++            SELECT
++                id,
++                title,
++                directory,
++                model,
++                tokens_input,
++                tokens_output,
++                summary_files,
++                summary_additions,
++                summary_deletions,
++                time_created,
++                time_updated
++            FROM session
++            {where}
++            ORDER BY time_created DESC
++        """, params).fetchall()
++    finally:
++        conn.close()
++    return [dict(row) for row in rows]
++
++
++def _load_opencode_messages(days: int | None) -> list[dict]:
++    where, params = _since_clause(days)
++    msg_where = where.replace("time_created", "m.time_created")
++    conn = get_db()
++    try:
++        rows = conn.execute(f"""
++            SELECT
++                m.time_created,
++                m.session_id,
++                date(m.time_created / 1000, 'unixepoch', 'localtime') as dt,
++                json_extract(m.data, '$.modelID') as model_id,
++                json_extract(m.data, '$.providerID') as provider,
++                COALESCE(json_extract(m.data, '$.tokens.input'), 0) as tokens_input,
++                COALESCE(json_extract(m.data, '$.tokens.output'), 0) as tokens_output,
++                COALESCE(json_extract(m.data, '$.tokens.cache.read'), 0) as cache_read,
++                COALESCE(json_extract(m.data, '$.tokens.cache.write'), 0) as cache_write
++            FROM message m
++            {msg_where + " AND" if msg_where else "WHERE"}
++              json_valid(m.data)
++              AND json_extract(m.data, '$.role') = 'assistant'
++              AND json_extract(m.data, '$.modelID') IS NOT NULL
++            ORDER BY m.time_created ASC
++        """, params).fetchall()
++    finally:
++        conn.close()
++    return [dict(row) for row in rows]
++
++
++def _load_opencode_snapshot(days: int | None) -> dict:
++    sessions = _load_opencode_sessions(days)
++    messages = _load_opencode_messages(days)
++
++    overview = {
++        "total_sessions": len(sessions),
++        "total_input": 0,
++        "total_output": 0,
++        "total_tokens": 0,
++        "session_tokens": 0,
++        "cache_read": 0,
++        "cache_write": 0,
++        "cache_total": 0,
++        "first_session": None,
++        "last_session": None,
++        "days": days,
++        "token_total_definition": "total token volume = input tokens + output tokens; includes cache read/write",
++        "input_token_definition": "input tokens = non-cache input + cache read + cache write",
++        "session_token_definition": "session tokens = non-cache input + output assistant-message tokens",
++    }
++    session_dates = []
++    for row in sessions:
++        created_ms = _safe_int(row.get("time_created"), 0)
++        if not created_ms:
++            continue
++        session_dates.append(datetime.datetime.fromtimestamp(created_ms / 1000).date().isoformat())
++
++    model_groups: dict[tuple[str, str], dict] = {}
++    daily_groups: dict[tuple[str, str, str], dict] = {}
++    session_models: dict[str, set[str]] = defaultdict(set)
++    session_message_counts: dict[str, int] = defaultdict(int)
++    model_meta_cache: dict[tuple[str, str], dict] = {}
++
++    for row in messages:
++        session_id = row["session_id"]
++        provider = row["provider"] or "unknown"
++        model_id = row["model_id"] or "unknown"
++        tokens_input = _safe_int(row.get("tokens_input"), 0)
++        tokens_output = _safe_int(row.get("tokens_output"), 0)
++        cache_read = _safe_int(row.get("cache_read"), 0)
++        cache_write = _safe_int(row.get("cache_write"), 0)
++        total = tokens_input + tokens_output
++        effective_total = effective_token_total(total, cache_read, cache_write)
++        overview["total_input"] += tokens_input
++        overview["total_output"] += tokens_output
++        overview["total_tokens"] += total
++        overview["session_tokens"] += total
++        overview["cache_read"] += cache_read
++        overview["cache_write"] += cache_write
++        overview["cache_total"] += cache_read + cache_write
++
++        model_key = (provider, model_id)
++        model_group = model_groups.setdefault(model_key, {
++            "session_ids": set(),
++            "messages": 0,
++            "tokens_input": 0,
++            "tokens_output": 0,
++            "tokens_total": 0,
++            "tokens_effective_total": 0,
++            "cache_read": 0,
++            "cache_write": 0,
++        })
++        model_group["session_ids"].add(session_id)
++        model_group["messages"] += 1
++        model_group["tokens_input"] += tokens_input
++        model_group["tokens_output"] += tokens_output
++        model_group["tokens_total"] += total
++        model_group["tokens_effective_total"] += effective_total
++        model_group["cache_read"] += cache_read
++        model_group["cache_write"] += cache_write
++
++        dt = row["dt"]
++        daily_key = (dt, provider, model_id)
++        daily_group = daily_groups.setdefault(daily_key, {
++            "session_ids": set(),
++            "messages": 0,
++            "tokens_input": 0,
++            "tokens_output": 0,
++            "tokens_total": 0,
++            "tokens_effective_total": 0,
++            "cache_read": 0,
++            "cache_write": 0,
++        })
++        daily_group["session_ids"].add(session_id)
++        daily_group["messages"] += 1
++        daily_group["tokens_input"] += tokens_input
++        daily_group["tokens_output"] += tokens_output
++        daily_group["tokens_total"] += total
++        daily_group["tokens_effective_total"] += effective_total
++        daily_group["cache_read"] += cache_read
++        daily_group["cache_write"] += cache_write
++
++        session_models[session_id].add(f"{provider}/{model_id}")
++        session_message_counts[session_id] += 1
++
++    session_dates = [date for date in session_dates if date]
++    if session_dates:
++        overview["first_session"] = min(session_dates)
++        overview["last_session"] = max(session_dates)
++
++    def model_info(provider: str, model_id: str) -> dict:
++        key = (provider, model_id)
++        cached = model_meta_cache.get(key)
++        if cached is None:
++            cached = normalize_model(json.dumps({"id": model_id, "providerID": provider}))
++            model_meta_cache[key] = cached
++        return cached
++
++    opencode_models = []
++    for (provider, model_id), group in model_groups.items():
++        info = model_info(provider, model_id)
++        total = group["tokens_total"]
++        cache_read = group["cache_read"]
++        cache_write = group["cache_write"]
++        opencode_models.append({
++            "tool": "OpenCode",
++            "tool_id": "opencode",
++            "tool_color": "#3B82F6",
++            "source_path": display_path(dashboard_config.DB_PATH),
++            "label": info["label"],
++            "provider": info["provider"],
++            "model_id": info["id"],
++            "chart_model_id": f"{info['provider']}/{info['id']}",
++            "sessions": len(group["session_ids"]),
++            "messages": group["messages"],
++            "tokens_input": group["tokens_input"],
++            "tokens_output": group["tokens_output"],
++            "tokens_total": total,
++            "tokens_effective_total": group["tokens_effective_total"],
++            "cache_read": cache_read,
++            "cache_write": cache_write,
++            "cache_write_available": True,
++            **estimate_cost(info["provider"], info["id"], group["tokens_input"], group["tokens_output"], cache_read, cache_write),
++        })
++
++    opencode_models.sort(key=lambda item: item.get("tokens_effective_total") or 0, reverse=True)
++    for rank, item in enumerate(opencode_models, start=1):
++        item["rank"] = rank
++        item["color"] = chart_color(rank - 1, item.get("model_id", ""), item.get("provider", ""))
++
++    opencode_daily_records = []
++    for (dt, provider, model_id), group in daily_groups.items():
++        info = model_info(provider, model_id)
++        opencode_daily_records.append({
++            "tool": "OpenCode",
++            "tool_id": "opencode",
++            "tool_color": "#3B82F6",
++            "source_path": display_path(dashboard_config.DB_PATH),
++            "date": dt,
++            "label": info["label"],
++            "provider": info["provider"],
++            "model_id": info["id"],
++            "chart_model_id": f"{info['provider']}/{info['id']}",
++            "sessions": len(group["session_ids"]),
++            "messages": group["messages"],
++            "tokens_input": group["tokens_input"],
++            "tokens_output": group["tokens_output"],
++            "tokens_total": group["tokens_total"],
++            "tokens_effective_total": group["tokens_effective_total"],
++            "cache_read": group["cache_read"],
++            "cache_write": group["cache_write"],
++        })
++
++    opencode_history = []
++    for row in sessions:
++        if not row.get("model"):
++            continue
++        session_id = row["id"]
++        info = normalize_model(row["model"])
++        model_label = " + ".join(sorted(session_models.get(session_id, set()))) or info["label"]
++        created_ms = _safe_int(row.get("time_created"), 0)
++        updated_ms = _safe_int(row.get("time_updated"), created_ms)
++        created_dt = datetime.datetime.fromtimestamp(created_ms / 1000) if created_ms else None
++        updated_dt = datetime.datetime.fromtimestamp(updated_ms / 1000) if updated_ms else None
++        opencode_history.append({
++            "id": session_id,
++            "tool": "OpenCode",
++            "tool_id": "opencode",
++            "tool_color": "#3B82F6",
++            "source_path": display_path(dashboard_config.DB_PATH),
++            "title": row["title"],
++            "created": created_dt.strftime("%Y-%m-%d %H:%M:%S") if created_dt else None,
++            "updated": updated_dt.strftime("%Y-%m-%d %H:%M:%S") if updated_dt else None,
++            "timestamp": created_ms,
++            "directory": row["directory"],
++            "model": model_label,
++            "messages": session_message_counts.get(session_id, 0),
++            "tokens_input": _safe_int(row.get("tokens_input"), 0),
++            "tokens_output": _safe_int(row.get("tokens_output"), 0),
++            "tokens_total": _safe_int(row.get("tokens_input"), 0) + _safe_int(row.get("tokens_output"), 0),
++            "files_changed": _safe_int(row.get("summary_files"), 0),
++            "additions": _safe_int(row.get("summary_additions"), 0),
++            "deletions": _safe_int(row.get("summary_deletions"), 0),
++        })
++
++    return {
++        "overview": overview,
++        "models": opencode_models,
++        "daily_records": opencode_daily_records,
++        "history": opencode_history,
++    }
++
++
++def _build_snapshot(days: int | None) -> dict:
++    started = perf_counter()
++    snapshot = {"days": days}
++    opencode_started = perf_counter()
++    snapshot["opencode"] = _load_opencode_snapshot(days)
++    _profile(f"snapshot opencode days={days}", opencode_started)
++
++    codex_started = perf_counter()
++    snapshot["codex_records"] = codex_records(days)
++    snapshot["codex_overview"] = codex_overview(days, records=snapshot["codex_records"])
++    snapshot["codex_models"] = aggregate_codex_models(days, records=snapshot["codex_records"])
++    _profile(f"snapshot codex days={days}", codex_started)
++
++    hermes_started = perf_counter()
++    snapshot["hermes_records"] = hermes_records(days)
++    snapshot["hermes_overview"] = hermes_overview(days, records=snapshot["hermes_records"])
++    snapshot["hermes_models"] = aggregate_hermes_models(days, records=snapshot["hermes_records"])
++    _profile(f"snapshot hermes days={days}", hermes_started)
++
++    _profile(f"snapshot build days={days}", started)
++    return snapshot
++
++
++def load_dashboard_snapshot(days: int | None) -> dict:
++    """Return a cached snapshot for the current source file state and range."""
++    key = _snapshot_key(days)
++    with _SNAPSHOT_LOCK:
++        cached = _SNAPSHOT_CACHE.get(key)
++        if cached is not None:
++            _SNAPSHOT_CACHE.move_to_end(key)
++            if PROFILE_REQUESTS:
++                logger.info("snapshot cache_hit days=%s", days)
++            return cached
++        inflight = _SNAPSHOT_IN_FLIGHT.get(key)
++        if inflight is None:
++            inflight = threading.Event()
++            _SNAPSHOT_IN_FLIGHT[key] = inflight
++            builder = True
++        else:
++            builder = False
++
++    if not builder:
++        inflight.wait()
++        with _SNAPSHOT_LOCK:
++            cached = _SNAPSHOT_CACHE.get(key)
++            if cached is not None:
++                _SNAPSHOT_CACHE.move_to_end(key)
++                return cached
++        return load_dashboard_snapshot(days)
++
++    try:
++        snapshot = _build_snapshot(days)
++    except Exception:
++        with _SNAPSHOT_LOCK:
++            inflight = _SNAPSHOT_IN_FLIGHT.pop(key, None)
++            if inflight is not None:
++                inflight.set()
++        raise
++
++    with _SNAPSHOT_LOCK:
++        _SNAPSHOT_CACHE[key] = snapshot
++        _SNAPSHOT_CACHE.move_to_end(key)
++        while len(_SNAPSHOT_CACHE) > SNAPSHOT_CACHE_LIMIT:
++            _SNAPSHOT_CACHE.popitem(last=False)
++        inflight = _SNAPSHOT_IN_FLIGHT.pop(key, None)
++        if inflight is not None:
++            inflight.set()
++    return snapshot
++
++
++def clear_dashboard_snapshot_cache() -> None:
++    """Clear cached snapshots; useful for tests and manual refreshes."""
++    with _SNAPSHOT_LOCK:
++        _SNAPSHOT_CACHE.clear()
++        _SNAPSHOT_IN_FLIGHT.clear()
+diff --git a/dashboard/sources.py b/dashboard/sources.py
+index 25882e1b005107100b518e5fd187a5300152527c..52cee6b9b4ff1f7845a586c38c83bcb537472d0c 100644
+--- a/dashboard/sources.py
++++ b/dashboard/sources.py
+@@ -204,8 +204,8 @@ def _record_tool_source_totals(records: list[dict], source: dict) -> dict:
+     })
+     return item
+ 
+-def codex_overview(days: int | None = None) -> dict | None:
+-    records = codex_records(days)
++def codex_overview(days: int | None = None, *, records: list[dict] | None = None) -> dict | None:
++    records = records if records is not None else codex_records(days)
+     if not records:
+         return None
+     dates = sorted({r["date"] for r in records if r.get("date")})
+@@ -326,8 +326,8 @@ def hermes_records(days: int | None = None) -> list[dict]:
+         })
+     return records
+ 
+-def hermes_overview(days: int | None = None) -> dict | None:
+-    records = hermes_records(days)
++def hermes_overview(days: int | None = None, *, records: list[dict] | None = None) -> dict | None:
++    records = records if records is not None else hermes_records(days)
+     if not records:
+         return None
+     dates = sorted({r["date"] for r in records if r.get("date")})
+@@ -356,9 +356,9 @@ def _trusted_hermes_accounting_cost(record: dict) -> float | None:
+     return accounted_cost
+ 
+ 
+-def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
++def aggregate_hermes_models(days: int | None = 30, *, records: list[dict] | None = None) -> list[dict]:
+     grouped = {}
+-    for record in hermes_records(days):
++    for record in (records if records is not None else hermes_records(days)):
+         key = (record["provider"], record["model_id"])
+         agg = grouped.setdefault(key, {
+             "tool": "Hermes",
+@@ -459,9 +459,9 @@ def aggregate_hermes_models(days: int | None = 30) -> list[dict]:
+             ))
+     return models
+ 
+-def aggregate_codex_models(days: int | None = 30) -> list[dict]:
++def aggregate_codex_models(days: int | None = 30, *, records: list[dict] | None = None) -> list[dict]:
+     grouped = {}
+-    for record in codex_records(days):
++    for record in (records if records is not None else codex_records(days)):
+         key = (record["provider"], record["model_id"])
+         agg = grouped.setdefault(key, {
+             "tool": "Codex CLI",
+diff --git a/tests/test_app.py b/tests/test_app.py
+index e8f79a31431b17feae2942e5e0ccef7599771342..966e1f48f2e6fd22d43d3880a0a09bbefbe7b536 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -11,6 +11,7 @@ import app as dashboard_app
+ from dashboard import config as dashboard_config
+ from dashboard import pricing as dashboard_pricing
+ from dashboard.daily import build_daily_from_model_records
++import dashboard.snapshot as dashboard_snapshot
+ 
+ 
+ HOME_PREFIX = f"{Path.home()}/"
+@@ -207,6 +208,7 @@ class DashboardApiTests(unittest.TestCase):
+         dashboard_config.CODEX_SESSIONS_DIR = str(self.codex_sessions_dir)
+         dashboard_config.CODEX_SOURCE_PATH = str(self.codex_state_path)
+         dashboard_config.HERMES_STATE_PATH = str(self.hermes_state_path)
++        dashboard_snapshot.clear_dashboard_snapshot_cache()
+         self.client = dashboard_app.app.test_client()
+ 
+     def test_overview_exposes_tool_source_metadata(self):
+@@ -334,6 +336,134 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertEqual(len(history), 1)
+         self.assertEqual(history[0]['id'], 'sess-1')
+ 
++    def test_usage_history_keeps_older_open_code_rows_and_tokens_total(self):
++        conn = sqlite3.connect(self.db_path)
++        old_created_ms = int(time.time() * 1000) - 45 * 86400000
++        conn.execute(
++            """
++            INSERT INTO session (
++                id, title, directory, model, tokens_input, tokens_output,
++                summary_files, summary_additions, summary_deletions,
++                time_created, time_updated
++            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
++            """,
++            (
++                'sess-old',
++                'Older OpenCode session',
++                '/tmp/project-old',
++                json.dumps({"id": "gpt-5.5", "providerID": "openai"}),
++                111,
++                222,
++                7,
++                24,
++                6,
++                old_created_ms,
++                old_created_ms + 60000,
++            ),
++        )
++        write_message(
++            conn,
++            session_id='sess-old',
++            created_ms=old_created_ms,
++            role='assistant',
++            model_id='gpt-5.5',
++            provider_id='openai',
++            tokens_input=111,
++            tokens_output=222,
++        )
++        conn.commit()
++        conn.close()
++
++        response = self.client.get('/api/usage-history?limit=10')
++        self.assertEqual(response.status_code, 200)
++        history = response.get_json()
++        old = next(item for item in history if item['id'] == 'sess-old')
++
++        self.assertEqual(old['tokens_input'], 111)
++        self.assertEqual(old['tokens_output'], 222)
++        self.assertEqual(old['tokens_total'], 333)
++        self.assertEqual(old['files_changed'], 7)
++        self.assertEqual(old['additions'], 24)
++        self.assertEqual(old['deletions'], 6)
++        self.assertNotIn('summary_files', old)
++        self.assertNotIn('summary_additions', old)
++        self.assertNotIn('summary_deletions', old)
++
++    def test_dashboard_snapshot_cache_includes_wal_signatures(self):
++        wal_path = Path(f'{self.db_path}-wal')
++        shm_path = Path(f'{self.db_path}-shm')
++        wal_path.write_text('wal-1', encoding='utf-8')
++        shm_path.write_text('shm-1', encoding='utf-8')
++        dashboard_snapshot.clear_dashboard_snapshot_cache()
++
++        with mock.patch.object(dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot) as build_snapshot:
++            first = dashboard_snapshot.load_dashboard_snapshot(30)
++            wal_path.write_text('wal-2-updated', encoding='utf-8')
++            shm_path.write_text('shm-2-updated', encoding='utf-8')
++            second = dashboard_snapshot.load_dashboard_snapshot(30)
++
++        self.assertEqual(build_snapshot.call_count, 2)
++        self.assertIsNot(first, second)
++
++    def test_dashboard_snapshot_cache_includes_codex_rollout_signatures(self):
++        self._write_codex_fixture()
++        dashboard_snapshot.clear_dashboard_snapshot_cache()
++
++        with mock.patch.object(dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot) as build_snapshot:
++            first = dashboard_snapshot.load_dashboard_snapshot(30)
++            self.codex_rollout_path.write_text(
++                self.codex_rollout_path.read_text(encoding='utf-8') + '\n' + json.dumps({
++                    "timestamp": "2026-05-30T00:03:00Z",
++                    "type": "event_msg",
++                    "payload": {
++                        "type": "task_complete",
++                        "info": {
++                            "total_token_usage": {
++                                "input_tokens": 1800,
++                                "cached_input_tokens": 500,
++                                "output_tokens": 300,
++                                "reasoning_output_tokens": 50,
++                                "total_tokens": 2100,
++                            }
++                        },
++                    },
++                }) + '\n',
++                encoding='utf-8',
++            )
++            second = dashboard_snapshot.load_dashboard_snapshot(30)
++
++        self.assertEqual(build_snapshot.call_count, 2)
++        self.assertIsNot(first, second)
++
++    def test_dashboard_snapshot_refreshes_relative_ranges_when_time_bucket_changes(self):
++        dashboard_snapshot.clear_dashboard_snapshot_cache()
++
++        with mock.patch("dashboard.snapshot.time.time") as mock_time, mock.patch.object(
++            dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot
++        ) as build_snapshot:
++            mock_time.return_value = 1000.0
++            first = dashboard_snapshot.load_dashboard_snapshot(30)
++            second = dashboard_snapshot.load_dashboard_snapshot(30)
++            mock_time.return_value = 1300.0
++            third = dashboard_snapshot.load_dashboard_snapshot(30)
++
++        self.assertEqual(build_snapshot.call_count, 2)
++        self.assertIs(first, second)
++        self.assertIsNot(first, third)
++
++    def test_dashboard_snapshot_is_reused_across_dashboard_endpoints(self):
++        with mock.patch.object(dashboard_snapshot, "_build_snapshot", wraps=dashboard_snapshot._build_snapshot) as build_snapshot:
++            overview = self.client.get('/api/overview?days=30')
++            models = self.client.get('/api/models?days=30')
++            daily = self.client.get('/api/daily?days=30&top_n=8')
++            history = self.client.get('/api/usage-history?limit=30')
++
++        self.assertEqual(overview.status_code, 200)
++        self.assertEqual(models.status_code, 200)
++        self.assertEqual(daily.status_code, 200)
++        self.assertEqual(history.status_code, 200)
++        self.assertEqual(build_snapshot.call_count, 2)
++
+     def test_daily_other_zero_bucket_preserves_cache_fields(self):
+         payload = build_daily_from_model_records([
+             {
+@@ -478,6 +608,7 @@ class DashboardApiTests(unittest.TestCase):
+         conn.close()
+         dashboard_config.CODEX_STATE_PATH = str(state)
+         dashboard_config.CODEX_SOURCE_PATH = str(state)
++        self.codex_rollout_path = rollout
+ 
+     def test_codex_records_flow_into_sources_models_daily_and_history(self):
+         self._write_codex_fixture()

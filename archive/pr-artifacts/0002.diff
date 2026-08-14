@@ -1,0 +1,2821 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..f83ce83b7e371ef8b5ff669ef1aa78e2c1e086b2
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1,31 @@
++name: CI
++
++on:
++  pull_request:
++  push:
++    branches:
++      - main
++
++jobs:
++  test:
++    runs-on: ubuntu-latest
++    steps:
++      - name: Check out repository
++        uses: actions/checkout@v4
++
++      - name: Install uv
++        uses: astral-sh/setup-uv@v5
++
++      - name: Set up Python
++        uses: actions/setup-python@v5
++        with:
++          python-version: '3.12'
++
++      - name: Sync dependencies
++        run: uv sync --locked
++
++      - name: Run tests
++        run: uv run python -m unittest tests.test_app tests.test_readme -v
++
++      - name: Compile Python files
++        run: uv run python -m py_compile app.py scripts/snapshot_dashboard.py
+diff --git a/.gitignore b/.gitignore
+index 584026e8aa29219789cbb9f7cc27da1cfa8a3267..687de3b7416b2e0a0a7cfb01c4ef0c5f654f87ed 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -5,4 +5,7 @@ __pycache__/
+ venv/
+ *.db
+ *.db-wal
+-*.db-shm
+\ No newline at end of file
++*.db-shm
++dashboard-snapshots/
++.playwright-mcp/
++dashboard-*.png
+diff --git a/.pre-commit-config.yaml b/.pre-commit-config.yaml
+new file mode 100644
+index 0000000000000000000000000000000000000000..c71c0509ada14f22e4febb4aa572ef424000677c
+--- /dev/null
++++ b/.pre-commit-config.yaml
+@@ -0,0 +1,14 @@
++repos:
++  - repo: local
++    hooks:
++      - id: unit-tests
++        name: Run unit tests
++        entry: uv run python -m unittest tests.test_app tests.test_readme -v
++        language: system
++        pass_filenames: false
++
++      - id: python-compile
++        name: Compile Python files
++        entry: uv run python -m py_compile app.py scripts/snapshot_dashboard.py
++        language: system
++        pass_filenames: false
+diff --git a/README.md b/README.md
+index 9fadcf03a2e902587defdc2e91086ca74f94c11d..509728f95a07968fa467f60a55e12638e0db2481 100644
+--- a/README.md
++++ b/README.md
+@@ -1,29 +1,97 @@
+-# OpenCode Dashboard
++# Coding Agent Usage Dashboard
+ 
+-Local session and token usage viewer for OpenCode AI agent. Reads directly from your
+-local OpenCode SQLite database and renders a dark-themed web dashboard.
++Local dashboard for inspecting coding-agent usage from your machine.
++
++Right now the active source is OpenCode via its local SQLite database at
++`~/.local/share/opencode/opencode.db`. The UI already leaves room for future
++Codex CLI and Hermes adapters, but this README is intentionally about one thing:
++getting the dashboard running locally and capturing snapshots.
+ 
+ ## Setup
+ 
++### 1. Install uv
++
++This repo uses [uv](https://docs.astral.sh/uv/) as a proper project environment,
++so the committed `pyproject.toml` and `uv.lock` are the source of truth for a
++reproducible local setup.
++
++```bash
++# macOS / Linux
++curl -LsSf https://astral.sh/uv/install.sh | sh
++
++# alternative
++pip install uv
++```
++
++### 2. Sync the project environment
++
++```bash
++cd coding-agent-usage-dashboard
++uv sync
++```
++
++That creates the local environment from the committed lockfile.
++
++### 3. Run the dashboard
++
++```bash
++uv run python app.py
++```
++
++Then open:
++
++```text
++http://localhost:8321
+ ```
+-cd opencode-dashboard
+-pip install -r requirements.txt
+-python app.py
++
++For a deterministic fake dataset that is useful for screenshots and UI checks,
++open:
++
++```text
++http://localhost:8321/?simulate=1
++```
++
++## Snapshots
++
++Capture a localhost snapshot with Playwright:
++
++```bash
++uv run --with playwright python scripts/snapshot_dashboard.py --url http://localhost:8321
++```
++
++To snapshot the simulated dataset instead of your live local usage:
++
++```bash
++uv run --with playwright python scripts/snapshot_dashboard.py --url http://localhost:8321/?simulate=1
+ ```
+ 
+-Open http://localhost:8321 in your browser.
++Outputs are written to:
++
++```text
++dashboard-snapshots/
++```
+ 
+-The dashboard auto-detects your OpenCode database at
+-`~/.local/share/opencode/opencode.db`.
++That snapshot run produces a rendered screenshot plus a DOM summary so you can
++review what the dashboard actually showed at capture time.
+ 
+-## Overview
++## What the dashboard shows
+ 
+-- **Daily token chart** — daily stacked bar chart by model, with 7/30/90/all/custom ranges
+-- **Model breakdown** — each model's session count, total tokens, input tokens, and output tokens
+-- **Usage history** — recent session feed with model, title, and token totals
+-- **Dark theme** — matches OpenCode's aesthetic
++- daily usage by model
++- model breakdown with token totals
++- recent usage history
++- estimated cost when a model can be matched to public OpenRouter pricing
++- explicit tool/source labeling so the current OpenCode-backed totals are not ambiguous
+ 
+-## Data Source
++## Current data rules
+ 
+-Pulls from the `session` table in OpenCode's local SQLite database. All reads
+-are read-only. Cost and cached-token fields are intentionally hidden for now.
++- active source: OpenCode local SQLite DB
++- total tokens = input + output assistant-message tokens
++- cache read/write tokens are shown separately and excluded from total tokens
++- unmatched model pricing stays unpriced instead of guessed
++
++## Local verification
++
++```bash
++uv run python -m unittest tests.test_app tests.test_readme -v
++uv run python -m py_compile app.py scripts/snapshot_dashboard.py
++```
+diff --git a/app.py b/app.py
+index 580f2a1004288c9eed69d448f29579dc090c1528..e2316418871034ece4d6a561606aaf57b22ed2d6 100644
+--- a/app.py
++++ b/app.py
+@@ -1,12 +1,16 @@
+ #!/usr/bin/env python3
+ """
+-OpenCode Dashboard — local session and token usage viewer.
+-Reads from ~/.local/share/opencode/opencode.db and serves a dark-themed web UI.
++Coding Agent Usage Dashboard — local session and token usage viewer.
++Currently reads from ~/.local/share/opencode/opencode.db and serves a dark-themed web UI.
+ """
+ 
+ import datetime
++import json
+ import os
++import random
+ import sqlite3
++import time
++import urllib.request
+ from pathlib import Path
+ 
+ from flask import Flask, jsonify, render_template, request
+@@ -16,11 +20,126 @@ app = Flask(__name__)
+ DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
+ 
+ 
++def display_path(path: str) -> str:
++    """Return a stable, user-facing local path."""
++    home = os.path.expanduser("~")
++    return path.replace(home, "~", 1) if path.startswith(home) else path
++
++
++TOOL_SOURCES = [
++    {
++        "id": "opencode",
++        "label": "OpenCode",
++        "status": "active",
++        "status_label": "Active",
++        "source_type": "SQLite database",
++        "source_path": display_path(DB_PATH),
++        "color": "#3B82F6",
++        "issue": None,
++    },
++    {
++        "id": "codex",
++        "label": "Codex CLI",
++        "status": "placeholder",
++        "status_label": "Planned",
++        "source_type": "Local session/history data",
++        "source_path": "TBD",
++        "color": "#BA68C8",
++        "issue": None,
++    },
++    {
++        "id": "hermes",
++        "label": "Hermes",
++        "status": "placeholder",
++        "status_label": "Planned",
++        "source_type": "Local session/tool logs or session DB",
++        "source_path": "TBD",
++        "color": "#EAB308",
++        "issue": None,
++    },
++]
++
++TOOL_COLOR_MAP = {t["id"]: t["color"] for t in TOOL_SOURCES}
++
++
++def current_tool_sources() -> list[dict]:
++    """Return tool source metadata with the active DB path baked in."""
++    sources = []
++    for source in TOOL_SOURCES:
++        item = dict(source)
++        if item["id"] == "opencode":
++            item["source_path"] = display_path(DB_PATH)
++        sources.append(item)
++    return sources
++
++
++OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
++PRICING_CACHE = {"fetched_at": 0.0, "prices": {}}
++
++# Per-token fallback prices, keyed by normalized OpenRouter model ID.
++# OpenRouter live pricing remains primary; these keep estimates available when
++# the live endpoint is unavailable or missing fields for models we actively use.
++HARDCODED_MODEL_PRICES = {
++    "openai/gpt-5.5": {
++        "prompt": "0.000005",
++        "completion": "0.00003",
++        "input_cache_read": "0.0000005",
++    },
++    "openai/gpt-5.4": {
++        "prompt": "0.0000025",
++        "completion": "0.000015",
++        "input_cache_read": "0.00000025",
++    },
++    "openai/gpt-5.4-mini": {
++        "prompt": "0.00000075",
++        "completion": "0.0000045",
++        "input_cache_read": "0.000000075",
++    },
++    "openai/gpt-5.3-codex": {
++        "prompt": "0.00000175",
++        "completion": "0.000014",
++        "input_cache_read": "0.000000175",
++    },
++    "deepseek/deepseek-v4-flash:free": {
++        "prompt": "0",
++        "completion": "0",
++    },
++    "deepseek/deepseek-v4-flash": {
++        "prompt": "0.0000001",
++        "completion": "0.0000002",
++        "input_cache_read": "0.00000002",
++    },
++    "deepseek/deepseek-v4-pro": {
++        "prompt": "0.000000435",
++        "completion": "0.00000087",
++        "input_cache_read": "0.000000003625",
++    },
++    "moonshotai/kimi-k2.6": {
++        "prompt": "0.00000073",
++        "completion": "0.00000349",
++        "input_cache_read": "0.00000025",
++    },
++    "qwen/qwen3.6-plus": {
++        "prompt": "0.000000325",
++        "completion": "0.00000195",
++        "input_cache_write": "0.00000040625",
++    },
++    "minimax/minimax-m2.5:free": {
++        "prompt": "0",
++        "completion": "0",
++    },
++    "inclusionai/ling-2.6-flash": {
++        "prompt": "0.00000001",
++        "completion": "0.00000003",
++        "input_cache_read": "0.000000002",
++    },
++}
++
++
+ def get_db():
+     """Return a read-only connection to the OpenCode SQLite DB."""
+     conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+     conn.row_factory = sqlite3.Row
+-    conn.execute("PRAGMA journal_mode=wal")
+     return conn
+ 
+ 
+@@ -78,37 +197,305 @@ def normalize_model(raw: str) -> dict:
+     return {"id": model_id, "provider": provider, "label": label, "variant": variant}
+ 
+ 
+-def get_color(model_id: str) -> str:
+-    """Consistent color per model for stacked charts."""
+-    palette = {
+-        "deepseek-v4-flash": "#5B8C5A",
+-        "deepseek-v4-flash-free": "#8BC34A",
+-        "deepseek-v4-pro": "#7B5EA7",
+-        "kimi-k2.5": "#A5D6A7",
+-        "kimi-k2.6": "#2E7D32",
+-        "minimax-m2.7": "#2196F3",
+-        "qwen3.6-plus": "#795548",
+-        "qwen3.6-plus-free": "#A1887F",
+-        "gpt-5.5": "#FF9800",
+-        "gpt-5.5-fast": "#FFB74D",
+-        "gemini-2.5-flash": "#00BCD4",
+-        "gemini-2.5-pro": "#0097A7",
+-        "anthropic/claude-sonnet-4": "#D32F2F",
+-        "gemma": "#607D8B",
++QUALITATIVE_COLORS = [
++    # Dark-background-safe categorical set. These are categories, not a gradient.
++    # Keep this short: beyond ~8 hues, stacked bars become hard to compare.
++    "#38BDF8",  # cyan
++    "#F59E0B",  # amber
++    "#22C55E",  # green
++    "#8B5CF6",  # violet
++    "#EC4899",  # pink
++    "#14B8A6",  # teal
++    "#F97316",  # orange
++    "#64748B",  # slate
++]
++
++def chart_color(rank: int, model_id: str, provider: str) -> str:
++    """Use rank-first colors so the chart adapts when model mix changes."""
++    return QUALITATIVE_COLORS[rank % len(QUALITATIVE_COLORS)]
++
++
++def parse_top_n(default: int = 8) -> int:
++    """Top N visible chart models; remaining models are folded into Other."""
++    raw = request.args.get("top_n", default, type=int)
++    return max(3, min(raw or default, len(QUALITATIVE_COLORS)))
++
++
++def simulate_enabled() -> bool:
++    raw = request.args.get("simulate") or request.args.get("demo") or os.environ.get("DASHBOARD_SIMULATE")
++    if raw is None:
++        return False
++    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
++
++
++def build_simulated_dataset(days: int | None = 31) -> dict:
++    """Deterministic synthetic data for UI checks and screenshots."""
++    window_days = days or 31
++    window_days = max(7, min(window_days, 120))
++    rng = random.Random(20260527)
++    today = datetime.date.today()
++    start = today - datetime.timedelta(days=window_days - 1)
++    date_keys = [
++        (start + datetime.timedelta(days=i)).isoformat()
++        for i in range(window_days)
++    ]
++
++    model_specs = [
++        {"provider": "opencode-go", "model_id": "deepseek-v4-flash", "base": 180_000, "burst": 1.4, "session_ratio": 0.18},
++        {"provider": "opencode-go", "model_id": "deepseek-v4-pro", "base": 120_000, "burst": 0.9, "session_ratio": 0.12},
++        {"provider": "opencode-go", "model_id": "kimi-k2.5", "base": 90_000, "burst": 0.75, "session_ratio": 0.10},
++        {"provider": "opencode-go", "model_id": "kimi-k2.6", "base": 260_000, "burst": 2.3, "session_ratio": 0.20},
++        {"provider": "opencode-go", "model_id": "minimax-m2.7", "base": 80_000, "burst": 0.65, "session_ratio": 0.09},
++        {"provider": "opencode-go", "model_id": "qwen3.6-plus", "base": 105_000, "burst": 0.82, "session_ratio": 0.11},
++    ]
++
++    daily = {}
++    model_totals = {}
++    history = []
++    session_counter = 0
++
++    for index, dt in enumerate(date_keys):
++        daily[dt] = {}
++        weekday_factor = 1.25 if index % 7 in {1, 2, 3} else 0.72
++        burst_factor = 1.0
++        if index == min(12, window_days - 1):
++            burst_factor = 3.8
++        elif index in {min(7, window_days - 1), min(16, window_days - 1)}:
++            burst_factor = 2.1
++        elif index > int(window_days * 0.78):
++            burst_factor = 0.28
++
++        for spec in model_specs:
++            if index > int(window_days * 0.82) and spec["model_id"] not in {"kimi-k2.6", "deepseek-v4-flash"}:
++                activity_factor = 0.0
++            else:
++                activity_factor = 0.82 + rng.random() * 0.42
++
++            total_tokens = int(spec["base"] * weekday_factor * burst_factor * activity_factor)
++            if total_tokens < 25_000:
++                total_tokens = 0
++
++            tokens_input = int(total_tokens * (0.56 + rng.random() * 0.1)) if total_tokens else 0
++            tokens_output = max(total_tokens - tokens_input, 0)
++            cache_read = int(tokens_input * (0.18 + rng.random() * 0.16)) if total_tokens else 0
++            cache_write = int(tokens_input * (0.04 + rng.random() * 0.05)) if total_tokens else 0
++            sessions = max(0, int(total_tokens / 95_000 * (0.8 + rng.random() * spec["session_ratio"]))) if total_tokens else 0
++            messages = max(sessions, int(sessions * (1.6 + rng.random() * 1.7))) if total_tokens else 0
++
++            chart_model_id = f'{spec["provider"]}/{spec["model_id"]}'
++            daily[dt][chart_model_id] = {
++                "sessions": sessions,
++                "messages": messages,
++                "tokens_input": tokens_input,
++                "tokens_output": tokens_output,
++                "tokens_total": total_tokens,
++                "cache_read": cache_read,
++                "cache_write": cache_write,
++            }
++            model_totals[chart_model_id] = model_totals.get(chart_model_id, 0) + total_tokens
++
++            if total_tokens and len(history) < 40:
++                session_counter += 1
++                created_at = datetime.datetime.fromisoformat(dt) + datetime.timedelta(hours=9 + (session_counter % 8), minutes=(session_counter * 7) % 60)
++                history.append({
++                    "id": f"sim-{session_counter:04d}",
++                    "tool": "OpenCode",
++                    "tool_id": "opencode",
++                    "tool_color": TOOL_COLOR_MAP.get("opencode", "#64748B"),
++                    "source_path": "simulated dataset",
++                    "title": f"Simulated {spec['model_id']} run {session_counter}",
++                    "created": created_at.strftime("%Y-%m-%d %H:%M:%S"),
++                    "updated": (created_at + datetime.timedelta(minutes=15 + session_counter % 35)).strftime("%Y-%m-%d %H:%M:%S"),
++                    "directory": f"~/sandbox/session-{session_counter:02d}",
++                    "model": f"{spec['provider']}/{spec['model_id']}",
++                    "messages": messages,
++                    "tokens_input": tokens_input,
++                    "tokens_output": tokens_output,
++                    "tokens_total": total_tokens,
++                    "files_changed": 2 + session_counter % 9,
++                    "additions": 40 + session_counter * 5,
++                    "deletions": 8 + session_counter * 2,
++                })
++
++    models = []
++    ordered_model_ids = sorted(model_totals, key=lambda mid: model_totals[mid], reverse=True)
++    for rank, chart_model_id in enumerate(ordered_model_ids):
++        provider, model_id = chart_model_id.split("/", 1)
++        aggregate = {
++            "sessions": 0,
++            "messages": 0,
++            "tokens_input": 0,
++            "tokens_output": 0,
++            "tokens_total": 0,
++            "cache_read": 0,
++            "cache_write": 0,
++        }
++        for day in daily.values():
++            row = day.get(chart_model_id, {})
++            for key in aggregate:
++                aggregate[key] += row.get(key, 0)
++
++        info = normalize_model(json.dumps({"id": model_id, "providerID": provider}))
++        models.append({
++            "tool": "OpenCode",
++            "tool_id": "opencode",
++            "tool_color": TOOL_COLOR_MAP.get("opencode", "#64748B"),
++            "source_path": "simulated dataset",
++            "label": info["label"],
++            "provider": info["provider"],
++            "model_id": info["id"],
++            "chart_model_id": chart_model_id,
++            "rank": rank + 1,
++            "sessions": aggregate["sessions"],
++            "messages": aggregate["messages"],
++            "tokens_input": aggregate["tokens_input"],
++            "tokens_output": aggregate["tokens_output"],
++            "tokens_total": aggregate["tokens_total"],
++            "cache_read": aggregate["cache_read"],
++            "cache_write": aggregate["cache_write"],
++            "color": QUALITATIVE_COLORS[rank] if rank < len(QUALITATIVE_COLORS) else "#64748B",
++            **estimate_cost(info["provider"], info["id"], aggregate["tokens_input"], aggregate["tokens_output"], aggregate["cache_read"], aggregate["cache_write"]),
++        })
++
++    total_sessions = sum(item["sessions"] for item in models)
++    total_input = sum(item["tokens_input"] for item in models)
++    total_output = sum(item["tokens_output"] for item in models)
++    cache_read_total = sum(item["cache_read"] for item in models)
++    cache_write_total = sum(item["cache_write"] for item in models)
++
++    overview = {
++        "total_sessions": total_sessions,
++        "total_input": total_input,
++        "total_output": total_output,
++        "total_tokens": total_input + total_output,
++        "cache_read": cache_read_total,
++        "cache_write": cache_write_total,
++        "first_session": date_keys[0],
++        "last_session": date_keys[-1],
++        "days": days,
++        "active_tool": "opencode",
++        "active_tool_label": "OpenCode (simulated)",
++        "source_path": "simulated dataset",
++        "token_total_definition": "input + output assistant-message tokens; cache read/write excluded",
++        "tool_sources": [],
++    }
++
++    for source in current_tool_sources():
++        item = dict(source)
++        if item["id"] == "opencode":
++            item.update({
++                "status_label": "Simulated",
++                "source_path": "simulated dataset",
++                "sessions": total_sessions,
++                "tokens_total": overview["total_tokens"],
++                "tokens_input": total_input,
++                "tokens_output": total_output,
++                "cache_read": cache_read_total,
++                "cache_write": cache_write_total,
++            })
++        else:
++            item.update({
++                "sessions": None,
++                "tokens_total": None,
++                "tokens_input": None,
++                "tokens_output": None,
++                "cache_read": None,
++                "cache_write": None,
++            })
++        overview["tool_sources"].append(item)
++
++    history.sort(key=lambda row: row["created"], reverse=True)
++    return {
++        "overview": overview,
++        "models": models,
++        "daily": daily,
++        "dates": date_keys,
++        "history": history,
++    }
++
++
++def openrouter_model_id(provider: str, model_id: str) -> str | None:
++    """Best-effort mapping from local provider/model IDs to OpenRouter model IDs."""
++    if not model_id:
++        return None
++
++    free = model_id.endswith("-free")
++    base = model_id.removesuffix("-free")
++
++    if "/" in base:
++        return base
++    if provider == "openai":
++        return f"openai/{base}"
++    if provider == "google":
++        return f"google/{base}"
++    if base.startswith("deepseek-"):
++        suffix = ":free" if free else ""
++        return f"deepseek/{base}{suffix}"
++    if base.startswith("kimi-"):
++        return f"moonshotai/{base}"
++    if base.startswith("qwen"):
++        return f"qwen/{base}"
++    if base.startswith("minimax-"):
++        suffix = ":free" if free else ""
++        return f"minimax/{base}{suffix}"
++    if base.startswith("ling-"):
++        return f"inclusionai/{base}"
++    return None
++
++
++def openrouter_prices() -> dict:
++    """Fetch public OpenRouter per-token pricing, cached for one hour."""
++    now = time.time()
++    if PRICING_CACHE["prices"] and now - PRICING_CACHE["fetched_at"] < 3600:
++        return PRICING_CACHE["prices"]
++
++    try:
++        with urllib.request.urlopen(OPENROUTER_MODELS_URL, timeout=8) as response:
++            payload = json.load(response)
++        prices = {m.get("id"): m.get("pricing", {}) for m in payload.get("data", []) if m.get("id")}
++        PRICING_CACHE.update({"fetched_at": now, "prices": prices})
++        return prices
++    except Exception:
++        return PRICING_CACHE["prices"]
++
++
++def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output: int, cache_read: int = 0, cache_write: int = 0) -> dict:
++    """Estimate USD cost from token counts using latest fetched OpenRouter pricing."""
++    router_id = openrouter_model_id(provider, model_id)
++    fallback_pricing = HARDCODED_MODEL_PRICES.get(router_id or "", {})
++    fetched_pricing = openrouter_prices().get(router_id or "", {})
++    pricing = {**fallback_pricing, **fetched_pricing}
++
++    def price(key: str) -> float:
++        try:
++            return float(pricing.get(key) or 0)
++        except (TypeError, ValueError):
++            return 0.0
++
++    if not pricing:
++        return {
++            "estimated_cost": None,
++            "pricing_status": "unpriced",
++            "pricing_source": None,
++            "pricing_model_id": router_id,
++        }
++
++    estimated = (
++        (tokens_input or 0) * price("prompt")
++        + (tokens_output or 0) * price("completion")
++        + (cache_read or 0) * price("input_cache_read")
++        + (cache_write or 0) * price("input_cache_write")
++    )
++    return {
++        "estimated_cost": estimated,
++        "pricing_status": "priced",
++        "pricing_source": "OpenRouter /api/v1/models" if fetched_pricing else "Hardcoded pricing fallback",
++        "pricing_model_id": router_id,
++        "input_price": price("prompt"),
++        "output_price": price("completion"),
++        "cache_read_price": price("input_cache_read"),
++        "cache_write_price": price("input_cache_write"),
+     }
+-    # Exact match first
+-    if model_id in palette:
+-        return palette[model_id]
+-    # Prefix match for gemini variants
+-    if model_id.startswith("gemini-"):
+-        base = "gemini-2.5-flash"
+-        h = hash(model_id)
+-        return "#" + format(h & 0xFFFFFF, "06x")
+-    if model_id.startswith("antigravity-"):
+-        h = hash(model_id)
+-        return "#" + format(h & 0xFFFFFF, "06x")
+-    # Hash for unknowns
+-    return "#" + format(hash(model_id) & 0xFFFFFF, "06x")
+ 
+ 
+ # ── API Routes ──────────────────────────────────────────────────────────────
+@@ -118,21 +505,70 @@ def get_color(model_id: str) -> str:
+ def api_overview():
+     """Aggregate totals for a selected range; days=0/all means all time."""
+     days = parse_days(default=None)
++    if simulate_enabled():
++        return jsonify(build_simulated_dataset(days)["overview"])
+     where, params = since_clause(days)
++    msg_where = where.replace("time_created", "m.time_created")
+     conn = get_db()
+     cur = conn.execute(f"""
++        WITH session_stats AS (
++            SELECT
++                COUNT(*) as total_sessions,
++                MIN(date(time_created / 1000, 'unixepoch', 'localtime')) as first_session,
++                MAX(date(time_created / 1000, 'unixepoch', 'localtime')) as last_session
++            FROM session
++            {where}
++        ), message_stats AS (
++            SELECT
++                COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0) as total_input,
++                COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as total_output,
++                COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0) as cache_read,
++                COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0) as cache_write
++            FROM message m
++            {msg_where + " AND" if msg_where else "WHERE"}
++              json_valid(m.data)
++              AND json_extract(m.data, '$.role') = 'assistant'
++              AND json_extract(m.data, '$.modelID') IS NOT NULL
++        )
+         SELECT
+-            COUNT(*) as total_sessions,
+-            COALESCE(SUM(tokens_input), 0) as total_input,
+-            COALESCE(SUM(tokens_output), 0) as total_output,
+-            COALESCE(SUM(tokens_input), 0) + COALESCE(SUM(tokens_output), 0) as total_tokens,
+-            MIN(date(time_created / 1000, 'unixepoch', 'localtime')) as first_session,
+-            MAX(date(time_created / 1000, 'unixepoch', 'localtime')) as last_session
+-        FROM session
+-        {where}
+-    """, params)
++            session_stats.total_sessions,
++            message_stats.total_input,
++            message_stats.total_output,
++            message_stats.total_input + message_stats.total_output as total_tokens,
++            message_stats.cache_read,
++            message_stats.cache_write,
++            session_stats.first_session,
++            session_stats.last_session
++        FROM session_stats CROSS JOIN message_stats
++    """, params + params)
+     row = dict(cur.fetchone())
+     row["days"] = days
++    row["active_tool"] = "opencode"
++    row["active_tool_label"] = "OpenCode"
++    row["source_path"] = display_path(DB_PATH)
++    row["token_total_definition"] = "input + output assistant-message tokens; cache read/write excluded"
++    row["tool_sources"] = []
++    for source in current_tool_sources():
++        item = dict(source)
++        if item["id"] == "opencode":
++            item.update({
++                "sessions": row["total_sessions"],
++                "tokens_total": row["total_tokens"],
++                "tokens_input": row["total_input"],
++                "tokens_output": row["total_output"],
++                "cache_read": row["cache_read"],
++                "cache_write": row["cache_write"],
++            })
++        else:
++            item.update({
++                "sessions": None,
++                "tokens_total": None,
++                "tokens_input": None,
++                "tokens_output": None,
++                "cache_read": None,
++                "cache_write": None,
++            })
++        row["tool_sources"].append(item)
+     conn.close()
+     return jsonify(row)
+ 
+@@ -141,6 +577,8 @@ def api_overview():
+ def api_models():
+     """Session and token totals per model, attributed per assistant message."""
+     days = parse_days(default=30)
++    if simulate_enabled():
++        return jsonify(build_simulated_dataset(days)["models"])
+     where, params = since_clause(days)
+     msg_where = where.replace("time_created", "m.time_created")
+ 
+@@ -152,7 +590,9 @@ def api_models():
+             COUNT(*) as messages,
+             COUNT(DISTINCT m.session_id) as sessions,
+             COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0) as tokens_input,
+-            COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as tokens_output
++            COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as tokens_output,
++            COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0) as cache_read,
++            COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0) as cache_write
+         FROM message m
+         {msg_where + " AND" if msg_where else "WHERE"}
+           json_valid(m.data)
+@@ -163,21 +603,34 @@ def api_models():
+     """, params)
+ 
+     models = []
+-    for row in cur.fetchall():
++    for rank, row in enumerate(cur.fetchall()):
+         raw = {"id": row["model_id"], "providerID": row["provider"]}
+         import json
+         info = normalize_model(json.dumps(raw))
+         total = (row["tokens_input"] or 0) + (row["tokens_output"] or 0)
++        tokens_input = row["tokens_input"] or 0
++        tokens_output = row["tokens_output"] or 0
++        cache_read = row["cache_read"] or 0
++        cache_write = row["cache_write"] or 0
+         models.append({
++            "tool": "OpenCode",
++            "tool_id": "opencode",
++            "tool_color": TOOL_COLOR_MAP.get("opencode", "#64748B"),
++            "source_path": display_path(DB_PATH),
+             "label": info["label"],
+             "provider": info["provider"],
+             "model_id": info["id"],
++            "chart_model_id": f"{info['provider']}/{info['id']}",
++            "rank": rank + 1,
+             "sessions": row["sessions"] or 0,
+             "messages": row["messages"] or 0,
+-            "tokens_input": row["tokens_input"] or 0,
+-            "tokens_output": row["tokens_output"] or 0,
++            "tokens_input": tokens_input,
++            "tokens_output": tokens_output,
+             "tokens_total": total,
+-            "color": get_color(info["id"]),
++            "cache_read": cache_read,
++            "cache_write": cache_write,
++            "color": QUALITATIVE_COLORS[rank] if rank < len(QUALITATIVE_COLORS) else "#64748B",
++            **estimate_cost(info["provider"], info["id"], tokens_input, tokens_output, cache_read, cache_write),
+         })
+     conn.close()
+     return jsonify(models)
+@@ -187,6 +640,83 @@ def api_models():
+ def api_daily():
+     """Daily token breakdown by model, attributed per assistant message."""
+     days = parse_days(default=31)
++    top_n = parse_top_n(default=8)
++    selected_model_id = request.args.get("model_id") or None
++    if simulate_enabled():
++        simulated = build_simulated_dataset(days)
++        daily_data = simulated["daily"]
++        dates = simulated["dates"]
++        all_models_ordered = [item["chart_model_id"] for item in simulated["models"]]
++        model_map = {
++            item["chart_model_id"]: {
++                "label": item["label"],
++                "model_id": item["model_id"],
++                "provider": item["provider"],
++                "color": item["color"],
++            }
++            for item in simulated["models"]
++        }
++        model_totals = {item["chart_model_id"]: item["tokens_total"] for item in simulated["models"]}
++        active_models = [m for m in all_models_ordered if model_totals.get(m, 0) > 0]
++        top_models = [selected_model_id] if selected_model_id in active_models else active_models[:top_n]
++        other_models = [m for m in all_models_ordered if m not in top_models]
++        chart_data = {}
++        for dt in dates:
++            chart_data[dt] = {
++                mid: daily_data[dt].get(mid, {
++                    "sessions": 0,
++                    "messages": 0,
++                    "tokens_input": 0,
++                    "tokens_output": 0,
++                    "tokens_total": 0,
++                    "cache_read": 0,
++                    "cache_write": 0,
++                })
++                for mid in top_models
++            }
++            other = {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0}
++            for mid in other_models:
++                row = daily_data[dt].get(mid)
++                if not row:
++                    continue
++                for key in other:
++                    other[key] += row.get(key, 0)
++            if not selected_model_id and (other["tokens_total"] > 0 or other["sessions"] > 0):
++                chart_data[dt]["other"] = other
++
++        chart_models = []
++        for index, mid in enumerate(top_models):
++            rank = active_models.index(mid) if mid in active_models else index
++            meta = model_map[mid]
++            chart_models.append({
++                "id": mid,
++                "label": meta["label"],
++                "color": chart_color(rank, meta["model_id"], meta["provider"]),
++                "tokens_total": model_totals.get(mid, 0),
++                "rank": rank + 1,
++            })
++        if not selected_model_id and any("other" in chart_data[dt] for dt in dates):
++            chart_models.append({
++                "id": "other",
++                "label": f"Other ({len(other_models)} models)",
++                "color": "#64748B",
++                "tokens_total": sum(model_totals.get(mid, 0) for mid in other_models),
++                "rank": None,
++            })
++            for dt in dates:
++                chart_data[dt].setdefault(
++                    "other",
++                    {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0},
++                )
++
++        return jsonify({
++            "dates": dates,
++            "models": chart_models,
++            "data": chart_data,
++            "top_n": top_n,
++            "other_count": 0 if selected_model_id else len(other_models),
++            "selected_model_id": selected_model_id if selected_model_id in active_models else None,
++        })
+     where, params = since_clause(days)
+     msg_where = where.replace("time_created", "m.time_created")
+ 
+@@ -199,7 +729,9 @@ def api_daily():
+             COUNT(*) as messages,
+             COUNT(DISTINCT m.session_id) as sessions,
+             COALESCE(SUM(json_extract(m.data, '$.tokens.input')), 0) as tokens_input,
+-            COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as tokens_output
++            COALESCE(SUM(json_extract(m.data, '$.tokens.output')), 0) as tokens_output,
++            COALESCE(SUM(json_extract(m.data, '$.tokens.cache.read')), 0) as cache_read,
++            COALESCE(SUM(json_extract(m.data, '$.tokens.cache.write')), 0) as cache_write
+         FROM message m
+         {msg_where + " AND" if msg_where else "WHERE"}
+           json_valid(m.data)
+@@ -223,7 +755,12 @@ def api_daily():
+         total = (row["tokens_input"] or 0) + (row["tokens_output"] or 0)
+ 
+         if model_id not in model_map:
+-            model_map[model_id] = {"label": label, "color": get_color(info["id"])}
++            model_map[model_id] = {
++                "label": label,
++                "model_id": info["id"],
++                "provider": info["provider"],
++                "color": "#64748B",
++            }
+             all_models_ordered.append(model_id)
+ 
+         daily_data.setdefault(dt, {})
+@@ -233,6 +770,8 @@ def api_daily():
+             "tokens_input": row["tokens_input"] or 0,
+             "tokens_output": row["tokens_output"] or 0,
+             "tokens_total": total,
++            "cache_read": row["cache_read"] or 0,
++            "cache_write": row["cache_write"] or 0,
+         }
+ 
+     dates = sorted(daily_data.keys())
+@@ -244,6 +783,8 @@ def api_daily():
+                 "tokens_input": 0,
+                 "tokens_output": 0,
+                 "tokens_total": 0,
++                "cache_read": 0,
++                "cache_write": 0,
+             })
+ 
+     conn.close()
+@@ -254,9 +795,8 @@ def api_daily():
+             model_totals[mid] = model_totals.get(mid, 0) + daily_data[dt][mid]["tokens_total"]
+     all_models_ordered.sort(key=lambda m: model_totals.get(m, 0), reverse=True)
+ 
+-    top_n = 8
+     active_models = [m for m in all_models_ordered if model_totals.get(m, 0) > 0]
+-    top_models = active_models[:top_n]
++    top_models = [selected_model_id] if selected_model_id in active_models else active_models[:top_n]
+     other_models = [m for m in all_models_ordered if m not in top_models]
+ 
+     chart_data = {}
+@@ -268,10 +808,12 @@ def api_daily():
+                 "tokens_input": 0,
+                 "tokens_output": 0,
+                 "tokens_total": 0,
++                "cache_read": 0,
++                "cache_write": 0,
+             })
+             for mid in top_models
+         }
+-        other = {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0}
++        other = {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0}
+         for mid in other_models:
+             row = daily_data[dt].get(mid)
+             if not row:
+@@ -281,22 +823,44 @@ def api_daily():
+             other["tokens_input"] += row["tokens_input"]
+             other["tokens_output"] += row["tokens_output"]
+             other["tokens_total"] += row["tokens_total"]
+-        if other["tokens_total"] > 0 or other["sessions"] > 0:
++            other["cache_read"] += row.get("cache_read", 0) if isinstance(row, dict) else row["cache_read"]
++            other["cache_write"] += row.get("cache_write", 0) if isinstance(row, dict) else row["cache_write"]
++        if not selected_model_id and (other["tokens_total"] > 0 or other["sessions"] > 0):
+             chart_data[dt]["other"] = other
+ 
+-    chart_models = [
+-        {"id": mid, "label": model_map[mid]["label"], "color": model_map[mid]["color"]}
+-        for mid in top_models
+-    ]
+-    if any("other" in chart_data[dt] for dt in dates):
+-        chart_models.append({"id": "other", "label": "Other", "color": "#646262"})
++    chart_models = []
++    for index, mid in enumerate(top_models):
++        rank = active_models.index(mid) if mid in active_models else index
++        meta = model_map[mid]
++        chart_models.append({
++            "id": mid,
++            "label": meta["label"],
++            "color": chart_color(rank, meta["model_id"], meta["provider"]),
++            "tokens_total": model_totals.get(mid, 0),
++            "rank": rank + 1,
++        })
++    if not selected_model_id and any("other" in chart_data[dt] for dt in dates):
++        chart_models.append({
++            "id": "other",
++            "label": f"Other ({len(other_models)} models)",
++            "color": "#64748B",
++            "tokens_total": sum(model_totals.get(mid, 0) for mid in other_models),
++            "rank": None,
++        })
+         for dt in dates:
+             chart_data[dt].setdefault(
+                 "other",
+                 {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0},
+             )
+ 
+-    return jsonify({"dates": dates, "models": chart_models, "data": chart_data})
++    return jsonify({
++        "dates": dates,
++        "models": chart_models,
++        "data": chart_data,
++        "top_n": top_n,
++        "other_count": 0 if selected_model_id else len(other_models),
++        "selected_model_id": selected_model_id if selected_model_id in active_models else None,
++    })
+ 
+ 
+ @app.route("/api/usage-history")
+@@ -305,6 +869,12 @@ def api_usage_history():
+     limit = request.args.get("limit", "50", type=int)
+     offset = request.args.get("offset", "0", type=int)
+ 
++    if simulate_enabled():
++        history = build_simulated_dataset(31)["history"]
++        start = int(offset or 0)
++        count = int(limit or 50)
++        return jsonify(history[start: start + count])
++
+     conn = get_db()
+     cur = conn.execute("""
+         WITH session_models AS (
+@@ -345,6 +915,10 @@ def api_usage_history():
+         model_label = row["models"] or info["label"]
+         sessions.append({
+             "id": row["id"],
++            "tool": "OpenCode",
++            "tool_id": "opencode",
++            "tool_color": TOOL_COLOR_MAP.get("opencode", "#64748B"),
++            "source_path": display_path(DB_PATH),
+             "title": row["title"],
+             "created": row["created"],
+             "updated": row["updated"],
+@@ -365,6 +939,8 @@ def api_usage_history():
+ @app.route("/api/refresh")
+ def api_refresh():
+     """Return the last session timestamp so the UI can poll for updates."""
++    if simulate_enabled():
++        return jsonify({"last_updated": int(time.time() * 1000)})
+     conn = get_db()
+     cur = conn.execute(
+         "SELECT MAX(time_updated) as max_ts FROM session"
+@@ -392,6 +968,6 @@ def settings():
+ 
+ if __name__ == "__main__":
+     port = int(os.environ.get("PORT", 8321))
+-    print(f"◆ OpenCode Dashboard → http://localhost:{port}")
++    print(f"◆ Coding Agent Usage Dashboard → http://localhost:{port}")
+     print(f"◆ Database: {DB_PATH}")
+     app.run(host="0.0.0.0", port=port, debug=True)
+diff --git a/pyproject.toml b/pyproject.toml
+new file mode 100644
+index 0000000000000000000000000000000000000000..ede3707525de6ccbc04bd3160c5b9ef4b336060b
+--- /dev/null
++++ b/pyproject.toml
+@@ -0,0 +1,12 @@
++[project]
++name = "coding-agent-usage-dashboard"
++version = "0.1.0"
++description = "Local dashboard for inspecting coding-agent usage from your machine"
++readme = "README.md"
++requires-python = ">=3.12"
++dependencies = [
++  "flask>=3.0",
++]
++
++[tool.uv]
++package = false
+diff --git a/requirements.txt b/requirements.txt
+deleted file mode 100644
+index f7d47c93c154cc71c7e92967ade3a09bee6417e2..0000000000000000000000000000000000000000
+--- a/requirements.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-flask>=3.0
+\ No newline at end of file
+diff --git a/scripts/snapshot_dashboard.py b/scripts/snapshot_dashboard.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..6dbc7804c11ab0af447e63b0c581d366bf84497b
+--- /dev/null
++++ b/scripts/snapshot_dashboard.py
+@@ -0,0 +1,61 @@
++#!/usr/bin/env python3
++"""Capture a local dashboard screenshot and lightweight DOM health summary."""
++
++from __future__ import annotations
++
++import argparse
++import json
++from pathlib import Path
++from datetime import datetime, timezone
++
++from playwright.sync_api import sync_playwright
++
++
++def main() -> None:
++    parser = argparse.ArgumentParser(description="Snapshot the local coding-agent usage dashboard.")
++    parser.add_argument("--url", default="http://localhost:8321", help="Dashboard URL to inspect")
++    parser.add_argument("--out", default="dashboard-snapshots", help="Output directory")
++    parser.add_argument("--wait", default="#model-table-body td", help="Selector that confirms data rendered")
++    args = parser.parse_args()
++
++    out_dir = Path(args.out)
++    out_dir.mkdir(parents=True, exist_ok=True)
++    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
++    screenshot_path = out_dir / f"dashboard-{stamp}.png"
++    summary_path = out_dir / f"dashboard-{stamp}.json"
++
++    console_messages: list[dict[str, str]] = []
++    page_errors: list[str] = []
++
++    with sync_playwright() as p:
++        browser = p.chromium.launch()
++        page = browser.new_page(viewport={"width": 1440, "height": 1100}, device_scale_factor=1)
++        page.on("console", lambda msg: console_messages.append({"type": msg.type, "text": msg.text}))
++        page.on("pageerror", lambda err: page_errors.append(str(err)))
++
++        response = page.goto(args.url, wait_until="networkidle")
++        page.wait_for_selector(args.wait, timeout=10_000)
++        page.screenshot(path=screenshot_path, full_page=True)
++
++        summary = {
++            "url": page.url,
++            "status": response.status if response else None,
++            "title": page.title(),
++            "logo": page.locator(".logo").inner_text(timeout=5_000).strip(),
++            "overview_cards": page.locator(".stat-card").count(),
++            "legend_items": page.locator("#chart-legend .legend-item").count(),
++            "model_rows": page.locator("#model-table-body tr").count(),
++            "usage_rows": page.locator("#usage-table-body tr").count(),
++            "first_model": page.locator("#model-table-body td").first.inner_text(timeout=5_000).strip(),
++            "console_messages": console_messages,
++            "page_errors": page_errors,
++            "screenshot": str(screenshot_path),
++        }
++        summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
++        browser.close()
++
++    print(json.dumps({"screenshot": str(screenshot_path), "summary": str(summary_path), "title": summary["title"], "errors": len(page_errors)}, indent=2))
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/templates/index.html b/templates/index.html
+index fc7922d339975916382a90728874e32d48defa0a..17361879c70ec5bb9616f3c7bf221ffce9597117 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -3,24 +3,24 @@
+ <head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-<title>OpenCode Dashboard</title>
++<title>Coding Agent Usage Dashboard</title>
+ <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+ <script src="/static/color-modes.js"></script>
+ <style>
+   :root {
+-    --bg-primary: #201d1d;
+-    --bg-secondary: #282424;
+-    --bg-tertiary: #302c2c;
+-    --bg-card: #242121;
+-    --border: #464141;
+-    --text-primary: #fdfcfc;
+-    --text-secondary: #b8b3b3;
+-    --text-tertiary: #7d7777;
+-    --accent: #007aff;
+-    --accent-hover: #3395ff;
+-    --green: #30d158;
+-    --orange: #ff9f0a;
+-    --red: #ff3b30;
++    --bg-primary: #08090a;
++    --bg-secondary: #111315;
++    --bg-tertiary: #1a1d20;
++    --bg-card: #0d0f11;
++    --border: #272b30;
++    --text-primary: #f4f4f5;
++    --text-secondary: #a1a1aa;
++    --text-tertiary: #71717a;
++    --accent: #38bdf8;
++    --accent-hover: #7dd3fc;
++    --green: #34d399;
++    --orange: #f59e0b;
++    --red: #f87171;
+     --radius: 4px;
+     --font-sans: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+     --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+@@ -157,9 +157,150 @@
+     padding: 18px 20px;
+     min-height: 132px;
+   }
+-  .stat-card .label { font-size: 12px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
++  .stat-card .label { font-size: 13px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+   .stat-card .value { font-size: clamp(24px, 2vw, 34px); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -1px; }
+-  .stat-card .sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; font-family: var(--font-mono); }
++  .stat-card .sub {
++    display: flex;
++    align-items: center;
++    gap: 8px;
++    min-height: 24px;
++    margin-top: 6px;
++    color: var(--text-secondary);
++    font-family: var(--font-mono);
++    font-size: 13px;
++    line-height: 1.45;
++  }
++  .stat-card .meta-main { min-width: 0; overflow-wrap: anywhere; }
++  .stat-card .meta-info-wrap {
++    position: relative;
++    display: inline-flex;
++    align-items: center;
++    flex: 0 0 auto;
++  }
++  .stat-card .meta-info {
++    display: inline-flex;
++    align-items: center;
++    justify-content: center;
++    width: 18px;
++    height: 18px;
++    flex: 0 0 18px;
++    border: 1px solid var(--border);
++    border-radius: 999px;
++    color: var(--text-tertiary);
++    background: var(--bg-secondary);
++    font-family: var(--font-mono);
++    font-size: 11px;
++    cursor: pointer;
++    padding: 0;
++  }
++  .stat-card .meta-info:hover,
++  .stat-card .meta-info:focus-visible,
++  .stat-card .meta-info-wrap.is-open .meta-info {
++    outline: none;
++    color: var(--text-primary);
++    border-color: var(--accent);
++    box-shadow: 0 0 0 2px rgb(33 150 243 / 0.18);
++  }
++  .stat-card .meta-tooltip {
++    position: absolute;
++    left: 50%;
++    bottom: calc(100% + 10px);
++    transform: translateX(-50%) translateY(4px);
++    width: min(280px, calc(100vw - 48px));
++    padding: 10px 12px;
++    border: 1px solid var(--border);
++    border-radius: 8px;
++    background: var(--bg-tertiary);
++    color: var(--text-primary);
++    font-family: var(--font-mono);
++    font-size: 12px;
++    line-height: 1.5;
++    box-shadow: 0 12px 30px rgb(0 0 0 / 0.35);
++    opacity: 0;
++    visibility: hidden;
++    pointer-events: none;
++    transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
++    z-index: 20;
++  }
++  .stat-card .meta-tooltip::after {
++    content: '';
++    position: absolute;
++    left: 50%;
++    top: 100%;
++    transform: translateX(-50%);
++    border-width: 6px;
++    border-style: solid;
++    border-color: var(--bg-tertiary) transparent transparent transparent;
++  }
++  .stat-card .meta-info-wrap:hover .meta-tooltip,
++  .stat-card .meta-info-wrap:focus-within .meta-tooltip,
++  .stat-card .meta-info-wrap.is-open .meta-tooltip {
++    opacity: 1;
++    visibility: visible;
++    transform: translateX(-50%) translateY(0);
++  }
++  @media (max-width: 720px) {
++    .stat-card .meta-tooltip {
++      left: auto;
++      right: -8px;
++      transform: translateY(4px);
++      width: min(240px, calc(100vw - 32px));
++    }
++    .stat-card .meta-tooltip::after {
++      left: auto;
++      right: 12px;
++      transform: none;
++    }
++    .stat-card .meta-info-wrap:hover .meta-tooltip,
++    .stat-card .meta-info-wrap:focus-within .meta-tooltip,
++    .stat-card .meta-info-wrap.is-open .meta-tooltip {
++      transform: translateY(0);
++    }
++  }
++
++  .tool-section {
++    margin: -12px 0 32px;
++  }
++  .tool-section h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
++  .tool-section .subtitle { font-family: var(--font-mono); font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
++  .tool-source-grid {
++    display: grid;
++    grid-template-columns: repeat(3, minmax(180px, 1fr));
++    gap: 12px;
++  }
++  .tool-source-card {
++    background: var(--bg-card);
++    border: 1px solid var(--border);
++    border-radius: var(--radius);
++    padding: 14px 16px;
++    min-height: 118px;
++  }
++  .tool-source-card.placeholder {
++    border-style: dashed;
++    opacity: 0.78;
++  }
++  .tool-source-head {
++    display: flex;
++    justify-content: space-between;
++    gap: 10px;
++    align-items: baseline;
++    margin-bottom: 8px;
++  }
++  .tool-source-name { font-weight: 600; }
++  .tool-source-status { font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.4px; }
++  .tool-source-value { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
++  .tool-source-meta { margin-top: 6px; color: var(--text-secondary); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; }
++  .tool-pill {
++    display: inline-flex;
++    align-items: center;
++    border: 1px solid var(--border);
++    border-radius: 999px;
++    padding: 2px 8px;
++    color: var(--text-secondary);
++    font-family: var(--font-mono);
++    font-size: 12px;
++    white-space: nowrap;
++  }
+ 
+   /* Chart */
+   .chart-container {
+@@ -169,17 +310,73 @@
+     padding: 22px 24px 18px;
+     margin-bottom: 40px;
+   }
+-  .chart-container h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
++  .chart-header {
++    display: flex;
++    align-items: flex-start;
++    justify-content: space-between;
++    gap: 16px;
++    margin-bottom: 16px;
++  }
++  .chart-container h2 { font-size: 16px; font-weight: 600; margin-bottom: 3px; }
++  .chart-note { color: var(--text-tertiary); font-size: 12px; }
++  .chart-controls {
++    display: flex;
++    align-items: center;
++    gap: 8px;
++    color: var(--text-tertiary);
++    font-size: 12px;
++    white-space: nowrap;
++  }
++  .chart-controls select { min-width: 92px; padding: 6px 28px 6px 10px; font-size: 12px; }
++  .chart-filter-bar {
++    display: none;
++    align-items: center;
++    justify-content: space-between;
++    gap: 12px;
++    margin: -4px 0 16px;
++    padding: 9px 12px;
++    border: 1px solid var(--accent);
++    border-radius: var(--radius);
++    background: rgb(33 150 243 / 0.08);
++    color: var(--text-secondary);
++    font-family: var(--font-mono);
++    font-size: 12px;
++  }
++  .chart-filter-bar.active { display: flex; }
++  .chart-filter-model { color: var(--text-primary); font-weight: 600; }
++  .chart-filter-clear {
++    border: 1px solid var(--border);
++    border-radius: 999px;
++    background: var(--bg-secondary);
++    color: var(--text-secondary);
++    cursor: pointer;
++    font: inherit;
++    padding: 4px 10px;
++    transition: color 0.12s, border-color 0.12s, background-color 0.12s;
++  }
++  .chart-filter-clear:hover,
++  .chart-filter-clear:focus-visible {
++    outline: none;
++    color: var(--text-primary);
++    border-color: var(--accent);
++    background: var(--bg-tertiary);
++  }
++  .chart-layout {
++    display: grid;
++    grid-template-columns: minmax(0, 1fr) 260px;
++    gap: 20px;
++    align-items: stretch;
++  }
++  .chart-plot { position: relative; height: 360px; min-width: 0; }
+ 
+   /* Legend */
+   .chart-legend {
+     display: flex;
+-    flex-wrap: wrap;
+-    gap: 8px;
+-    margin-top: 14px;
+-    padding-top: 14px;
+-    border-top: 1px solid var(--border);
+-    max-height: 116px;
++    flex-direction: column;
++    gap: 7px;
++    padding-left: 18px;
++    border-left: 1px solid var(--border);
++    max-height: 360px;
+     overflow: auto;
+   }
+   .legend-item {
+@@ -194,6 +391,29 @@
+     border-radius: var(--radius);
+     background: var(--bg-secondary);
+     white-space: nowrap;
++    cursor: pointer;
++    transition: opacity 0.12s, border-color 0.12s, background 0.12s;
++    appearance: none;
++    text-align: left;
++  }
++  .legend-item:hover { border-color: var(--accent); background: var(--bg-tertiary); }
++  .legend-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
++  .legend-item.muted { opacity: 0.35; }
++  .legend-item.disabled { opacity: 0.42; text-decoration: line-through; }
++  .legend-name { overflow: hidden; text-overflow: ellipsis; }
++
++  @media (max-width: 1040px) {
++    .chart-layout { display: block; }
++    .chart-legend {
++      flex-direction: row;
++      flex-wrap: wrap;
++      margin-top: 14px;
++      padding-left: 0;
++      padding-top: 14px;
++      border-left: 0;
++      border-top: 1px solid var(--border);
++      max-height: 116px;
++    }
+   }
+   .legend-dot {
+     width: 10px;
+@@ -201,6 +421,9 @@
+     border-radius: 2px;
+     flex-shrink: 0;
+   }
++  .legend-item.other { color: var(--text-tertiary); }
++  .legend-item.other .legend-dot { opacity: 0.72; }
++  .legend-share { color: var(--text-tertiary); margin-left: 2px; }
+ 
+   /* Table */
+   .table-section { margin-top: 12px; }
+@@ -230,9 +453,39 @@
+     font-variant-numeric: tabular-nums;
+   }
+   .data-table tr:hover td { background: var(--bg-tertiary); }
++  .data-table tr.model-filter-row.active td {
++    background: rgb(33 150 243 / 0.1);
++    border-bottom-color: rgb(33 150 243 / 0.35);
++  }
+   .data-table .model-cell { font-family: var(--font-mono); font-size: 12px; color: var(--text-primary); }
+   .data-table .num { text-align: right; font-family: var(--font-mono); }
+   .data-table .token-cell { color: var(--accent); font-weight: 600; }
++  .chart-focus-button {
++    margin-left: 10px;
++    border: 1px solid var(--border);
++    border-radius: 999px;
++    background: transparent;
++    color: var(--text-secondary);
++    font-family: var(--font-mono);
++    font-size: 11px;
++    padding: 3px 8px;
++    cursor: pointer;
++    transition: border-color 0.12s, color 0.12s, background 0.12s;
++  }
++  .chart-focus-button:hover {
++    border-color: var(--accent);
++    color: var(--text-primary);
++    background: var(--bg-tertiary);
++  }
++  .chart-focus-button[aria-pressed="true"] {
++    border-color: var(--accent);
++    color: var(--text-primary);
++    background: rgb(33 150 243 / 0.12);
++  }
++  .chart-focus-button:focus-visible {
++    outline: 2px solid var(--accent);
++    outline-offset: 2px;
++  }
+ 
+   .model-badge {
+     display: inline-block;
+@@ -352,14 +605,16 @@
+ 
+   /* Responsive */
+   @media (max-width: 1280px) {
+-    .stat-cards { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
++    .stat-cards { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
++    .tool-source-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+   }
+ 
+   @media (max-width: 800px) {
+     .app-layout { display: block; }
+     .sidebar { display: none; }
+     .main-area { padding: 24px 16px; }
+-    .stat-cards { grid-template-columns: 1fr; }
++    .stat-cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
++    .tool-source-grid { grid-template-columns: 1fr; }
+   }
+ </style>
+ </head>
+@@ -368,7 +623,7 @@
+ <div class="app-layout">
+   <!-- Sidebar -->
+   <aside class="sidebar">
+-    <div class="logo">opencode <span>dashboard</span></div>
++    <div class="logo">coding agent <span>usage</span></div>
+     <a href="#cost" class="nav-item active" data-nav="cost">☤ Overview</a>
+     <a href="#models" class="nav-item" data-nav="models">◇ Models</a>
+     <a href="#usage" class="nav-item" data-nav="usage">◆ Usage</a>
+@@ -379,7 +634,7 @@
+   <main class="main-area">
+     <section id="cost" class="page-header">
+       <h1>Overview</h1>
+-      <div class="subtitle">Sessions and tokens broken down by model.</div>
++      <div class="subtitle">Sessions and tokens broken down by model. Cache is shown as secondary context.</div>
+     </section>
+ 
+     <!-- Pill tabs -->
+@@ -416,33 +671,66 @@
+         <div class="value" id="total-output">—</div>
+         <div class="sub" id="output-sub"></div>
+       </div>
++      <div class="stat-card">
++        <div class="label">Est. Cost</div>
++        <div class="value" id="estimated-cost">—</div>
++        <div class="sub" id="estimated-cost-sub">OpenRouter pricing when matched</div>
++      </div>
+     </div>
+ 
++    <section class="tool-section" aria-labelledby="tool-sources-heading">
++      <h2 id="tool-sources-heading">Tool Sources</h2>
++      <div class="subtitle" id="tool-sources-subtitle">Active source and planned tool adapters.</div>
++      <div class="tool-source-grid" id="tool-source-grid"></div>
++    </section>
++
+     <!-- Chart -->
+     <div class="chart-container">
+-      <h2>Daily Tokens by Model</h2>
+-      <div style="position:relative;height:360px;">
+-        <canvas id="usage-chart"></canvas>
++      <div class="chart-header">
++        <div>
++          <h2>Daily Tokens by Model</h2>
++          <div class="chart-note" id="chart-note">Position-based categorical colors · top models by token volume · long tail grouped as Other</div>
++        </div>
++        <label class="chart-controls">
++          Show
++          <select id="top-n-select" aria-label="Number of models shown in chart">
++            <option value="5">Top 5</option>
++            <option value="6">Top 6</option>
++            <option value="8" selected>Top 8</option>
++          </select>
++        </label>
++      </div>
++      <div class="chart-filter-bar" id="chart-filter-bar" aria-live="polite">
++        <span>Chart focused on <span class="chart-filter-model" id="chart-filter-model">one model</span></span>
++        <button class="chart-filter-clear" id="clear-chart-filter" type="button">Clear filter</button>
++      </div>
++      <div class="chart-layout">
++        <div class="chart-plot">
++          <canvas id="usage-chart"></canvas>
++        </div>
++        <div class="chart-legend" id="chart-legend"></div>
+       </div>
+-      <div class="chart-legend" id="chart-legend"></div>
+     </div>
+ 
+     <!-- Model breakdown table -->
+     <section class="table-section" id="models">
+       <h2>Model Breakdown</h2>
+-      <div class="subtitle">Sessions and tokens broken down by model.</div>
++      <div class="subtitle">Sessions, tokens, and estimated cost by model. Cost uses latest matched OpenRouter pricing and is approximate.</div>
+       <table class="data-table">
+         <thead>
+           <tr>
++            <th>Tool</th>
+             <th>Model</th>
+             <th class="num">Sessions</th>
+             <th class="num">Total Tokens</th>
+             <th class="num">Input</th>
+             <th class="num">Output</th>
++            <th class="num">Cache Read</th>
++            <th class="num">Est. Cost</th>
+           </tr>
+         </thead>
+         <tbody id="model-table-body">
+-          <tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
++          <tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
+         </tbody>
+       </table>
+     </section>
+@@ -450,10 +738,11 @@
+     <!-- Usage History -->
+     <section class="table-section" id="usage" style="margin-top:40px;">
+       <h2>Usage History</h2>
+-      <div class="subtitle">Recent OpenCode sessions and token usage.</div>
++      <div class="subtitle">Recent coding-agent sessions and token usage. OpenCode is the active source.</div>
+       <table class="data-table">
+         <thead>
+           <tr>
++            <th>Tool</th>
+             <th>Date</th>
+             <th>Model</th>
+             <th>Title</th>
+@@ -463,13 +752,13 @@
+           </tr>
+         </thead>
+         <tbody id="history-table-body">
+-          <tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
++          <tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:40px;">Loading...</td></tr>
+         </tbody>
+       </table>
+     </section>
+ 
+     <div class="footer">
+-      ◇ <span id="db-path-display">~/.local/share/opencode/opencode.db</span>
++      ◇ active source: <span id="db-path-display">OpenCode · ~/.local/share/opencode/opencode.db</span>
+       ☤ last updated: <span id="last-updated">—</span>
+     </div>
+   </main>
+@@ -478,6 +767,10 @@
+ <script>
+ // ── State ──────────────────────────────────────────────────────────────────
+ let usageChart = null;
++let currentTopN = 8;
++let selectedChartModelId = null;
++let selectedChartModelLabel = null;
++const hiddenChartModels = new Set();
+ const FORMATTER = new Intl.NumberFormat('en-US');
+ function fmtNum(n) { return FORMATTER.format(n); }
+ 
+@@ -488,13 +781,176 @@ function fmtTokens(n) {
+   return String(n);
+ }
+ 
++function fmtCost(n) {
++  if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
++  if (n === 0) return '$0.00';
++  if (Math.abs(n) < 0.01) return `$${Number(n).toFixed(4)}`;
++  return `$${Number(n).toFixed(2)}`;
++}
++
++function escapeHtml(value) {
++  return String(value ?? '').replace(/[&<>"]/g, char => ({
++    '&': '&amp;',
++    '<': '&lt;',
++    '>': '&gt;',
++    '"': '&quot;',
++  }[char]));
++}
++
++function sanitizeColor(value, fallback = '#64748B') {
++  const raw = String(value ?? '').trim();
++  return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(raw) ? raw : fallback;
++}
++
++function clearNode(node) {
++  node.replaceChildren();
++}
++
++function makeTableEmptyState(tbody, colspan, message) {
++  clearNode(tbody);
++  const row = document.createElement('tr');
++  const cell = document.createElement('td');
++  cell.colSpan = colspan;
++  cell.style.textAlign = 'center';
++  cell.style.color = 'var(--text-tertiary)';
++  cell.style.padding = '40px';
++  cell.textContent = message;
++  row.appendChild(cell);
++  tbody.appendChild(row);
++}
++
++function createToolPill({ tool, toolColor, sourcePath }) {
++  const pill = document.createElement('span');
++  pill.className = 'tool-pill';
++  pill.style.borderColor = sanitizeColor(toolColor, '#64748B');
++  pill.style.color = sanitizeColor(toolColor, '#9aa0a6');
++  pill.title = String(sourcePath || '');
++  pill.textContent = tool || 'OpenCode';
++  return pill;
++}
++
++function createLegendDot(color) {
++  const dot = document.createElement('span');
++  dot.className = 'legend-dot';
++  dot.style.background = sanitizeColor(color, '#64748B');
++  return dot;
++}
++
++function setCardMeta(id, visible, detail = '') {
++  const el = document.getElementById(id);
++  if (!el) return;
++  const detailText = String(detail || '');
++  const tooltipId = `${id}-tooltip`;
++  el.innerHTML = `
++    <span class="meta-main">${escapeHtml(visible)}</span>
++    ${detailText ? `
++      <span class="meta-info-wrap">
++        <button
++          type="button"
++          class="meta-info"
++          aria-label="More information"
++          aria-expanded="false"
++          aria-describedby="${escapeHtml(tooltipId)}"
++        >i</button>
++        <span class="meta-tooltip" id="${escapeHtml(tooltipId)}" role="tooltip">${escapeHtml(detailText)}</span>
++      </span>
++    ` : ''}
++  `;
++  bindMetaInfoInteractions(el);
++}
++
++function closeMetaInfo(exceptWrap = null) {
++  document.querySelectorAll('.meta-info-wrap.is-open').forEach(wrap => {
++    if (wrap === exceptWrap) return;
++    wrap.classList.remove('is-open');
++    wrap.querySelector('.meta-info')?.setAttribute('aria-expanded', 'false');
++  });
++}
++
++function bindMetaInfoInteractions(root = document) {
++  root.querySelectorAll('.meta-info-wrap .meta-info').forEach(button => {
++    if (button.dataset.bound === 'true') return;
++    button.dataset.bound = 'true';
++
++    button.addEventListener('click', event => {
++      event.preventDefault();
++      event.stopPropagation();
++      const wrap = button.closest('.meta-info-wrap');
++      const willOpen = !wrap.classList.contains('is-open');
++      closeMetaInfo(wrap);
++      wrap.classList.toggle('is-open', willOpen);
++      button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
++    });
++
++    button.addEventListener('keydown', event => {
++      if (event.key === 'Escape') {
++        const wrap = button.closest('.meta-info-wrap');
++        wrap?.classList.remove('is-open');
++        button.setAttribute('aria-expanded', 'false');
++        button.blur();
++      }
++    });
++  });
++}
++
++function renderToolSources(sources = []) {
++  const grid = document.getElementById('tool-source-grid');
++  if (!grid) return;
++  clearNode(grid);
++
++  sources.forEach(source => {
++    const active = source.status === 'active';
++    const value = active && source.tokens_total !== null ? fmtTokens(source.tokens_total || 0) : '—';
++    const color = sanitizeColor(source.color, '#64748B');
++
++    const card = document.createElement('article');
++    card.className = `tool-source-card ${active ? 'active' : 'placeholder'}`;
++    if (active) {
++      card.style.borderColor = color;
++      card.style.borderLeft = `3px solid ${color}`;
++      card.style.paddingLeft = '13px';
++    }
++
++    const head = document.createElement('div');
++    head.className = 'tool-source-head';
++
++    const name = document.createElement('span');
++    name.className = 'tool-source-name';
++    name.style.color = color;
++    name.textContent = source.label || 'Unknown';
++
++    const status = document.createElement('span');
++    status.className = 'tool-source-status';
++    status.textContent = source.status_label || '';
++
++    const valueEl = document.createElement('div');
++    valueEl.className = 'tool-source-value';
++    valueEl.textContent = value;
++
++    const meta = document.createElement('div');
++    meta.className = 'tool-source-meta';
++    meta.textContent = active ? String(source.source_path || '') : String(source.source_path || '');
++
++    head.append(name, status);
++    card.append(head, valueEl, meta);
++    grid.appendChild(card);
++  });
++}
++
+ // ── Range tabs ──────────────────────────────────────────────────────────────
+ let currentDays = 30;
++const pageSearch = new URLSearchParams(window.location.search);
+ 
+ function rangeParam() {
+   return currentDays === 0 ? 'all' : String(currentDays);
+ }
+ 
++function simulateQuerySuffix() {
++  return pageSearch.get('simulate') === '1' || pageSearch.get('demo') === '1'
++    ? '&simulate=1'
++    : '';
++}
++
+ document.querySelectorAll('#range-tabs .pill').forEach(btn => {
+   btn.addEventListener('click', () => {
+     document.querySelectorAll('#range-tabs .pill').forEach(b => b.classList.remove('active'));
+@@ -518,6 +974,16 @@ document.getElementById('custom-days').addEventListener('keydown', (event) => {
+   if (event.key === 'Enter') document.getElementById('apply-custom-days').click();
+ });
+ 
++document.getElementById('top-n-select').addEventListener('change', (event) => {
++  currentTopN = parseInt(event.target.value || '8');
++  hiddenChartModels.clear();
++  loadDaily(currentDays);
++});
++
++document.getElementById('clear-chart-filter').addEventListener('click', () => {
++  clearChartModelFilter();
++});
++
+ // ── Load everything ─────────────────────────────────────────────────────────
+ async function loadAll() {
+   await Promise.all([loadOverview(currentDays), loadModels(currentDays), loadDaily(currentDays), loadHistory()]);
+@@ -525,7 +991,7 @@ async function loadAll() {
+ 
+ async function loadOverview(days) {
+   try {
+-    const r = await fetch(`/api/overview?days=${rangeParam()}`);
++    const r = await fetch(`/api/overview?days=${rangeParam()}${simulateQuerySuffix()}`);
+     const d = await r.json();
+ 
+     document.getElementById('total-sessions').textContent = fmtNum(d.total_sessions);
+@@ -533,10 +999,33 @@ async function loadOverview(days) {
+     document.getElementById('total-input').textContent = fmtTokens(d.total_input);
+     document.getElementById('total-output').textContent = fmtTokens(d.total_output);
+ 
+-    document.getElementById('sessions-sub').textContent = `${d.first_session || '—'} → ${d.last_session || '—'}`;
+-    document.getElementById('tokens-sub').textContent = `${fmtTokens(d.total_tokens / Math.max(d.total_sessions, 1))} avg/session`;
+-    document.getElementById('input-sub').textContent = `${fmtTokens(d.total_input / Math.max(d.total_sessions, 1))} avg/session`;
+-    document.getElementById('output-sub').textContent = `${fmtTokens(d.total_output / Math.max(d.total_sessions, 1))} avg/session`;
++    const sourceLabel = d.active_tool_label || 'OpenCode';
++    const sourcePath = d.source_path || '~/.local/share/opencode/opencode.db';
++    const totalAvg = fmtTokens(d.total_tokens / Math.max(d.total_sessions, 1));
++    const inputAvg = fmtTokens(d.total_input / Math.max(d.total_sessions, 1));
++    const outputAvg = fmtTokens(d.total_output / Math.max(d.total_sessions, 1));
++    setCardMeta(
++      'sessions-sub',
++      `${d.first_session || '—'} → ${d.last_session || '—'}`,
++      `Source: ${sourceLabel}. Path: ${sourcePath}`,
++    );
++    setCardMeta(
++      'tokens-sub',
++      `${totalAvg} avg/session`,
++      `${d.token_total_definition || 'Total tokens are input + output.'} Source: ${sourceLabel} only. Cache read/write is shown as secondary context, not included in total tokens.`,
++    );
++    setCardMeta(
++      'input-sub',
++      `${inputAvg} avg/session`,
++      `${fmtTokens(d.cache_read || 0)} cache read. Reused context is shown separately from input tokens.`,
++    );
++    setCardMeta(
++      'output-sub',
++      `${outputAvg} avg/session`,
++      `${fmtTokens(d.cache_write || 0)} cache write. Cache created is shown separately from output tokens.`,
++    );
++    document.getElementById('tool-sources-subtitle').textContent = `Totals currently come from ${sourceLabel} (${sourcePath}). ${d.token_total_definition || 'Total tokens are input + output.'}`;
++    renderToolSources(d.tool_sources || []);
+   } catch(e) {
+     console.error('overview', e);
+   }
+@@ -544,27 +1033,90 @@ async function loadOverview(days) {
+ 
+ async function loadModels(days) {
+   try {
+-    const r = await fetch(`/api/models?days=${rangeParam()}`);
++    const r = await fetch(`/api/models?days=${rangeParam()}${simulateQuerySuffix()}`);
+     const models = await r.json();
+ 
+     const tbody = document.getElementById('model-table-body');
+     if (!models.length) {
+-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:40px;">No data</td></tr>';
++      makeTableEmptyState(tbody, 8, 'No data');
+       return;
+     }
+ 
+-    tbody.innerHTML = models.map(m => `
+-      <tr>
+-        <td class="model-cell">
+-          <span class="legend-dot" style="background:${m.color};display:inline-block;vertical-align:middle;margin-right:6px;"></span>
+-          ${m.label}
+-        </td>
+-        <td class="num">${fmtNum(m.sessions)}</td>
+-        <td class="num">${fmtTokens(m.tokens_total)}</td>
+-        <td class="num">${fmtTokens(m.tokens_input)}</td>
+-        <td class="num">${fmtTokens(m.tokens_output)}</td>
+-      </tr>
+-    `).join('');
++    const priced = models.filter(m => m.estimated_cost !== null && m.estimated_cost !== undefined);
++    const estimatedTotal = priced.reduce((sum, m) => sum + (m.estimated_cost || 0), 0);
++    const unpricedCount = models.length - priced.length;
++    document.getElementById('estimated-cost').textContent = priced.length ? fmtCost(estimatedTotal) : '—';
++    setCardMeta(
++      'estimated-cost-sub',
++      priced.length ? `${priced.length}/${models.length} priced` : 'No matched pricing',
++      priced.length
++        ? `${unpricedCount} unmatched models. Cost uses live OpenRouter pricing first, then hardcoded fallback pricing for known OpenAI and opencode/go models.`
++        : 'No OpenRouter or hardcoded pricing matched the active models.',
++    );
++
++    clearNode(tbody);
++    models.forEach(m => {
++      const row = document.createElement('tr');
++      row.className = 'model-filter-row';
++      row.dataset.chartModelId = m.chart_model_id || '';
++      row.dataset.chartModelLabel = m.label || '';
++      row.classList.toggle('active', selectedChartModelId === m.chart_model_id);
++
++      const toolCell = document.createElement('td');
++      toolCell.appendChild(createToolPill({
++        tool: m.tool,
++        toolColor: m.tool_color,
++        sourcePath: m.source_path,
++      }));
++
++      const modelCell = document.createElement('td');
++      modelCell.className = 'model-cell';
++      modelCell.appendChild(createLegendDot(m.color));
++      modelCell.append(document.createTextNode(` ${m.rank}. ${m.label}`));
++
++      const focusButton = document.createElement('button');
++      focusButton.type = 'button';
++      focusButton.className = 'chart-focus-button';
++      focusButton.dataset.chartModelId = m.chart_model_id || '';
++      focusButton.dataset.chartModelLabel = m.label || '';
++      focusButton.setAttribute('aria-label', `Focus chart on ${m.label || 'selected model'}`);
++      focusButton.setAttribute('aria-pressed', selectedChartModelId === m.chart_model_id ? 'true' : 'false');
++      focusButton.textContent = selectedChartModelId === m.chart_model_id ? 'Clear focus' : 'Focus chart';
++      modelCell.appendChild(focusButton);
++
++      const sessionsCell = document.createElement('td');
++      sessionsCell.className = 'num';
++      sessionsCell.textContent = fmtNum(m.sessions);
++
++      const totalCell = document.createElement('td');
++      totalCell.className = 'num';
++      totalCell.textContent = fmtTokens(m.tokens_total);
++
++      const inputCell = document.createElement('td');
++      inputCell.className = 'num';
++      inputCell.textContent = fmtTokens(m.tokens_input);
++
++      const outputCell = document.createElement('td');
++      outputCell.className = 'num';
++      outputCell.textContent = fmtTokens(m.tokens_output);
++
++      const cacheCell = document.createElement('td');
++      cacheCell.className = 'num';
++      cacheCell.title = `Cache write: ${fmtTokens(m.cache_write || 0)}`;
++      cacheCell.textContent = fmtTokens(m.cache_read || 0);
++
++      const costCell = document.createElement('td');
++      costCell.className = 'num';
++      costCell.title = m.pricing_status === 'priced'
++        ? `${m.pricing_source}: ${m.pricing_model_id}`
++        : `No matched pricing for ${m.pricing_model_id || m.model_id}`;
++      costCell.textContent = fmtCost(m.estimated_cost);
++
++      row.append(toolCell, modelCell, sessionsCell, totalCell, inputCell, outputCell, cacheCell, costCell);
++      tbody.appendChild(row);
++    });
++    bindModelFilterButtons(tbody);
++    updateChartFilterUi();
+   } catch(e) {
+     console.error('models', e);
+   }
+@@ -572,16 +1124,75 @@ async function loadModels(days) {
+ 
+ async function loadDaily(days) {
+   try {
+-    const r = await fetch(`/api/daily?days=${rangeParam()}`);
++    const selectedParam = selectedChartModelId ? `&model_id=${encodeURIComponent(selectedChartModelId)}` : '';
++    const r = await fetch(`/api/daily?days=${rangeParam()}&top_n=${currentTopN}${selectedParam}${simulateQuerySuffix()}`);
+     const data = await r.json();
+ 
++    syncChartModelSelection(data);
+     renderChart(data);
+     renderLegend(data.models);
++    updateChartFilterUi();
++    document.getElementById('chart-note').textContent = selectedChartModelId
++      ? 'Single-model focus · click Clear filter to restore Top N view'
++      : `Position-based colors · top ${data.top_n} models by token volume · ${data.other_count || 0} long-tail models grouped as Other`;
+   } catch(e) {
+     console.error('daily', e);
+   }
+ }
+ 
++function updateChartFilterUi() {
++  const bar = document.getElementById('chart-filter-bar');
++  const label = document.getElementById('chart-filter-model');
++  if (!bar || !label) return;
++  bar.classList.toggle('active', Boolean(selectedChartModelId));
++  label.textContent = selectedChartModelLabel || 'selected model';
++  document.querySelectorAll('.model-filter-row').forEach(row => {
++    const active = row.dataset.chartModelId === selectedChartModelId;
++    row.classList.toggle('active', active);
++    const button = row.querySelector('.chart-focus-button');
++    if (!button) return;
++    button.setAttribute('aria-pressed', active ? 'true' : 'false');
++    button.textContent = active ? 'Clear focus' : 'Focus chart';
++  });
++}
++
++function syncChartModelSelection(data) {
++  if (!data?.selected_model_id) {
++    selectedChartModelId = null;
++    selectedChartModelLabel = null;
++    return;
++  }
++  selectedChartModelId = data.selected_model_id;
++  const selectedMeta = (data.models || []).find(model => model.id === data.selected_model_id);
++  selectedChartModelLabel = selectedMeta?.label || selectedChartModelLabel || data.selected_model_id;
++}
++
++function setChartModelFilter(modelId, label) {
++  const sameModel = selectedChartModelId === modelId;
++  selectedChartModelId = sameModel ? null : modelId;
++  selectedChartModelLabel = sameModel ? null : label;
++  hiddenChartModels.clear();
++  loadDaily(currentDays);
++  updateChartFilterUi();
++}
++
++function clearChartModelFilter() {
++  selectedChartModelId = null;
++  selectedChartModelLabel = null;
++  hiddenChartModels.clear();
++  loadDaily(currentDays);
++  updateChartFilterUi();
++}
++
++function bindModelFilterButtons(root) {
++  root.querySelectorAll('.chart-focus-button').forEach(button => {
++    button.addEventListener('click', event => {
++      event.preventDefault();
++      setChartModelFilter(button.dataset.chartModelId, button.dataset.chartModelLabel);
++    });
++  });
++}
++
+ function renderChart(data) {
+   const ctx = document.getElementById('usage-chart').getContext('2d');
+ 
+@@ -589,20 +1200,22 @@ function renderChart(data) {
+ 
+   const datasets = data.models.map(m => ({
+     label: m.label,
++    modelId: m.id,
+     data: data.dates.map(dt => (data.data[dt]?.[m.id]?.tokens_total ?? 0)),
+     backgroundColor: m.color,
+     borderColor: m.color,
+-    borderWidth: 0,
++    borderWidth: m.id === 'other' ? 1 : 0,
+     borderRadius: 0,
+     hoverBackgroundColor: m.color,
+     pointRadius: 0,
+     tension: 0,
++    hidden: hiddenChartModels.has(m.id),
+   }));
+ 
+   usageChart = new Chart(ctx, {
+     type: 'bar',
+     data: {
+-      labels: data.dates.map((d, i) => i % 3 === 0 ? d : ''),
++      labels: data.dates,
+       datasets,
+     },
+     options: {
+@@ -617,6 +1230,9 @@ function renderChart(data) {
+             color: '#5f6368',
+             font: { family: "'JetBrains Mono', monospace", size: 11 },
+             maxRotation: 0,
++            callback: function(value, index) {
++              return index % 3 === 0 ? this.getLabelForValue(value) : '';
++            },
+           },
+           border: { display: false },
+         },
+@@ -658,37 +1274,117 @@ function renderChart(data) {
+   });
+ }
+ 
++function setLegendHover(modelId) {
++  if (!usageChart) return;
++  usageChart.data.datasets.forEach(ds => {
++    const active = !modelId || ds.modelId === modelId;
++    ds.backgroundColor = active ? ds.borderColor : `${ds.borderColor}55`;
++  });
++  usageChart.update('none');
++  document.querySelectorAll('.legend-item').forEach(item => {
++    item.classList.toggle('muted', Boolean(modelId) && item.dataset.modelId !== modelId);
++  });
++}
++
++function toggleChartModel(modelId) {
++  if (!usageChart) return;
++  const index = usageChart.data.datasets.findIndex(ds => ds.modelId === modelId);
++  if (index < 0) return;
++  const visible = usageChart.isDatasetVisible(index);
++  usageChart.setDatasetVisibility(index, !visible);
++  if (visible) hiddenChartModels.add(modelId); else hiddenChartModels.delete(modelId);
++  usageChart.update();
++  const button = document.querySelector(`.legend-item[data-model-id="${CSS.escape(modelId)}"]`);
++  button?.classList.toggle('disabled', visible);
++  button?.setAttribute('aria-pressed', visible ? 'false' : 'true');
++}
++
+ function renderLegend(models) {
+   const el = document.getElementById('chart-legend');
+-  el.innerHTML = models.map(m => `
+-    <div class="legend-item">
+-      <span class="legend-dot" style="background:${m.color};"></span>
+-      ${m.label}
+-    </div>
+-  `).join('');
++  const visibleTotal = models.reduce((sum, m) => sum + (m.tokens_total || 0), 0) || 1;
++  clearNode(el);
++
++  models.forEach(m => {
++    const item = document.createElement('button');
++    item.type = 'button';
++    item.className = `legend-item ${m.id === 'other' ? 'other' : ''} ${hiddenChartModels.has(m.id) ? 'disabled' : ''}`.trim();
++    item.dataset.modelId = m.id || '';
++    item.title = 'Click to hide/show. Hover to highlight.';
++    item.setAttribute('aria-pressed', hiddenChartModels.has(m.id) ? 'false' : 'true');
++
++    item.appendChild(createLegendDot(m.color));
++
++    const name = document.createElement('span');
++    name.className = 'legend-name';
++    name.textContent = `${m.rank ? `${m.rank}. ` : ''}${m.label}`;
++
++    const share = document.createElement('span');
++    share.className = 'legend-share';
++    share.textContent = `${Math.round(((m.tokens_total || 0) / visibleTotal) * 100)}%`;
++
++    item.append(name, share);
++    item.addEventListener('mouseenter', () => setLegendHover(item.dataset.modelId));
++    item.addEventListener('mouseleave', () => setLegendHover(null));
++    item.addEventListener('click', () => toggleChartModel(item.dataset.modelId));
++    el.appendChild(item);
++  });
+ }
+ 
+ async function loadHistory() {
+   try {
+-    const r = await fetch('/api/usage-history?limit=30');
++    const r = await fetch(`/api/usage-history?limit=30${simulateQuerySuffix()}`);
+     const sessions = await r.json();
+ 
+     const tbody = document.getElementById('history-table-body');
+     if (!sessions.length) {
+-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:40px;">No sessions</td></tr>';
++      makeTableEmptyState(tbody, 7, 'No sessions');
+       return;
+     }
+ 
+-    tbody.innerHTML = sessions.map(s => `
+-      <tr>
+-        <td style="font-family:var(--font-mono);font-size:12px;">${s.created}</td>
+-        <td class="model-cell" style="font-size:12px;">${s.model}</td>
+-        <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(s.title || '').replace(/"/g,'&quot;')}">${s.title || '(untitled)'}</td>
+-        <td class="num">${fmtTokens(s.tokens_total)}</td>
+-        <td class="num">${fmtTokens(s.tokens_input)}</td>
+-        <td class="num">${fmtTokens(s.tokens_output)}</td>
+-      </tr>
+-    `).join('');
++    clearNode(tbody);
++    sessions.forEach(s => {
++      const row = document.createElement('tr');
++
++      const toolCell = document.createElement('td');
++      toolCell.appendChild(createToolPill({
++        tool: s.tool,
++        toolColor: s.tool_color,
++        sourcePath: s.source_path,
++      }));
++
++      const createdCell = document.createElement('td');
++      createdCell.style.fontFamily = 'var(--font-mono)';
++      createdCell.style.fontSize = '12px';
++      createdCell.textContent = s.created || '—';
++
++      const modelCell = document.createElement('td');
++      modelCell.className = 'model-cell';
++      modelCell.style.fontSize = '12px';
++      modelCell.textContent = s.model || 'Unknown';
++
++      const titleCell = document.createElement('td');
++      titleCell.style.maxWidth = '350px';
++      titleCell.style.overflow = 'hidden';
++      titleCell.style.textOverflow = 'ellipsis';
++      titleCell.style.whiteSpace = 'nowrap';
++      titleCell.title = String(s.title || '(untitled)');
++      titleCell.textContent = s.title || '(untitled)';
++
++      const totalCell = document.createElement('td');
++      totalCell.className = 'num';
++      totalCell.textContent = fmtTokens(s.tokens_total);
++
++      const inputCell = document.createElement('td');
++      inputCell.className = 'num';
++      inputCell.textContent = fmtTokens(s.tokens_input);
++
++      const outputCell = document.createElement('td');
++      outputCell.className = 'num';
++      outputCell.textContent = fmtTokens(s.tokens_output);
++
++      row.append(toolCell, createdCell, modelCell, titleCell, totalCell, inputCell, outputCell);
++      tbody.appendChild(row);
++    });
+   } catch(e) {
+     console.error('history', e);
+   }
+@@ -715,6 +1411,18 @@ const sectionObserver = new IntersectionObserver(entries => {
+ 
+ document.querySelectorAll('section[id]').forEach(s => sectionObserver.observe(s));
+ 
++document.addEventListener('click', event => {
++  if (!event.target.closest('.meta-info-wrap')) {
++    closeMetaInfo();
++  }
++});
++
++document.addEventListener('keydown', event => {
++  if (event.key === 'Escape') {
++    closeMetaInfo();
++  }
++});
++
+ // ── Init ────────────────────────────────────────────────────────────────────
+ loadAll();
+ 
+@@ -722,4 +1430,4 @@ loadAll();
+ setInterval(loadAll, 60000);
+ </script>
+ </body>
+-</html>
+\ No newline at end of file
++</html>
+diff --git a/templates/settings.html b/templates/settings.html
+index cf81f001499e46316428e35760c864d11cd1fd8b..d52beb457a2ee4b78ed4ce11d446ea70588d6085 100644
+--- a/templates/settings.html
++++ b/templates/settings.html
+@@ -3,7 +3,7 @@
+ <head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-<title>Settings — OpenCode Dashboard</title>
++<title>Settings — Coding Agent Usage Dashboard</title>
+ <script src="/static/color-modes.js"></script>
+ <style>
+   :root {
+@@ -26,7 +26,7 @@
+     background: var(--bg-primary);
+     color: var(--text-primary);
+     line-height: 1.5;
+-    padding: 40px;
++    padding: 40px 16px;
+     max-width: 640px;
+     margin: 0 auto;
+   }
+@@ -60,18 +60,18 @@
+ <div class="card">
+   <h2>Database Location</h2>
+   <div class="path">~/.local/share/opencode/opencode.db</div>
+-  <p style="margin-top:8px;">Read directly from your local OpenCode SQLite database. The dashboard uses a read-only connection and does not modify any data.</p>
++  <p style="margin-top:8px;">Read directly from local coding-agent usage sources. OpenCode is the active source today. The dashboard uses read-only connections and does not modify source data.</p>
+ </div>
+ 
+ <div class="card">
+   <h2>Environment Variable</h2>
+   <div class="path">OPENCODE_DB_PATH</div>
+-  <p style="margin-top:8px;">Set this to override the database path if yours is stored elsewhere.</p>
++  <p style="margin-top:8px;">Set this to override the OpenCode database path if yours is stored elsewhere.</p>
+ </div>
+ 
+ <div class="card">
+   <h2>Source</h2>
+-  <p>Built from local session data stored in the <code style="font-family:var(--font-mono);color:var(--accent);">session</code> table — model, session timestamps, tokens_input, and tokens_output per session. Cost and cached-token fields are intentionally hidden for now.</p>
++  <p>Built from normalized local session data — model, session timestamps, input tokens, and output tokens per session/message. Total tokens are defined as input + output assistant-message tokens. Cached tokens are shown only as secondary context, separate from input/output totals. Cost is estimated from matched OpenRouter pricing when available.</p>
+ </div>
+ </body>
+ </html>
+\ No newline at end of file
+diff --git a/tests/test_app.py b/tests/test_app.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..a35d4ba3818adc1e08198faf893bb1e6a9845385
+--- /dev/null
++++ b/tests/test_app.py
+@@ -0,0 +1,278 @@
++import json
++import sqlite3
++import tempfile
++import time
++import unittest
++from pathlib import Path
++
++import app as dashboard_app
++
++
++HOME_PREFIX = f"{Path.home()}/"
++
++
++def display_like_app(path: Path) -> str:
++    raw = str(path)
++    return raw.replace(HOME_PREFIX, "~/", 1) if raw.startswith(HOME_PREFIX) else raw
++
++
++def write_message(
++    conn: sqlite3.Connection,
++    *,
++    session_id: str,
++    created_ms: int,
++    role: str,
++    model_id: str | None = None,
++    provider_id: str | None = None,
++    tokens_input: int = 0,
++    tokens_output: int = 0,
++    cache_read: int = 0,
++    cache_write: int = 0,
++) -> None:
++    payload = {
++        "role": role,
++        "tokens": {
++            "input": tokens_input,
++            "output": tokens_output,
++            "cache": {
++                "read": cache_read,
++                "write": cache_write,
++            },
++        },
++    }
++    if model_id is not None:
++        payload["modelID"] = model_id
++    if provider_id is not None:
++        payload["providerID"] = provider_id
++    conn.execute(
++        "INSERT INTO message (session_id, time_created, data) VALUES (?, ?, ?)",
++        (session_id, created_ms, json.dumps(payload)),
++    )
++
++
++class DashboardApiTests(unittest.TestCase):
++    @classmethod
++    def setUpClass(cls):
++        cls.tmpdir = tempfile.TemporaryDirectory()
++        cls.db_path = Path(cls.tmpdir.name) / "opencode-test.db"
++        cls.original_db_path = dashboard_app.DB_PATH
++        cls._build_test_db(cls.db_path)
++        dashboard_app.DB_PATH = str(cls.db_path)
++
++    @classmethod
++    def tearDownClass(cls):
++        dashboard_app.DB_PATH = cls.original_db_path
++        cls.tmpdir.cleanup()
++
++    @classmethod
++    def _build_test_db(cls, db_path: Path) -> None:
++        conn = sqlite3.connect(db_path)
++        conn.execute(
++            """
++            CREATE TABLE session (
++                id TEXT PRIMARY KEY,
++                title TEXT,
++                directory TEXT,
++                model TEXT,
++                tokens_input INTEGER,
++                tokens_output INTEGER,
++                summary_files INTEGER,
++                summary_additions INTEGER,
++                summary_deletions INTEGER,
++                time_created INTEGER,
++                time_updated INTEGER
++            )
++            """
++        )
++        conn.execute(
++            """
++            CREATE TABLE message (
++                id INTEGER PRIMARY KEY AUTOINCREMENT,
++                session_id TEXT NOT NULL,
++                time_created INTEGER NOT NULL,
++                data TEXT NOT NULL
++            )
++            """
++        )
++
++        now_ms = int(time.time() * 1000)
++        session_rows = [
++            {
++                "id": "sess-1",
++                "title": "Daily usage dashboard cleanup",
++                "directory": "/tmp/project-one",
++                "model": json.dumps({"id": "kimi-k2.6", "providerID": "opencode-go"}),
++                "tokens_input": 1200,
++                "tokens_output": 3400,
++                "summary_files": 2,
++                "summary_additions": 24,
++                "summary_deletions": 6,
++                "time_created": now_ms - 2 * 86400000,
++                "time_updated": now_ms - 2 * 86400000 + 120000,
++            },
++            {
++                "id": "sess-2",
++                "title": "Legend accessibility pass",
++                "directory": "/tmp/project-two",
++                "model": json.dumps({"id": "deepseek-v4-flash", "providerID": "opencode-go"}),
++                "tokens_input": 900,
++                "tokens_output": 1600,
++                "summary_files": 1,
++                "summary_additions": 12,
++                "summary_deletions": 3,
++                "time_created": now_ms - 86400000,
++                "time_updated": now_ms - 86400000 + 180000,
++            },
++        ]
++        for row in session_rows:
++            conn.execute(
++                """
++                INSERT INTO session (
++                    id, title, directory, model, tokens_input, tokens_output,
++                    summary_files, summary_additions, summary_deletions,
++                    time_created, time_updated
++                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
++                """,
++                (
++                    row["id"],
++                    row["title"],
++                    row["directory"],
++                    row["model"],
++                    row["tokens_input"],
++                    row["tokens_output"],
++                    row["summary_files"],
++                    row["summary_additions"],
++                    row["summary_deletions"],
++                    row["time_created"],
++                    row["time_updated"],
++                ),
++            )
++
++        write_message(
++            conn,
++            session_id="sess-1",
++            created_ms=now_ms - 2 * 86400000,
++            role="assistant",
++            model_id="kimi-k2.6",
++            provider_id="opencode-go",
++            tokens_input=1200,
++            tokens_output=3400,
++            cache_read=300,
++            cache_write=125,
++        )
++        write_message(
++            conn,
++            session_id="sess-1",
++            created_ms=now_ms - 2 * 86400000 + 60000,
++            role="user",
++        )
++        write_message(
++            conn,
++            session_id="sess-2",
++            created_ms=now_ms - 86400000,
++            role="assistant",
++            model_id="deepseek-v4-flash",
++            provider_id="opencode-go",
++            tokens_input=900,
++            tokens_output=1600,
++            cache_read=75,
++            cache_write=40,
++        )
++        conn.commit()
++        conn.close()
++
++    def setUp(self):
++        self.client = dashboard_app.app.test_client()
++
++    def test_overview_exposes_tool_source_metadata(self):
++        response = self.client.get('/api/overview?days=30')
++        self.assertEqual(response.status_code, 200)
++        payload = response.get_json()
++
++        self.assertEqual(
++            payload['token_total_definition'],
++            'input + output assistant-message tokens; cache read/write excluded',
++        )
++        self.assertEqual(payload['active_tool'], 'opencode')
++        self.assertEqual(payload['active_tool_label'], 'OpenCode')
++        self.assertEqual(payload['source_path'], display_like_app(self.db_path))
++
++        sources = {item['id']: item for item in payload['tool_sources']}
++        self.assertEqual(sources['opencode']['status'], 'active')
++        self.assertEqual(sources['opencode']['color'], '#3B82F6')
++        self.assertEqual(sources['opencode']['source_path'], display_like_app(self.db_path))
++        self.assertEqual(sources['codex']['status'], 'placeholder')
++        self.assertEqual(sources['codex']['color'], '#BA68C8')
++        self.assertEqual(sources['codex']['source_path'], 'TBD')
++        self.assertIsNone(sources['codex']['issue'])
++        self.assertEqual(sources['hermes']['status'], 'placeholder')
++        self.assertEqual(sources['hermes']['color'], '#EAB308')
++        self.assertEqual(sources['hermes']['source_path'], 'TBD')
++        self.assertIsNone(sources['hermes']['issue'])
++
++    def test_models_and_history_include_tool_color(self):
++        models_response = self.client.get('/api/models?days=30')
++        self.assertEqual(models_response.status_code, 200)
++        models = models_response.get_json()
++        self.assertTrue(models)
++        self.assertEqual(models[0]['tool'], 'OpenCode')
++        self.assertEqual(models[0]['tool_id'], 'opencode')
++        self.assertEqual(models[0]['tool_color'], '#3B82F6')
++
++        history_response = self.client.get('/api/usage-history?limit=5')
++        self.assertEqual(history_response.status_code, 200)
++        history = history_response.get_json()
++        self.assertTrue(history)
++        self.assertEqual(history[0]['tool'], 'OpenCode')
++        self.assertEqual(history[0]['tool_id'], 'opencode')
++        self.assertEqual(history[0]['tool_color'], '#3B82F6')
++
++    def test_settings_page_describes_current_cost_and_token_rules(self):
++        response = self.client.get('/settings')
++        self.assertEqual(response.status_code, 200)
++        html = response.get_data(as_text=True)
++        self.assertIn('Total tokens are defined as input + output assistant-message tokens.', html)
++        self.assertIn('Cost is estimated from matched OpenRouter pricing when available.', html)
++
++    def test_overview_page_includes_clickable_metric_tooltips(self):
++        response = self.client.get('/')
++        self.assertEqual(response.status_code, 200)
++        html = response.get_data(as_text=True)
++        self.assertIn('class="meta-info-wrap"', html)
++        self.assertIn('class="meta-tooltip"', html)
++        self.assertIn('aria-expanded="false"', html)
++        self.assertIn('bindMetaInfoInteractions', html)
++
++    def test_dashboard_template_uses_button_based_accessible_controls(self):
++        response = self.client.get('/')
++        self.assertEqual(response.status_code, 200)
++        html = response.get_data(as_text=True)
++        self.assertIn("document.createElement('button')", html)
++        self.assertIn("className = 'chart-focus-button'", html)
++        self.assertIn('item.className = `legend-item', html)
++        self.assertIn("button.textContent = active ? 'Clear focus' : 'Focus chart'", html)
++        self.assertNotIn('role="button" data-chart-model-id', html)
++
++    def test_simulated_mode_returns_synthetic_dashboard_data(self):
++        overview = self.client.get('/api/overview?simulate=1&days=31')
++        self.assertEqual(overview.status_code, 200)
++        payload = overview.get_json()
++        self.assertEqual(payload['active_tool_label'], 'OpenCode (simulated)')
++        self.assertEqual(payload['source_path'], 'simulated dataset')
++        self.assertGreater(payload['total_tokens'], 0)
++
++        models = self.client.get('/api/models?simulate=1&days=31').get_json()
++        self.assertTrue(models)
++        self.assertEqual(models[0]['source_path'], 'simulated dataset')
++
++        daily = self.client.get('/api/daily?simulate=1&days=31&top_n=4').get_json()
++        self.assertEqual(len(daily['dates']), 31)
++        self.assertLessEqual(len(daily['models']), 5)
++
++        history = self.client.get('/api/usage-history?simulate=1&limit=5').get_json()
++        self.assertEqual(len(history), 5)
++        self.assertTrue(all(item['id'].startswith('sim-') for item in history))
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/tests/test_readme.py b/tests/test_readme.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..c69305245b041281e74c591834ba25d779ef4e84
+--- /dev/null
++++ b/tests/test_readme.py
+@@ -0,0 +1,41 @@
++from pathlib import Path
++import unittest
++
++
++ROOT = Path(__file__).resolve().parents[1]
++README = ROOT / 'README.md'
++PYPROJECT = ROOT / 'pyproject.toml'
++UV_LOCK = ROOT / 'uv.lock'
++
++
++class ReadmeTests(unittest.TestCase):
++    def test_readme_documents_uv_sync_run_and_snapshot_steps(self):
++        content = README.read_text()
++        self.assertIn('## Setup', content)
++        self.assertIn('https://docs.astral.sh/uv/', content)
++        self.assertIn('curl -LsSf https://astral.sh/uv/install.sh | sh', content)
++        self.assertIn('uv sync', content)
++        self.assertNotIn('uv pip install -r requirements.txt', content)
++        self.assertNotIn('uv venv', content)
++        self.assertIn('uv run python app.py', content)
++        self.assertIn('## Snapshots', content)
++        self.assertIn('uv run --with playwright python scripts/snapshot_dashboard.py --url http://localhost:8321', content)
++        self.assertIn('dashboard-snapshots/', content)
++        self.assertIn('http://localhost:8321', content)
++
++    def test_repo_includes_uv_project_files_for_reproducible_setup(self):
++        self.assertTrue(PYPROJECT.exists(), 'pyproject.toml should be committed')
++        self.assertTrue(UV_LOCK.exists(), 'uv.lock should be committed')
++
++        pyproject = PYPROJECT.read_text()
++        self.assertIn('[project]', pyproject)
++        self.assertIn('dependencies = [', pyproject)
++        self.assertIn('flask', pyproject)
++
++        lock_text = UV_LOCK.read_text()
++        self.assertIn('version = 1', lock_text)
++        self.assertIn('name = "coding-agent-usage-dashboard"', lock_text)
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/uv.lock b/uv.lock
+new file mode 100644
+index 0000000000000000000000000000000000000000..d99196cdd62e7f8ce89d3a444bc9af9e25190cbb
+--- /dev/null
++++ b/uv.lock
+@@ -0,0 +1,157 @@
++version = 1
++revision = 1
++requires-python = ">=3.12"
++
++[[package]]
++name = "blinker"
++version = "1.9.0"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/21/28/9b3f50ce0e048515135495f198351908d99540d69bfdc8c1d15b73dc55ce/blinker-1.9.0.tar.gz", hash = "sha256:b4ce2265a7abece45e7cc896e98dbebe6cead56bcf805a3d23136d145f5445bf", size = 22460 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/10/cb/f2ad4230dc2eb1a74edf38f1a38b9b52277f75bef262d8908e60d957e13c/blinker-1.9.0-py3-none-any.whl", hash = "sha256:ba0efaa9080b619ff2f3459d1d500c57bddea4a6b424b60a91141db6fd2f08bc", size = 8458 },
++]
++
++[[package]]
++name = "click"
++version = "8.4.1"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "colorama", marker = "sys_platform == 'win32'" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/9b/98/518d8e5081007684232226f475082b30087d0f585e8457db087298259f49/click-8.4.1.tar.gz", hash = "sha256:918b5633eddf6b41c32d4f454bf0de810065c74e3f7dbf8ee5452f8be88d3e96", size = 353007 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/c7/0d/67e5b4109ea4a837e80daa87c2c696711955e40449a97e8926672534def2/click-8.4.1-py3-none-any.whl", hash = "sha256:482be17c6991b8c19c5429a1e995d9b0efdbb63172824c41f99965dc0ade8ec2", size = 116639 },
++]
++
++[[package]]
++name = "coding-agent-usage-dashboard"
++version = "0.1.0"
++source = { virtual = "." }
++dependencies = [
++    { name = "flask" },
++]
++
++[package.metadata]
++requires-dist = [{ name = "flask", specifier = ">=3.0" }]
++
++[[package]]
++name = "colorama"
++version = "0.4.6"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/d8/53/6f443c9a4a8358a93a6792e2acffb9d9d5cb0a5cfd8802644b7b1c9a02e4/colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44", size = 27697 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6", size = 25335 },
++]
++
++[[package]]
++name = "flask"
++version = "3.1.3"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "blinker" },
++    { name = "click" },
++    { name = "itsdangerous" },
++    { name = "jinja2" },
++    { name = "markupsafe" },
++    { name = "werkzeug" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/26/00/35d85dcce6c57fdc871f3867d465d780f302a175ea360f62533f12b27e2b/flask-3.1.3.tar.gz", hash = "sha256:0ef0e52b8a9cd932855379197dd8f94047b359ca0a78695144304cb45f87c9eb", size = 759004 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/7f/9c/34f6962f9b9e9c71f6e5ed806e0d0ff03c9d1b0b2340088a0cf4bce09b18/flask-3.1.3-py3-none-any.whl", hash = "sha256:f4bcbefc124291925f1a26446da31a5178f9483862233b23c0c96a20701f670c", size = 103424 },
++]
++
++[[package]]
++name = "itsdangerous"
++version = "2.2.0"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/9c/cb/8ac0172223afbccb63986cc25049b154ecfb5e85932587206f42317be31d/itsdangerous-2.2.0.tar.gz", hash = "sha256:e0050c0b7da1eea53ffaf149c0cfbb5c6e2e2b69c4bef22c81fa6eb73e5f6173", size = 54410 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl", hash = "sha256:c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef", size = 16234 },
++]
++
++[[package]]
++name = "jinja2"
++version = "3.1.6"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "markupsafe" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d", size = 245115 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67", size = 134899 },
++]
++
++[[package]]
++name = "markupsafe"
++version = "3.0.3"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/7e/99/7690b6d4034fffd95959cbe0c02de8deb3098cc577c67bb6a24fe5d7caa7/markupsafe-3.0.3.tar.gz", hash = "sha256:722695808f4b6457b320fdc131280796bdceb04ab50fe1795cd540799ebe1698", size = 80313 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/5a/72/147da192e38635ada20e0a2e1a51cf8823d2119ce8883f7053879c2199b5/markupsafe-3.0.3-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:d53197da72cc091b024dd97249dfc7794d6a56530370992a5e1a08983ad9230e", size = 11615 },
++    { url = "https://files.pythonhosted.org/packages/9a/81/7e4e08678a1f98521201c3079f77db69fb552acd56067661f8c2f534a718/markupsafe-3.0.3-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:1872df69a4de6aead3491198eaf13810b565bdbeec3ae2dc8780f14458ec73ce", size = 12020 },
++    { url = "https://files.pythonhosted.org/packages/1e/2c/799f4742efc39633a1b54a92eec4082e4f815314869865d876824c257c1e/markupsafe-3.0.3-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:3a7e8ae81ae39e62a41ec302f972ba6ae23a5c5396c8e60113e9066ef893da0d", size = 24332 },
++    { url = "https://files.pythonhosted.org/packages/3c/2e/8d0c2ab90a8c1d9a24f0399058ab8519a3279d1bd4289511d74e909f060e/markupsafe-3.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:d6dd0be5b5b189d31db7cda48b91d7e0a9795f31430b7f271219ab30f1d3ac9d", size = 22947 },
++    { url = "https://files.pythonhosted.org/packages/2c/54/887f3092a85238093a0b2154bd629c89444f395618842e8b0c41783898ea/markupsafe-3.0.3-cp312-cp312-manylinux_2_31_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:94c6f0bb423f739146aec64595853541634bde58b2135f27f61c1ffd1cd4d16a", size = 21962 },
++    { url = "https://files.pythonhosted.org/packages/c9/2f/336b8c7b6f4a4d95e91119dc8521402461b74a485558d8f238a68312f11c/markupsafe-3.0.3-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:be8813b57049a7dc738189df53d69395eba14fb99345e0a5994914a3864c8a4b", size = 23760 },
++    { url = "https://files.pythonhosted.org/packages/32/43/67935f2b7e4982ffb50a4d169b724d74b62a3964bc1a9a527f5ac4f1ee2b/markupsafe-3.0.3-cp312-cp312-musllinux_1_2_riscv64.whl", hash = "sha256:83891d0e9fb81a825d9a6d61e3f07550ca70a076484292a70fde82c4b807286f", size = 21529 },
++    { url = "https://files.pythonhosted.org/packages/89/e0/4486f11e51bbba8b0c041098859e869e304d1c261e59244baa3d295d47b7/markupsafe-3.0.3-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:77f0643abe7495da77fb436f50f8dab76dbc6e5fd25d39589a0f1fe6548bfa2b", size = 23015 },
++    { url = "https://files.pythonhosted.org/packages/2f/e1/78ee7a023dac597a5825441ebd17170785a9dab23de95d2c7508ade94e0e/markupsafe-3.0.3-cp312-cp312-win32.whl", hash = "sha256:d88b440e37a16e651bda4c7c2b930eb586fd15ca7406cb39e211fcff3bf3017d", size = 14540 },
++    { url = "https://files.pythonhosted.org/packages/aa/5b/bec5aa9bbbb2c946ca2733ef9c4ca91c91b6a24580193e891b5f7dbe8e1e/markupsafe-3.0.3-cp312-cp312-win_amd64.whl", hash = "sha256:26a5784ded40c9e318cfc2bdb30fe164bdb8665ded9cd64d500a34fb42067b1c", size = 15105 },
++    { url = "https://files.pythonhosted.org/packages/e5/f1/216fc1bbfd74011693a4fd837e7026152e89c4bcf3e77b6692fba9923123/markupsafe-3.0.3-cp312-cp312-win_arm64.whl", hash = "sha256:35add3b638a5d900e807944a078b51922212fb3dedb01633a8defc4b01a3c85f", size = 13906 },
++    { url = "https://files.pythonhosted.org/packages/38/2f/907b9c7bbba283e68f20259574b13d005c121a0fa4c175f9bed27c4597ff/markupsafe-3.0.3-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:e1cf1972137e83c5d4c136c43ced9ac51d0e124706ee1c8aa8532c1287fa8795", size = 11622 },
++    { url = "https://files.pythonhosted.org/packages/9c/d9/5f7756922cdd676869eca1c4e3c0cd0df60ed30199ffd775e319089cb3ed/markupsafe-3.0.3-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:116bb52f642a37c115f517494ea5feb03889e04df47eeff5b130b1808ce7c219", size = 12029 },
++    { url = "https://files.pythonhosted.org/packages/00/07/575a68c754943058c78f30db02ee03a64b3c638586fba6a6dd56830b30a3/markupsafe-3.0.3-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:133a43e73a802c5562be9bbcd03d090aa5a1fe899db609c29e8c8d815c5f6de6", size = 24374 },
++    { url = "https://files.pythonhosted.org/packages/a9/21/9b05698b46f218fc0e118e1f8168395c65c8a2c750ae2bab54fc4bd4e0e8/markupsafe-3.0.3-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ccfcd093f13f0f0b7fdd0f198b90053bf7b2f02a3927a30e63f3ccc9df56b676", size = 22980 },
++    { url = "https://files.pythonhosted.org/packages/7f/71/544260864f893f18b6827315b988c146b559391e6e7e8f7252839b1b846a/markupsafe-3.0.3-cp313-cp313-manylinux_2_31_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:509fa21c6deb7a7a273d629cf5ec029bc209d1a51178615ddf718f5918992ab9", size = 21990 },
++    { url = "https://files.pythonhosted.org/packages/c2/28/b50fc2f74d1ad761af2f5dcce7492648b983d00a65b8c0e0cb457c82ebbe/markupsafe-3.0.3-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:a4afe79fb3de0b7097d81da19090f4df4f8d3a2b3adaa8764138aac2e44f3af1", size = 23784 },
++    { url = "https://files.pythonhosted.org/packages/ed/76/104b2aa106a208da8b17a2fb72e033a5a9d7073c68f7e508b94916ed47a9/markupsafe-3.0.3-cp313-cp313-musllinux_1_2_riscv64.whl", hash = "sha256:795e7751525cae078558e679d646ae45574b47ed6e7771863fcc079a6171a0fc", size = 21588 },
++    { url = "https://files.pythonhosted.org/packages/b5/99/16a5eb2d140087ebd97180d95249b00a03aa87e29cc224056274f2e45fd6/markupsafe-3.0.3-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:8485f406a96febb5140bfeca44a73e3ce5116b2501ac54fe953e488fb1d03b12", size = 23041 },
++    { url = "https://files.pythonhosted.org/packages/19/bc/e7140ed90c5d61d77cea142eed9f9c303f4c4806f60a1044c13e3f1471d0/markupsafe-3.0.3-cp313-cp313-win32.whl", hash = "sha256:bdd37121970bfd8be76c5fb069c7751683bdf373db1ed6c010162b2a130248ed", size = 14543 },
++    { url = "https://files.pythonhosted.org/packages/05/73/c4abe620b841b6b791f2edc248f556900667a5a1cf023a6646967ae98335/markupsafe-3.0.3-cp313-cp313-win_amd64.whl", hash = "sha256:9a1abfdc021a164803f4d485104931fb8f8c1efd55bc6b748d2f5774e78b62c5", size = 15113 },
++    { url = "https://files.pythonhosted.org/packages/f0/3a/fa34a0f7cfef23cf9500d68cb7c32dd64ffd58a12b09225fb03dd37d5b80/markupsafe-3.0.3-cp313-cp313-win_arm64.whl", hash = "sha256:7e68f88e5b8799aa49c85cd116c932a1ac15caaa3f5db09087854d218359e485", size = 13911 },
++    { url = "https://files.pythonhosted.org/packages/e4/d7/e05cd7efe43a88a17a37b3ae96e79a19e846f3f456fe79c57ca61356ef01/markupsafe-3.0.3-cp313-cp313t-macosx_10_13_x86_64.whl", hash = "sha256:218551f6df4868a8d527e3062d0fb968682fe92054e89978594c28e642c43a73", size = 11658 },
++    { url = "https://files.pythonhosted.org/packages/99/9e/e412117548182ce2148bdeacdda3bb494260c0b0184360fe0d56389b523b/markupsafe-3.0.3-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:3524b778fe5cfb3452a09d31e7b5adefeea8c5be1d43c4f810ba09f2ceb29d37", size = 12066 },
++    { url = "https://files.pythonhosted.org/packages/bc/e6/fa0ffcda717ef64a5108eaa7b4f5ed28d56122c9a6d70ab8b72f9f715c80/markupsafe-3.0.3-cp313-cp313t-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:4e885a3d1efa2eadc93c894a21770e4bc67899e3543680313b09f139e149ab19", size = 25639 },
++    { url = "https://files.pythonhosted.org/packages/96/ec/2102e881fe9d25fc16cb4b25d5f5cde50970967ffa5dddafdb771237062d/markupsafe-3.0.3-cp313-cp313t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:8709b08f4a89aa7586de0aadc8da56180242ee0ada3999749b183aa23df95025", size = 23569 },
++    { url = "https://files.pythonhosted.org/packages/4b/30/6f2fce1f1f205fc9323255b216ca8a235b15860c34b6798f810f05828e32/markupsafe-3.0.3-cp313-cp313t-manylinux_2_31_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:b8512a91625c9b3da6f127803b166b629725e68af71f8184ae7e7d54686a56d6", size = 23284 },
++    { url = "https://files.pythonhosted.org/packages/58/47/4a0ccea4ab9f5dcb6f79c0236d954acb382202721e704223a8aafa38b5c8/markupsafe-3.0.3-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:9b79b7a16f7fedff2495d684f2b59b0457c3b493778c9eed31111be64d58279f", size = 24801 },
++    { url = "https://files.pythonhosted.org/packages/6a/70/3780e9b72180b6fecb83a4814d84c3bf4b4ae4bf0b19c27196104149734c/markupsafe-3.0.3-cp313-cp313t-musllinux_1_2_riscv64.whl", hash = "sha256:12c63dfb4a98206f045aa9563db46507995f7ef6d83b2f68eda65c307c6829eb", size = 22769 },
++    { url = "https://files.pythonhosted.org/packages/98/c5/c03c7f4125180fc215220c035beac6b9cb684bc7a067c84fc69414d315f5/markupsafe-3.0.3-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:8f71bc33915be5186016f675cd83a1e08523649b0e33efdb898db577ef5bb009", size = 23642 },
++    { url = "https://files.pythonhosted.org/packages/80/d6/2d1b89f6ca4bff1036499b1e29a1d02d282259f3681540e16563f27ebc23/markupsafe-3.0.3-cp313-cp313t-win32.whl", hash = "sha256:69c0b73548bc525c8cb9a251cddf1931d1db4d2258e9599c28c07ef3580ef354", size = 14612 },
++    { url = "https://files.pythonhosted.org/packages/2b/98/e48a4bfba0a0ffcf9925fe2d69240bfaa19c6f7507b8cd09c70684a53c1e/markupsafe-3.0.3-cp313-cp313t-win_amd64.whl", hash = "sha256:1b4b79e8ebf6b55351f0d91fe80f893b4743f104bff22e90697db1590e47a218", size = 15200 },
++    { url = "https://files.pythonhosted.org/packages/0e/72/e3cc540f351f316e9ed0f092757459afbc595824ca724cbc5a5d4263713f/markupsafe-3.0.3-cp313-cp313t-win_arm64.whl", hash = "sha256:ad2cf8aa28b8c020ab2fc8287b0f823d0a7d8630784c31e9ee5edea20f406287", size = 13973 },
++    { url = "https://files.pythonhosted.org/packages/33/8a/8e42d4838cd89b7dde187011e97fe6c3af66d8c044997d2183fbd6d31352/markupsafe-3.0.3-cp314-cp314-macosx_10_13_x86_64.whl", hash = "sha256:eaa9599de571d72e2daf60164784109f19978b327a3910d3e9de8c97b5b70cfe", size = 11619 },
++    { url = "https://files.pythonhosted.org/packages/b5/64/7660f8a4a8e53c924d0fa05dc3a55c9cee10bbd82b11c5afb27d44b096ce/markupsafe-3.0.3-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:c47a551199eb8eb2121d4f0f15ae0f923d31350ab9280078d1e5f12b249e0026", size = 12029 },
++    { url = "https://files.pythonhosted.org/packages/da/ef/e648bfd021127bef5fa12e1720ffed0c6cbb8310c8d9bea7266337ff06de/markupsafe-3.0.3-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:f34c41761022dd093b4b6896d4810782ffbabe30f2d443ff5f083e0cbbb8c737", size = 24408 },
++    { url = "https://files.pythonhosted.org/packages/41/3c/a36c2450754618e62008bf7435ccb0f88053e07592e6028a34776213d877/markupsafe-3.0.3-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:457a69a9577064c05a97c41f4e65148652db078a3a509039e64d3467b9e7ef97", size = 23005 },
++    { url = "https://files.pythonhosted.org/packages/bc/20/b7fdf89a8456b099837cd1dc21974632a02a999ec9bf7ca3e490aacd98e7/markupsafe-3.0.3-cp314-cp314-manylinux_2_31_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:e8afc3f2ccfa24215f8cb28dcf43f0113ac3c37c2f0f0806d8c70e4228c5cf4d", size = 22048 },
++    { url = "https://files.pythonhosted.org/packages/9a/a7/591f592afdc734f47db08a75793a55d7fbcc6902a723ae4cfbab61010cc5/markupsafe-3.0.3-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:ec15a59cf5af7be74194f7ab02d0f59a62bdcf1a537677ce67a2537c9b87fcda", size = 23821 },
++    { url = "https://files.pythonhosted.org/packages/7d/33/45b24e4f44195b26521bc6f1a82197118f74df348556594bd2262bda1038/markupsafe-3.0.3-cp314-cp314-musllinux_1_2_riscv64.whl", hash = "sha256:0eb9ff8191e8498cca014656ae6b8d61f39da5f95b488805da4bb029cccbfbaf", size = 21606 },
++    { url = "https://files.pythonhosted.org/packages/ff/0e/53dfaca23a69fbfbbf17a4b64072090e70717344c52eaaaa9c5ddff1e5f0/markupsafe-3.0.3-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:2713baf880df847f2bece4230d4d094280f4e67b1e813eec43b4c0e144a34ffe", size = 23043 },
++    { url = "https://files.pythonhosted.org/packages/46/11/f333a06fc16236d5238bfe74daccbca41459dcd8d1fa952e8fbd5dccfb70/markupsafe-3.0.3-cp314-cp314-win32.whl", hash = "sha256:729586769a26dbceff69f7a7dbbf59ab6572b99d94576a5592625d5b411576b9", size = 14747 },
++    { url = "https://files.pythonhosted.org/packages/28/52/182836104b33b444e400b14f797212f720cbc9ed6ba34c800639d154e821/markupsafe-3.0.3-cp314-cp314-win_amd64.whl", hash = "sha256:bdc919ead48f234740ad807933cdf545180bfbe9342c2bb451556db2ed958581", size = 15341 },
++    { url = "https://files.pythonhosted.org/packages/6f/18/acf23e91bd94fd7b3031558b1f013adfa21a8e407a3fdb32745538730382/markupsafe-3.0.3-cp314-cp314-win_arm64.whl", hash = "sha256:5a7d5dc5140555cf21a6fefbdbf8723f06fcd2f63ef108f2854de715e4422cb4", size = 14073 },
++    { url = "https://files.pythonhosted.org/packages/3c/f0/57689aa4076e1b43b15fdfa646b04653969d50cf30c32a102762be2485da/markupsafe-3.0.3-cp314-cp314t-macosx_10_13_x86_64.whl", hash = "sha256:1353ef0c1b138e1907ae78e2f6c63ff67501122006b0f9abad68fda5f4ffc6ab", size = 11661 },
++    { url = "https://files.pythonhosted.org/packages/89/c3/2e67a7ca217c6912985ec766c6393b636fb0c2344443ff9d91404dc4c79f/markupsafe-3.0.3-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:1085e7fbddd3be5f89cc898938f42c0b3c711fdcb37d75221de2666af647c175", size = 12069 },
++    { url = "https://files.pythonhosted.org/packages/f0/00/be561dce4e6ca66b15276e184ce4b8aec61fe83662cce2f7d72bd3249d28/markupsafe-3.0.3-cp314-cp314t-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:1b52b4fb9df4eb9ae465f8d0c228a00624de2334f216f178a995ccdcf82c4634", size = 25670 },
++    { url = "https://files.pythonhosted.org/packages/50/09/c419f6f5a92e5fadde27efd190eca90f05e1261b10dbd8cbcb39cd8ea1dc/markupsafe-3.0.3-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:fed51ac40f757d41b7c48425901843666a6677e3e8eb0abcff09e4ba6e664f50", size = 23598 },
++    { url = "https://files.pythonhosted.org/packages/22/44/a0681611106e0b2921b3033fc19bc53323e0b50bc70cffdd19f7d679bb66/markupsafe-3.0.3-cp314-cp314t-manylinux_2_31_riscv64.manylinux_2_39_riscv64.whl", hash = "sha256:f190daf01f13c72eac4efd5c430a8de82489d9cff23c364c3ea822545032993e", size = 23261 },
++    { url = "https://files.pythonhosted.org/packages/5f/57/1b0b3f100259dc9fffe780cfb60d4be71375510e435efec3d116b6436d43/markupsafe-3.0.3-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:e56b7d45a839a697b5eb268c82a71bd8c7f6c94d6fd50c3d577fa39a9f1409f5", size = 24835 },
++    { url = "https://files.pythonhosted.org/packages/26/6a/4bf6d0c97c4920f1597cc14dd720705eca0bf7c787aebc6bb4d1bead5388/markupsafe-3.0.3-cp314-cp314t-musllinux_1_2_riscv64.whl", hash = "sha256:f3e98bb3798ead92273dc0e5fd0f31ade220f59a266ffd8a4f6065e0a3ce0523", size = 22733 },
++    { url = "https://files.pythonhosted.org/packages/14/c7/ca723101509b518797fedc2fdf79ba57f886b4aca8a7d31857ba3ee8281f/markupsafe-3.0.3-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:5678211cb9333a6468fb8d8be0305520aa073f50d17f089b5b4b477ea6e67fdc", size = 23672 },
++    { url = "https://files.pythonhosted.org/packages/fb/df/5bd7a48c256faecd1d36edc13133e51397e41b73bb77e1a69deab746ebac/markupsafe-3.0.3-cp314-cp314t-win32.whl", hash = "sha256:915c04ba3851909ce68ccc2b8e2cd691618c4dc4c4232fb7982bca3f41fd8c3d", size = 14819 },
++    { url = "https://files.pythonhosted.org/packages/1a/8a/0402ba61a2f16038b48b39bccca271134be00c5c9f0f623208399333c448/markupsafe-3.0.3-cp314-cp314t-win_amd64.whl", hash = "sha256:4faffd047e07c38848ce017e8725090413cd80cbc23d86e55c587bf979e579c9", size = 15426 },
++    { url = "https://files.pythonhosted.org/packages/70/bc/6f1c2f612465f5fa89b95bead1f44dcb607670fd42891d8fdcd5d039f4f4/markupsafe-3.0.3-cp314-cp314t-win_arm64.whl", hash = "sha256:32001d6a8fc98c8cb5c947787c5d08b0a50663d139f1305bac5885d98d9b40fa", size = 14146 },
++]
++
++[[package]]
++name = "werkzeug"
++version = "3.1.8"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "markupsafe" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/dd/b2/381be8cfdee792dd117872481b6e378f85c957dd7c5bca38897b08f765fd/werkzeug-3.1.8.tar.gz", hash = "sha256:9bad61a4268dac112f1c5cd4630a56ede601b6ed420300677a869083d70a4c44", size = 875852 }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/93/8c/2e650f2afeb7ee576912636c23ddb621c91ac6a98e66dc8d29c3c69446e1/werkzeug-3.1.8-py3-none-any.whl", hash = "sha256:63a77fb8892bf28ebc3178683445222aa500e48ebad5ec77b0ad80f8726b1f50", size = 226459 },
++]

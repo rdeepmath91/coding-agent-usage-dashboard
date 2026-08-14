@@ -1,0 +1,1496 @@
+From 8656a37d67b79a46b334e72ca9a9a616847c401c Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Sat, 30 May 2026 16:53:30 +0700
+Subject: [PATCH 1/7] feat: add Codex usage adapter
+
+---
+ README.md            |  29 +++-
+ app.py               | 398 +++++++++++++++++++++++++++++++++++++++++--
+ templates/index.html |   7 +-
+ tests/test_app.py    |  98 ++++++++++-
+ 4 files changed, 511 insertions(+), 21 deletions(-)
+
+diff --git a/README.md b/README.md
+index 509728f..e9cf455 100644
+--- a/README.md
++++ b/README.md
+@@ -2,10 +2,12 @@
+ 
+ Local dashboard for inspecting coding-agent usage from your machine.
+ 
+-Right now the active source is OpenCode via its local SQLite database at
+-`~/.local/share/opencode/opencode.db`. The UI already leaves room for future
+-Codex CLI and Hermes adapters, but this README is intentionally about one thing:
+-getting the dashboard running locally and capturing snapshots.
++Right now the active sources are:
++
++- OpenCode via `~/.local/share/opencode/opencode.db`
++- Codex CLI via `~/.codex/state_5.sqlite` plus rollout JSONL files referenced by that state DB
++
++Hermes remains a planned adapter placeholder.
+ 
+ ## Setup
+ 
+@@ -84,11 +86,28 @@ review what the dashboard actually showed at capture time.
+ 
+ ## Current data rules
+ 
+-- active source: OpenCode local SQLite DB
++- active sources: OpenCode local SQLite DB; Codex local state DB plus rollout JSONL
+ - total tokens = input + output assistant-message tokens
+ - cache read/write tokens are shown separately and excluded from total tokens
+ - unmatched model pricing stays unpriced instead of guessed
+ 
++### Codex source contract
++
++The Codex adapter reads session metadata from `~/.codex/state_5.sqlite`, table
++`threads`. The trusted metadata fields are session id, rollout path, created and
++updated timestamps, title/preview, cwd, provider, and model.
++
++Token metrics come from the latest cumulative `total_token_usage` object in each
++referenced rollout JSONL file. The trusted token fields are:
++
++- `input_tokens` → input tokens
++- `output_tokens` → output tokens
++- `cached_input_tokens` → cache read tokens
++
++Codex local JSONL does not expose cache-write tokens, so the dashboard shows
++cache write as unavailable for Codex instead of treating it as zero. The adapter
++does not infer token counts from transcript text.
++
+ ## Local verification
+ 
+ ```bash
+diff --git a/app.py b/app.py
+index d7a48cb..f116375 100644
+--- a/app.py
++++ b/app.py
+@@ -18,6 +18,10 @@ from flask import Flask, jsonify, render_template, request
+ app = Flask(__name__)
+ 
+ DB_PATH = os.path.expanduser("~/.local/share/opencode/opencode.db")
++CODEX_STATE_PATH = os.path.expanduser("~/.codex/state_5.sqlite")
++CODEX_SESSIONS_DIR = os.path.expanduser("~/.codex/sessions")
++CODEX_SOURCE_PATH = CODEX_STATE_PATH
++
+ 
+ 
+ def display_path(path: str) -> str:
+@@ -73,6 +77,13 @@ def current_tool_sources() -> list[dict]:
+         item = dict(source)
+         if item["id"] == "opencode":
+             item["source_path"] = display_path(DB_PATH)
++        elif item["id"] == "codex" and codex_source_available():
++            item.update({
++                "status": "active",
++                "status_label": "Active source",
++                "source_type": "SQLite state + JSONL rollouts",
++                "source_path": display_path(CODEX_SOURCE_PATH),
++            })
+         sources.append(item)
+     return sources
+ 
+@@ -147,6 +158,286 @@ def get_db():
+     return conn
+ 
+ 
++def codex_source_available() -> bool:
++    """Return whether local Codex state exists on this machine."""
++    return Path(CODEX_STATE_PATH).exists()
++
++
++def _jsonl_latest_codex_usage(path: str | None) -> tuple[dict | None, int]:
++    """Return latest cumulative Codex token usage and count of token-bearing turns."""
++    if not path or not Path(path).exists():
++        return None, 0
++    latest = None
++    token_events = 0
++    try:
++        with Path(path).open("r", encoding="utf-8", errors="replace") as handle:
++            for line in handle:
++                try:
++                    obj = json.loads(line)
++                except json.JSONDecodeError:
++                    continue
++                payload = obj.get("payload") if isinstance(obj, dict) else None
++                if not isinstance(payload, dict):
++                    continue
++                info = payload.get("info")
++                if not isinstance(info, dict):
++                    continue
++                usage = info.get("total_token_usage")
++                if isinstance(usage, dict):
++                    latest = usage
++                    token_events += 1
++    except OSError:
++        return None, 0
++    return latest, token_events
++
++
++def _safe_int(value, default: int | None = 0) -> int | None:
++    if value is None:
++        return default
++    try:
++        return int(value)
++    except (TypeError, ValueError):
++        return default
++
++
++def codex_records(days: int | None = None) -> list[dict]:
++    """Normalize Codex CLI thread state + JSONL token events into dashboard records.
++
++    Trust boundary: ~/.codex/state_5.sqlite is used for session metadata, while
++    the latest cumulative `total_token_usage` in each rollout JSONL is used for
++    input/output/cache-read tokens. Codex does not expose cache-write tokens in
++    this local format, so cache_write remains None.
++    """
++    if not codex_source_available():
++        return []
++
++    since_ms = None
++    if days is not None:
++        since_ms = int((datetime.datetime.now() - datetime.timedelta(days=days)).timestamp() * 1000)
++
++    conn = sqlite3.connect(f"file:{CODEX_STATE_PATH}?mode=ro", uri=True)
++    conn.row_factory = sqlite3.Row
++    where = "WHERE COALESCE(updated_at_ms, updated_at * 1000, created_at_ms, created_at * 1000) >= ?" if since_ms else ""
++    params = (since_ms,) if since_ms else ()
++    try:
++        rows = conn.execute(f"""
++            SELECT
++                id,
++                rollout_path,
++                COALESCE(created_at_ms, created_at * 1000) as created_ms,
++                COALESCE(updated_at_ms, updated_at * 1000) as updated_ms,
++                model_provider,
++                model,
++                title,
++                cwd,
++                preview,
++                tokens_used
++            FROM threads
++            {where}
++            ORDER BY COALESCE(updated_at_ms, updated_at * 1000, created_at_ms, created_at * 1000) DESC
++        """, params).fetchall()
++    finally:
++        conn.close()
++
++    records = []
++    for row in rows:
++        usage, token_events = _jsonl_latest_codex_usage(row["rollout_path"])
++        if not usage:
++            continue
++        input_tokens = _safe_int(usage.get("input_tokens"), None)
++        output_tokens = _safe_int(usage.get("output_tokens"), None)
++        cache_read = _safe_int(usage.get("cached_input_tokens"), None)
++        model_id = row["model"] or "unknown"
++        provider = row["model_provider"] or "unknown"
++        created_ms = _safe_int(row["created_ms"], 0) or 0
++        updated_ms = _safe_int(row["updated_ms"], created_ms) or created_ms
++        created_dt = datetime.datetime.fromtimestamp(created_ms / 1000) if created_ms else None
++        updated_dt = datetime.datetime.fromtimestamp(updated_ms / 1000) if updated_ms else None
++        records.append({
++            "tool": "Codex CLI",
++            "tool_id": "codex",
++            "tool_color": TOOL_COLOR_MAP.get("codex", "#BA68C8"),
++            "source_path": display_path(CODEX_SOURCE_PATH),
++            "id": row["id"],
++            "session_id": row["id"],
++            "timestamp": created_ms,
++            "created": created_dt.strftime("%Y-%m-%d %H:%M:%S") if created_dt else None,
++            "updated": updated_dt.strftime("%Y-%m-%d %H:%M:%S") if updated_dt else None,
++            "date": created_dt.date().isoformat() if created_dt else None,
++            "title": row["title"] or row["preview"] or row["id"],
++            "directory": row["cwd"],
++            "provider": provider,
++            "model_id": model_id,
++            "model": f"{provider}/{model_id}",
++            "chart_model_id": f"{provider}/{model_id}",
++            "label": normalize_model(json.dumps({"id": model_id, "providerID": provider}))["label"],
++            "sessions": 1,
++            "messages": token_events,
++            "tokens_input": input_tokens,
++            "tokens_output": output_tokens,
++            "tokens_total": (input_tokens or 0) + (output_tokens or 0) if input_tokens is not None and output_tokens is not None else None,
++            "cache_read": cache_read,
++            "cache_write": None,
++            "cache_write_available": False,
++            "metrics_note": "Codex local JSONL exposes input, output, and cached input tokens; cache write is unavailable.",
++            "files_changed": None,
++            "additions": None,
++            "deletions": None,
++        })
++    return records
++
++
++def _sum_available(records: list[dict], key: str) -> int | None:
++    values = [r.get(key) for r in records if r.get(key) is not None]
++    if not values:
++        return None
++    return sum(values)
++
++
++def _record_tool_source_totals(records: list[dict], source: dict) -> dict:
++    item = dict(source)
++    matching = [r for r in records if r.get("tool_id") == item["id"]]
++    item.update({
++        "sessions": len({r.get("session_id") or r.get("id") for r in matching}),
++        "tokens_total": _sum_available(matching, "tokens_total"),
++        "tokens_input": _sum_available(matching, "tokens_input"),
++        "tokens_output": _sum_available(matching, "tokens_output"),
++        "cache_read": _sum_available(matching, "cache_read"),
++        "cache_write": _sum_available(matching, "cache_write"),
++    })
++    return item
++
++
++def codex_overview(days: int | None = None) -> dict | None:
++    records = codex_records(days)
++    if not records:
++        return None
++    dates = sorted({r["date"] for r in records if r.get("date")})
++    total_input = _sum_available(records, "tokens_input") or 0
++    total_output = _sum_available(records, "tokens_output") or 0
++    return {
++        "total_sessions": len({r["session_id"] for r in records}),
++        "total_input": total_input,
++        "total_output": total_output,
++        "total_tokens": total_input + total_output,
++        "cache_read": _sum_available(records, "cache_read") or 0,
++        "cache_write": None,
++        "first_session": dates[0] if dates else None,
++        "last_session": dates[-1] if dates else None,
++    }
++
++
++def aggregate_codex_models(days: int | None = 30) -> list[dict]:
++    grouped = {}
++    for record in codex_records(days):
++        key = (record["provider"], record["model_id"])
++        agg = grouped.setdefault(key, {
++            "tool": "Codex CLI",
++            "tool_id": "codex",
++            "tool_color": TOOL_COLOR_MAP.get("codex", "#BA68C8"),
++            "source_path": display_path(CODEX_SOURCE_PATH),
++            "provider": record["provider"],
++            "model_id": record["model_id"],
++            "label": normalize_model(json.dumps({"id": record["model_id"], "providerID": record["provider"]}))["label"],
++            "chart_model_id": record["chart_model_id"],
++            "sessions": 0,
++            "messages": 0,
++            "tokens_input": 0,
++            "tokens_output": 0,
++            "tokens_total": 0,
++            "cache_read": 0,
++            "cache_write": None,
++            "cache_write_available": False,
++        })
++        agg["sessions"] += 1
++        agg["messages"] += record.get("messages") or 0
++        agg["tokens_input"] += record.get("tokens_input") or 0
++        agg["tokens_output"] += record.get("tokens_output") or 0
++        agg["tokens_total"] += record.get("tokens_total") or 0
++        agg["cache_read"] += record.get("cache_read") or 0
++    models = sorted(grouped.values(), key=lambda item: item["tokens_total"], reverse=True)
++    return models
++
++
++def build_daily_from_model_records(model_records: list[dict], top_n: int, selected_model_id: str | None, selected_tool_id: str | None) -> dict:
++    daily_data = {}
++    model_map = {}
++    all_models_ordered = []
++    for row in model_records:
++        dt = row["date"]
++        mid = row["chart_model_id"]
++        if mid not in model_map:
++            model_map[mid] = {
++                "label": row["label"],
++                "model_id": row["model_id"],
++                "provider": row["provider"],
++            }
++            all_models_ordered.append(mid)
++        daily_data.setdefault(dt, {})
++        bucket = daily_data[dt].setdefault(mid, {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0})
++        bucket["sessions"] += row.get("sessions") or 0
++        bucket["messages"] += row.get("messages") or 0
++        bucket["tokens_input"] += row.get("tokens_input") or 0
++        bucket["tokens_output"] += row.get("tokens_output") or 0
++        bucket["tokens_total"] += row.get("tokens_total") or 0
++        bucket["cache_read"] += row.get("cache_read") or 0
++        bucket["cache_write"] += row.get("cache_write") or 0
++
++    dates = sorted(daily_data.keys())
++    for dt in dates:
++        for mid in all_models_ordered:
++            daily_data[dt].setdefault(mid, {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0})
++
++    model_totals = {}
++    for dt in dates:
++        for mid in all_models_ordered:
++            model_totals[mid] = model_totals.get(mid, 0) + daily_data[dt][mid]["tokens_total"]
++    all_models_ordered.sort(key=lambda m: model_totals.get(m, 0), reverse=True)
++    active_models = [m for m in all_models_ordered if model_totals.get(m, 0) > 0]
++    top_models = [selected_model_id] if selected_model_id in active_models else active_models[:top_n]
++    other_models = [m for m in all_models_ordered if m not in top_models]
++
++    chart_data = {}
++    for dt in dates:
++        chart_data[dt] = {mid: daily_data[dt][mid] for mid in top_models}
++        other = {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0}
++        for mid in other_models:
++            row = daily_data[dt].get(mid)
++            if not row:
++                continue
++            for key in other:
++                other[key] += row.get(key, 0)
++        if not selected_model_id and (other["tokens_total"] > 0 or other["sessions"] > 0):
++            chart_data[dt]["other"] = other
++
++    chart_models = []
++    for index, mid in enumerate(top_models):
++        rank = active_models.index(mid) if mid in active_models else index
++        meta = model_map[mid]
++        chart_models.append({
++            "id": mid,
++            "label": meta["label"],
++            "color": chart_color(rank, meta["model_id"], meta["provider"]),
++            "tokens_total": model_totals.get(mid, 0),
++            "rank": rank + 1,
++        })
++    if not selected_model_id and any("other" in chart_data[dt] for dt in dates):
++        chart_models.append({"id": "other", "label": f"Other ({len(other_models)} models)", "color": "#64748B", "tokens_total": sum(model_totals.get(mid, 0) for mid in other_models), "rank": None})
++        for dt in dates:
++            chart_data[dt].setdefault("other", {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0})
++
++    return {
++        "dates": dates,
++        "models": chart_models,
++        "data": chart_data,
++        "top_n": top_n,
++        "other_count": 0 if selected_model_id else len(other_models),
++        "selected_model_id": selected_model_id if selected_model_id in active_models else None,
++        "selected_tool_id": selected_tool_id,
++        "selected_tool_label": tool_source_label(selected_tool_id),
++    }
++
++
+ def parse_days(default: int | None = 30) -> int | None:
+     """Parse a days=N query param. 0/all means all time."""
+     raw = request.args.get("days")
+@@ -569,22 +860,47 @@ def api_overview():
+         FROM session_stats CROSS JOIN message_stats
+     """, params + params)
+     row = dict(cur.fetchone())
++    codex = codex_overview(days)
+     row["days"] = days
+-    row["active_tool"] = "opencode"
+-    row["active_tool_label"] = "OpenCode"
+-    row["source_path"] = display_path(DB_PATH)
++    row["active_tool"] = "multiple" if codex else "opencode"
++    row["active_tool_label"] = "OpenCode + Codex CLI" if codex else "OpenCode"
++    row["source_path"] = f"{display_path(DB_PATH)} + {display_path(CODEX_SOURCE_PATH)}" if codex else display_path(DB_PATH)
+     row["token_total_definition"] = "input + output assistant-message tokens; cache read/write excluded"
++
++    opencode_totals = {
++        "sessions": row["total_sessions"],
++        "tokens_total": row["total_tokens"],
++        "tokens_input": row["total_input"],
++        "tokens_output": row["total_output"],
++        "cache_read": row["cache_read"],
++        "cache_write": row["cache_write"],
++    }
++    if codex:
++        row["total_sessions"] = (row["total_sessions"] or 0) + codex["total_sessions"]
++        row["total_input"] = (row["total_input"] or 0) + codex["total_input"]
++        row["total_output"] = (row["total_output"] or 0) + codex["total_output"]
++        row["total_tokens"] = row["total_input"] + row["total_output"]
++        row["cache_read"] = (row["cache_read"] or 0) + (codex["cache_read"] or 0)
++        row["cache_write"] = row["cache_write"] if row["cache_write"] is not None else None
++        session_dates = [d for d in [row["first_session"], row["last_session"], codex["first_session"], codex["last_session"]] if d]
++        if session_dates:
++            row["first_session"] = min(session_dates)
++            row["last_session"] = max(session_dates)
++
+     row["tool_sources"] = []
+     for source in current_tool_sources():
+         item = dict(source)
+         if item["id"] == "opencode":
++            item.update(opencode_totals)
++        elif item["id"] == "codex" and codex:
+             item.update({
+-                "sessions": row["total_sessions"],
+-                "tokens_total": row["total_tokens"],
+-                "tokens_input": row["total_input"],
+-                "tokens_output": row["total_output"],
+-                "cache_read": row["cache_read"],
+-                "cache_write": row["cache_write"],
++                "sessions": codex["total_sessions"],
++                "tokens_total": codex["total_tokens"],
++                "tokens_input": codex["total_input"],
++                "tokens_output": codex["total_output"],
++                "cache_read": codex["cache_read"],
++                "cache_write": None,
++                "metrics_note": "Cache write unavailable in local Codex JSONL.",
+             })
+         else:
+             item.update({
+@@ -660,6 +976,11 @@ def api_models():
+             **estimate_cost(info["provider"], info["id"], tokens_input, tokens_output, cache_read, cache_write),
+         })
+     conn.close()
++    models.extend(aggregate_codex_models(days))
++    models.sort(key=lambda item: item.get("tokens_total") or 0, reverse=True)
++    for rank, model in enumerate(models, start=1):
++        model["rank"] = rank
++        model["color"] = chart_color(rank - 1, model.get("model_id", ""), model.get("provider", ""))
+     return jsonify(models)
+ 
+ 
+@@ -670,7 +991,7 @@ def api_daily():
+     top_n = parse_top_n(default=8)
+     selected_model_id = request.args.get("model_id") or None
+     selected_tool_id = request.args.get("tool_id") or None
+-    if selected_tool_id and selected_tool_id != "opencode":
++    if selected_tool_id and selected_tool_id not in {"opencode", "codex"}:
+         if selected_tool_id in KNOWN_TOOL_IDS:
+             source_label = tool_source_label(selected_tool_id) or selected_tool_id
+             return empty_daily_response(
+@@ -769,6 +1090,12 @@ def api_daily():
+             "selected_tool_id": selected_tool_id,
+             "selected_tool_label": tool_source_label(selected_tool_id),
+         })
++    if selected_tool_id == "codex":
++        records = codex_records(days)
++        if not records:
++            return empty_daily_response(top_n, selected_tool_id, error_message="Codex CLI data is unavailable.")
++        return jsonify(build_daily_from_model_records(records, top_n, selected_model_id, selected_tool_id))
++
+     where, params = since_clause(days)
+     msg_where = where.replace("time_created", "m.time_created")
+ 
+@@ -826,6 +1153,29 @@ def api_daily():
+             "cache_write": row["cache_write"] or 0,
+         }
+ 
++    if selected_tool_id is None:
++        for record in codex_records(days):
++            dt = record.get("date")
++            if not dt:
++                continue
++            mid = record["chart_model_id"]
++            if mid not in model_map:
++                model_map[mid] = {
++                    "label": record["label"],
++                    "model_id": record["model_id"],
++                    "provider": record["provider"],
++                    "color": "#64748B",
++                }
++                all_models_ordered.append(mid)
++            daily_data.setdefault(dt, {})
++            bucket = daily_data[dt].setdefault(mid, {"sessions": 0, "messages": 0, "tokens_input": 0, "tokens_output": 0, "tokens_total": 0, "cache_read": 0, "cache_write": 0})
++            bucket["sessions"] += 1
++            bucket["messages"] += record.get("messages") or 0
++            bucket["tokens_input"] += record.get("tokens_input") or 0
++            bucket["tokens_output"] += record.get("tokens_output") or 0
++            bucket["tokens_total"] += record.get("tokens_total") or 0
++            bucket["cache_read"] += record.get("cache_read") or 0
++
+     dates = sorted(daily_data.keys())
+     for dt in dates:
+         for mid in all_models_ordered:
+@@ -987,7 +1337,33 @@ def api_usage_history():
+             "deletions": row["summary_deletions"],
+         })
+     conn.close()
+-    return jsonify(sessions)
++    for record in codex_records(30):
++        sessions.append({
++            "id": record["id"],
++            "tool": record["tool"],
++            "tool_id": record["tool_id"],
++            "tool_color": record["tool_color"],
++            "source_path": record["source_path"],
++            "title": record["title"],
++            "created": record["created"],
++            "updated": record["updated"],
++            "directory": record["directory"],
++            "model": record["model"],
++            "messages": record["messages"],
++            "tokens_input": record["tokens_input"],
++            "tokens_output": record["tokens_output"],
++            "tokens_total": record["tokens_total"],
++            "cache_read": record["cache_read"],
++            "cache_write": record["cache_write"],
++            "metrics_note": record["metrics_note"],
++            "files_changed": None,
++            "additions": None,
++            "deletions": None,
++        })
++    sessions.sort(key=lambda item: item.get("created") or "", reverse=True)
++    start = int(offset or 0)
++    count = int(limit or 50)
++    return jsonify(sessions[start: start + count])
+ 
+ 
+ @app.route("/api/refresh")
+diff --git a/templates/index.html b/templates/index.html
+index de3ad0c..fb550f0 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -795,6 +795,7 @@ const FORMATTER = new Intl.NumberFormat('en-US');
+ function fmtNum(n) { return FORMATTER.format(n); }
+ 
+ function fmtTokens(n) {
++  if (n === null || n === undefined || Number.isNaN(Number(n))) return '—';
+   if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + 'B';
+   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+@@ -1058,17 +1059,17 @@ async function loadOverview(days) {
+     );
+     setCardMeta(
+       'tokens-sub',
+-      `${fmtTokens(d.cache_read || 0)} read / ${fmtTokens(d.cache_write || 0)} write cache`,
++      `${fmtTokens(d.cache_read)} read / ${fmtTokens(d.cache_write)} write cache`,
+       `${d.token_total_definition || 'Total tokens are input + output.'} ${totalAvg} avg/session. Source: ${sourceLabel} only.`,
+     );
+     setCardMeta(
+       'input-sub',
+-      `${fmtTokens(d.cache_read || 0)} cache read`,
++      `${fmtTokens(d.cache_read)} cache read`,
+       `Input tokens are prompt/context tokens sent to the model. Cache read is reused context and is excluded from input totals. ${inputAvg} input avg/session.`,
+     );
+     setCardMeta(
+       'output-sub',
+-      `${fmtTokens(d.cache_write || 0)} cache write`,
++      `${fmtTokens(d.cache_write)} cache write`,
+       `Output tokens are assistant response tokens. Cache write is newly cached context and is excluded from output totals. ${outputAvg} output avg/session.`,
+     );
+     document.getElementById('tool-sources-subtitle').textContent = `Click a source to focus the chart. Totals currently come from ${sourceLabel}.`;
+diff --git a/tests/test_app.py b/tests/test_app.py
+index b5a3fc6..aa19206 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -56,12 +56,23 @@ class DashboardApiTests(unittest.TestCase):
+         cls.tmpdir = tempfile.TemporaryDirectory()
+         cls.db_path = Path(cls.tmpdir.name) / "opencode-test.db"
+         cls.original_db_path = dashboard_app.DB_PATH
++        cls.original_codex_state_path = dashboard_app.CODEX_STATE_PATH
++        cls.original_codex_sessions_dir = dashboard_app.CODEX_SESSIONS_DIR
++        cls.original_codex_source_path = dashboard_app.CODEX_SOURCE_PATH
++        cls.codex_state_path = Path(cls.tmpdir.name) / "missing-codex-state.sqlite"
++        cls.codex_sessions_dir = Path(cls.tmpdir.name) / "codex-sessions"
+         cls._build_test_db(cls.db_path)
+         dashboard_app.DB_PATH = str(cls.db_path)
++        dashboard_app.CODEX_STATE_PATH = str(cls.codex_state_path)
++        dashboard_app.CODEX_SESSIONS_DIR = str(cls.codex_sessions_dir)
++        dashboard_app.CODEX_SOURCE_PATH = str(cls.codex_state_path)
+ 
+     @classmethod
+     def tearDownClass(cls):
+         dashboard_app.DB_PATH = cls.original_db_path
++        dashboard_app.CODEX_STATE_PATH = cls.original_codex_state_path
++        dashboard_app.CODEX_SESSIONS_DIR = cls.original_codex_sessions_dir
++        dashboard_app.CODEX_SOURCE_PATH = cls.original_codex_source_path
+         cls.tmpdir.cleanup()
+ 
+     @classmethod
+@@ -182,6 +193,9 @@ class DashboardApiTests(unittest.TestCase):
+         conn.close()
+ 
+     def setUp(self):
++        dashboard_app.CODEX_STATE_PATH = str(self.codex_state_path)
++        dashboard_app.CODEX_SESSIONS_DIR = str(self.codex_sessions_dir)
++        dashboard_app.CODEX_SOURCE_PATH = str(self.codex_state_path)
+         self.client = dashboard_app.app.test_client()
+ 
+     def test_overview_exposes_tool_source_metadata(self):
+@@ -216,7 +230,7 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertEqual(sources['hermes']['repo_url'], 'https://github.com/NousResearch/hermes-agent/')
+         self.assertIsNone(sources['hermes']['issue'])
+ 
+-    def test_planned_tool_source_filter_returns_empty_daily_result(self):
++    def test_codex_tool_source_filter_returns_empty_result_when_data_missing(self):
+         response = self.client.get('/api/daily?days=30&tool_id=codex')
+         self.assertEqual(response.status_code, 200)
+         payload = response.get_json()
+@@ -225,7 +239,7 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertEqual(payload['selected_tool_label'], 'Codex CLI')
+         self.assertEqual(payload['models'], [])
+         self.assertEqual(payload['data'], {})
+-        self.assertEqual(payload['error'], 'Codex CLI is planned and not connected yet.')
++        self.assertEqual(payload['error'], 'Codex CLI data is unavailable.')
+ 
+     def test_unknown_tool_source_filter_returns_http_400(self):
+         response = self.client.get('/api/daily?days=30&tool_id=unknown')
+@@ -253,6 +267,86 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertEqual(history[0]['tool_id'], 'opencode')
+         self.assertEqual(history[0]['tool_color'], '#3B82F6')
+ 
++
++    def _write_codex_fixture(self) -> None:
++        state = Path(self.tmpdir.name) / "codex-state.sqlite"
++        rollout = Path(self.tmpdir.name) / "codex-rollout.jsonl"
++        created_ms = int(time.time() * 1000) - 3600000
++        rollout.write_text(
++            '\n'.join([
++                json.dumps({"timestamp": "2026-05-30T00:00:00Z", "type": "session_meta", "payload": {"id": "codex-1"}}),
++                json.dumps({"timestamp": "2026-05-30T00:01:00Z", "type": "event_msg", "payload": {"type": "task_complete", "info": {"total_token_usage": {"input_tokens": 1000, "cached_input_tokens": 250, "output_tokens": 125, "reasoning_output_tokens": 25, "total_tokens": 1125}}}}),
++                json.dumps({"timestamp": "2026-05-30T00:02:00Z", "type": "event_msg", "payload": {"type": "task_complete", "info": {"total_token_usage": {"input_tokens": 1500, "cached_input_tokens": 400, "output_tokens": 225, "reasoning_output_tokens": 40, "total_tokens": 1725}}}}),
++            ]) + '\n'
++        )
++        conn = sqlite3.connect(state)
++        conn.execute(
++            """
++            CREATE TABLE threads (
++                id TEXT PRIMARY KEY,
++                rollout_path TEXT NOT NULL,
++                created_at INTEGER NOT NULL,
++                updated_at INTEGER NOT NULL,
++                created_at_ms INTEGER,
++                updated_at_ms INTEGER,
++                source TEXT NOT NULL,
++                model_provider TEXT NOT NULL,
++                cwd TEXT NOT NULL,
++                title TEXT NOT NULL,
++                tokens_used INTEGER NOT NULL DEFAULT 0,
++                preview TEXT NOT NULL DEFAULT '',
++                model TEXT
++            )
++            """
++        )
++        conn.execute(
++            """
++            INSERT INTO threads (
++                id, rollout_path, created_at, updated_at, created_at_ms, updated_at_ms,
++                source, model_provider, cwd, title, tokens_used, preview, model
++            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
++            """,
++            (
++                "codex-1", str(rollout), created_ms // 1000, created_ms // 1000, created_ms, created_ms + 120000,
++                "cli", "openai", "/tmp/codex-project", "Codex adapter spike", 1725, "Codex adapter spike", "gpt-5.5",
++            ),
++        )
++        conn.commit()
++        conn.close()
++        dashboard_app.CODEX_STATE_PATH = str(state)
++        dashboard_app.CODEX_SOURCE_PATH = str(state)
++
++    def test_codex_records_flow_into_sources_models_daily_and_history(self):
++        self._write_codex_fixture()
++
++        overview = self.client.get('/api/overview?days=30').get_json()
++        sources = {item['id']: item for item in overview['tool_sources']}
++        self.assertEqual(sources['codex']['status'], 'active')
++        self.assertEqual(sources['codex']['status_label'], 'Active source')
++        self.assertEqual(sources['codex']['source_type'], 'SQLite state + JSONL rollouts')
++        self.assertEqual(sources['codex']['sessions'], 1)
++        self.assertEqual(sources['codex']['tokens_input'], 1500)
++        self.assertEqual(sources['codex']['tokens_output'], 225)
++        self.assertEqual(sources['codex']['cache_read'], 400)
++        self.assertIsNone(sources['codex']['cache_write'])
++
++        models = self.client.get('/api/models?days=30').get_json()
++        codex_model = next(item for item in models if item['tool_id'] == 'codex')
++        self.assertEqual(codex_model['chart_model_id'], 'openai/gpt-5.5')
++        self.assertEqual(codex_model['tokens_total'], 1725)
++        self.assertFalse(codex_model['cache_write_available'])
++
++        daily = self.client.get('/api/daily?days=30&tool_id=codex').get_json()
++        self.assertEqual(daily['selected_tool_id'], 'codex')
++        self.assertEqual(daily['models'][0]['id'], 'openai/gpt-5.5')
++        first_day = daily['dates'][0]
++        self.assertEqual(daily['data'][first_day]['openai/gpt-5.5']['tokens_total'], 1725)
++
++        history = self.client.get('/api/usage-history?limit=20').get_json()
++        codex_history = next(item for item in history if item['tool_id'] == 'codex')
++        self.assertEqual(codex_history['tokens_input'], 1500)
++        self.assertIsNone(codex_history['cache_write'])
++
+     def test_settings_page_describes_current_cost_and_token_rules(self):
+         response = self.client.get('/settings')
+         self.assertEqual(response.status_code, 200)
+-- 
+2.43.0
+
+
+From 42aae940c2beadacb13384f34ba242e59a49813f Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Sat, 30 May 2026 17:07:36 +0700
+Subject: [PATCH 2/7] fix: align Codex token semantics and pricing
+
+---
+ README.md         | 13 ++++++++-----
+ app.py            | 23 +++++++++++++++++++----
+ tests/test_app.py | 13 +++++++++----
+ 3 files changed, 36 insertions(+), 13 deletions(-)
+
+diff --git a/README.md b/README.md
+index e9cf455..f8d9533 100644
+--- a/README.md
++++ b/README.md
+@@ -100,13 +100,16 @@ updated timestamps, title/preview, cwd, provider, and model.
+ Token metrics come from the latest cumulative `total_token_usage` object in each
+ referenced rollout JSONL file. The trusted token fields are:
+ 
+-- `input_tokens` → input tokens
+-- `output_tokens` → output tokens
++- `input_tokens` → raw Codex input, including cached input
+ - `cached_input_tokens` → cache read tokens
++- `input_tokens - cached_input_tokens` → dashboard input, to match OpenCode's non-cache input semantics
++- `output_tokens` → output tokens
+ 
+-Codex local JSONL does not expose cache-write tokens, so the dashboard shows
+-cache write as unavailable for Codex instead of treating it as zero. The adapter
+-does not infer token counts from transcript text.
++Total tokens remain dashboard input + output. Cache read/write tokens are shown
++separately and excluded from total tokens. Codex local JSONL does not expose
++cache-write tokens, so the dashboard shows cache write as unavailable for Codex
++instead of treating it as zero. The adapter does not infer token counts from
++transcript text.
+ 
+ ## Local verification
+ 
+diff --git a/app.py b/app.py
+index f116375..c7366f4 100644
+--- a/app.py
++++ b/app.py
+@@ -205,8 +205,10 @@ def codex_records(days: int | None = None) -> list[dict]:
+ 
+     Trust boundary: ~/.codex/state_5.sqlite is used for session metadata, while
+     the latest cumulative `total_token_usage` in each rollout JSONL is used for
+-    input/output/cache-read tokens. Codex does not expose cache-write tokens in
+-    this local format, so cache_write remains None.
++    token metrics. Codex reports cached tokens inside `input_tokens`; the
++    dashboard subtracts `cached_input_tokens` so the public input column is
++    comparable with OpenCode's non-cache input. Codex does not expose
++    cache-write tokens in this local format, so cache_write remains None.
+     """
+     if not codex_source_available():
+         return []
+@@ -244,9 +246,12 @@ def codex_records(days: int | None = None) -> list[dict]:
+         usage, token_events = _jsonl_latest_codex_usage(row["rollout_path"])
+         if not usage:
+             continue
+-        input_tokens = _safe_int(usage.get("input_tokens"), None)
++        raw_input_tokens = _safe_int(usage.get("input_tokens"), None)
+         output_tokens = _safe_int(usage.get("output_tokens"), None)
+         cache_read = _safe_int(usage.get("cached_input_tokens"), None)
++        input_tokens = raw_input_tokens
++        if raw_input_tokens is not None and cache_read is not None:
++            input_tokens = max(0, raw_input_tokens - cache_read)
+         model_id = row["model"] or "unknown"
+         provider = row["model_provider"] or "unknown"
+         created_ms = _safe_int(row["created_ms"], 0) or 0
+@@ -274,12 +279,13 @@ def codex_records(days: int | None = None) -> list[dict]:
+             "sessions": 1,
+             "messages": token_events,
+             "tokens_input": input_tokens,
++            "raw_tokens_input": raw_input_tokens,
+             "tokens_output": output_tokens,
+             "tokens_total": (input_tokens or 0) + (output_tokens or 0) if input_tokens is not None and output_tokens is not None else None,
+             "cache_read": cache_read,
+             "cache_write": None,
+             "cache_write_available": False,
+-            "metrics_note": "Codex local JSONL exposes input, output, and cached input tokens; cache write is unavailable.",
++            "metrics_note": "Codex total_token_usage.input_tokens includes cached input; dashboard input subtracts cached_input_tokens so input/cache read match OpenCode semantics. Cache write is unavailable.",
+             "files_changed": None,
+             "additions": None,
+             "deletions": None,
+@@ -356,6 +362,15 @@ def aggregate_codex_models(days: int | None = 30) -> list[dict]:
+         agg["tokens_total"] += record.get("tokens_total") or 0
+         agg["cache_read"] += record.get("cache_read") or 0
+     models = sorted(grouped.values(), key=lambda item: item["tokens_total"], reverse=True)
++    for item in models:
++        item.update(estimate_cost(
++            item["provider"],
++            item["model_id"],
++            item["tokens_input"],
++            item["tokens_output"],
++            item["cache_read"],
++            0,
++        ))
+     return models
+ 
+ 
+diff --git a/tests/test_app.py b/tests/test_app.py
+index aa19206..bc80bef 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -325,26 +325,31 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertEqual(sources['codex']['status_label'], 'Active source')
+         self.assertEqual(sources['codex']['source_type'], 'SQLite state + JSONL rollouts')
+         self.assertEqual(sources['codex']['sessions'], 1)
+-        self.assertEqual(sources['codex']['tokens_input'], 1500)
++        self.assertEqual(sources['codex']['tokens_input'], 1100)
+         self.assertEqual(sources['codex']['tokens_output'], 225)
++        self.assertEqual(sources['codex']['tokens_total'], 1325)
+         self.assertEqual(sources['codex']['cache_read'], 400)
+         self.assertIsNone(sources['codex']['cache_write'])
+ 
+         models = self.client.get('/api/models?days=30').get_json()
+         codex_model = next(item for item in models if item['tool_id'] == 'codex')
+         self.assertEqual(codex_model['chart_model_id'], 'openai/gpt-5.5')
+-        self.assertEqual(codex_model['tokens_total'], 1725)
++        self.assertEqual(codex_model['tokens_input'], 1100)
++        self.assertEqual(codex_model['tokens_total'], 1325)
++        self.assertEqual(codex_model['pricing_model_id'], 'openai/gpt-5.5')
++        self.assertEqual(codex_model['pricing_status'], 'priced')
++        self.assertIsNotNone(codex_model['estimated_cost'])
+         self.assertFalse(codex_model['cache_write_available'])
+ 
+         daily = self.client.get('/api/daily?days=30&tool_id=codex').get_json()
+         self.assertEqual(daily['selected_tool_id'], 'codex')
+         self.assertEqual(daily['models'][0]['id'], 'openai/gpt-5.5')
+         first_day = daily['dates'][0]
+-        self.assertEqual(daily['data'][first_day]['openai/gpt-5.5']['tokens_total'], 1725)
++        self.assertEqual(daily['data'][first_day]['openai/gpt-5.5']['tokens_total'], 1325)
+ 
+         history = self.client.get('/api/usage-history?limit=20').get_json()
+         codex_history = next(item for item in history if item['tool_id'] == 'codex')
+-        self.assertEqual(codex_history['tokens_input'], 1500)
++        self.assertEqual(codex_history['tokens_input'], 1100)
+         self.assertIsNone(codex_history['cache_write'])
+ 
+     def test_settings_page_describes_current_cost_and_token_rules(self):
+-- 
+2.43.0
+
+
+From ad443bfac1d45b40e9da8b80927e41286f359194 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Sat, 30 May 2026 17:14:10 +0700
+Subject: [PATCH 3/7] fix: clarify non-cache input reporting
+
+---
+ README.md               |  5 +++--
+ app.py                  |  4 ++--
+ templates/index.html    | 26 +++++++++++++-------------
+ templates/settings.html |  2 +-
+ tests/test_app.py       |  7 +++++--
+ 5 files changed, 24 insertions(+), 20 deletions(-)
+
+diff --git a/README.md b/README.md
+index f8d9533..98dc1a6 100644
+--- a/README.md
++++ b/README.md
+@@ -87,8 +87,9 @@ review what the dashboard actually showed at capture time.
+ ## Current data rules
+ 
+ - active sources: OpenCode local SQLite DB; Codex local state DB plus rollout JSONL
+-- total tokens = input + output assistant-message tokens
++- total tokens = non-cache input + output assistant-message tokens
+ - cache read/write tokens are shown separately and excluded from total tokens
++- raw provider input can include cached tokens; adapters subtract cache read where needed before reporting dashboard input
+ - unmatched model pricing stays unpriced instead of guessed
+ 
+ ### Codex source contract
+@@ -105,7 +106,7 @@ referenced rollout JSONL file. The trusted token fields are:
+ - `input_tokens - cached_input_tokens` → dashboard input, to match OpenCode's non-cache input semantics
+ - `output_tokens` → output tokens
+ 
+-Total tokens remain dashboard input + output. Cache read/write tokens are shown
++Total tokens remain dashboard non-cache input + output. Cache read/write tokens are shown
+ separately and excluded from total tokens. Codex local JSONL does not expose
+ cache-write tokens, so the dashboard shows cache write as unavailable for Codex
+ instead of treating it as zero. The adapter does not infer token counts from
+diff --git a/app.py b/app.py
+index c7366f4..0ba5e1b 100644
+--- a/app.py
++++ b/app.py
+@@ -709,7 +709,7 @@ def build_simulated_dataset(days: int | None = 31) -> dict:
+         "active_tool": "opencode",
+         "active_tool_label": "OpenCode (simulated)",
+         "source_path": "simulated dataset",
+-        "token_total_definition": "input + output assistant-message tokens; cache read/write excluded",
++        "token_total_definition": "non-cache input + output assistant-message tokens; cache read/write separate",
+         "tool_sources": [],
+     }
+ 
+@@ -880,7 +880,7 @@ def api_overview():
+     row["active_tool"] = "multiple" if codex else "opencode"
+     row["active_tool_label"] = "OpenCode + Codex CLI" if codex else "OpenCode"
+     row["source_path"] = f"{display_path(DB_PATH)} + {display_path(CODEX_SOURCE_PATH)}" if codex else display_path(DB_PATH)
+-    row["token_total_definition"] = "input + output assistant-message tokens; cache read/write excluded"
++    row["token_total_definition"] = "non-cache input + output assistant-message tokens; cache read/write separate"
+ 
+     opencode_totals = {
+         "sessions": row["total_sessions"],
+diff --git a/templates/index.html b/templates/index.html
+index fb550f0..51de635 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -652,7 +652,7 @@
+   <main class="main-area">
+     <section id="cost" class="page-header">
+       <h1>Overview</h1>
+-      <div class="subtitle">Primary totals use assistant-message input + output tokens. Cache read/write is tracked separately.</div>
++      <div class="subtitle">Primary totals use non-cache input + assistant output tokens. Cache read/write is tracked separately.</div>
+     </section>
+ 
+     <!-- Pill tabs -->
+@@ -680,7 +680,7 @@
+         <div class="sub" id="tokens-sub"></div>
+       </div>
+       <div class="stat-card">
+-        <div class="label">Input Tokens</div>
++        <div class="label">Non-cache Input</div>
+         <div class="value" id="total-input">—</div>
+         <div class="sub" id="input-sub"></div>
+       </div>
+@@ -733,15 +733,15 @@
+     <!-- Model breakdown table -->
+     <section class="table-section" id="models">
+       <h2>Model Breakdown</h2>
+-      <div class="subtitle">Sessions, tokens, and estimated cost by model. Cost uses latest matched OpenRouter pricing and is approximate.</div>
++      <div class="subtitle">Sessions, non-cache input + output tokens, cache read, and estimated cost by model. Cost uses latest matched OpenRouter pricing and is approximate.</div>
+       <table class="data-table">
+         <thead>
+           <tr>
+             <th>Tool</th>
+             <th>Model</th>
+             <th class="num">Sessions</th>
+-            <th class="num">Total Tokens</th>
+-            <th class="num">Input</th>
++            <th class="num" title="Non-cache input + output; cache read/write shown separately">Total Tokens</th>
++            <th class="num" title="Non-cache prompt/context input. Raw provider usage may include cache reads; this dashboard subtracts cache read when needed for consistency.">Non-cache Input</th>
+             <th class="num">Output</th>
+             <th class="num">Cache Read</th>
+             <th class="num">Est. Cost</th>
+@@ -756,7 +756,7 @@
+     <!-- Usage History -->
+     <section class="table-section" id="usage" style="margin-top:40px;">
+       <h2>Usage History</h2>
+-      <div class="subtitle">Recent coding-agent sessions and token usage. OpenCode is the active source.</div>
++      <div class="subtitle">Recent coding-agent sessions. Tokens = non-cache input + output; cache is tracked separately in summaries.</div>
+       <table class="data-table">
+         <thead>
+           <tr>
+@@ -764,8 +764,8 @@
+             <th>Date</th>
+             <th>Model</th>
+             <th>Title</th>
+-            <th class="num">Tokens</th>
+-            <th class="num">Input</th>
++            <th class="num" title="Non-cache input + output">Tokens</th>
++            <th class="num" title="Non-cache prompt/context input">Non-cache Input</th>
+             <th class="num">Output</th>
+           </tr>
+         </thead>
+@@ -1060,12 +1060,12 @@ async function loadOverview(days) {
+     setCardMeta(
+       'tokens-sub',
+       `${fmtTokens(d.cache_read)} read / ${fmtTokens(d.cache_write)} write cache`,
+-      `${d.token_total_definition || 'Total tokens are input + output.'} ${totalAvg} avg/session. Source: ${sourceLabel} only.`,
++      `${d.token_total_definition || 'Total tokens are non-cache input + output.'} ${totalAvg} avg/session. Source: ${sourceLabel} only.`,
+     );
+     setCardMeta(
+       'input-sub',
+       `${fmtTokens(d.cache_read)} cache read`,
+-      `Input tokens are prompt/context tokens sent to the model. Cache read is reused context and is excluded from input totals. ${inputAvg} input avg/session.`,
++      `Input is non-cache prompt/context tokens. Some raw provider usage includes cache reads; the dashboard subtracts cache read where needed so sources compare consistently. ${inputAvg} non-cache input avg/session.`,
+     );
+     setCardMeta(
+       'output-sub',
+@@ -1220,7 +1220,7 @@ async function loadDaily(days) {
+       ? 'Single-model focus · click Clear filter to restore Top N view'
+       : selectedChartToolId
+       ? `Source focus: ${selectedChartToolLabel || selectedChartToolId} · click Clear filter to restore all sources`
+-      : `Position-based colors · top ${safeData.top_n} models by token volume · ${safeData.other_count || 0} long-tail models grouped as Other`;
++      : `Daily total = non-cache input + output · top ${safeData.top_n} models by token volume · ${safeData.other_count || 0} long-tail models grouped as Other`;
+   } catch(e) {
+     console.error('daily', e);
+     renderChart({ dates: [], models: [], data: {}, top_n: currentTopN, other_count: 0 });
+@@ -1381,11 +1381,11 @@ function renderChart(data) {
+           callbacks: {
+             label: ctx => {
+               if (ctx.raw <= 0) return null;
+-              return ` ${ctx.dataset.label}: ${fmtTokens(ctx.raw)} tokens`;
++              return ` ${ctx.dataset.label}: ${fmtTokens(ctx.raw)} non-cache input + output`;
+             },
+             afterBody: ctxs => {
+               const total = ctxs.reduce((sum, c) => sum + (c.raw || 0), 0);
+-              return `\n Total: ${fmtTokens(total)} tokens`;
++              return `\n Total: ${fmtTokens(total)} non-cache input + output`;
+             },
+           },
+         },
+diff --git a/templates/settings.html b/templates/settings.html
+index d52beb4..83cf244 100644
+--- a/templates/settings.html
++++ b/templates/settings.html
+@@ -71,7 +71,7 @@
+ 
+ <div class="card">
+   <h2>Source</h2>
+-  <p>Built from normalized local session data — model, session timestamps, input tokens, and output tokens per session/message. Total tokens are defined as input + output assistant-message tokens. Cached tokens are shown only as secondary context, separate from input/output totals. Cost is estimated from matched OpenRouter pricing when available.</p>
++  <p>Built from normalized local session data — model, session timestamps, non-cache input tokens, output tokens, and separate cache read/write metrics where a source exposes them. Total tokens are defined as non-cache input + output assistant-message tokens. Raw provider usage can include cached tokens in input; this dashboard subtracts cache read where needed for source-to-source consistency. Cost is estimated from matched OpenRouter pricing when available.</p>
+ </div>
+ </body>
+ </html>
+\ No newline at end of file
+diff --git a/tests/test_app.py b/tests/test_app.py
+index bc80bef..c02bf12 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -205,7 +205,7 @@ class DashboardApiTests(unittest.TestCase):
+ 
+         self.assertEqual(
+             payload['token_total_definition'],
+-            'input + output assistant-message tokens; cache read/write excluded',
++            'non-cache input + output assistant-message tokens; cache read/write separate',
+         )
+         self.assertEqual(payload['active_tool'], 'opencode')
+         self.assertEqual(payload['active_tool_label'], 'OpenCode')
+@@ -356,7 +356,8 @@ class DashboardApiTests(unittest.TestCase):
+         response = self.client.get('/settings')
+         self.assertEqual(response.status_code, 200)
+         html = response.get_data(as_text=True)
+-        self.assertIn('Total tokens are defined as input + output assistant-message tokens.', html)
++        self.assertIn('Total tokens are defined as non-cache input + output assistant-message tokens.', html)
++        self.assertIn('this dashboard subtracts cache read where needed', html)
+         self.assertIn('Cost is estimated from matched OpenRouter pricing when available.', html)
+ 
+     def test_overview_page_includes_clickable_metric_tooltips(self):
+@@ -366,6 +367,8 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertIn('class="meta-info-wrap"', html)
+         self.assertIn('class="meta-tooltip"', html)
+         self.assertIn('aria-expanded="false"', html)
++        self.assertIn('Non-cache Input', html)
++        self.assertIn('Raw provider usage may include cache reads', html)
+         self.assertIn('bindMetaInfoInteractions', html)
+ 
+     def test_dashboard_template_uses_button_based_accessible_controls(self):
+-- 
+2.43.0
+
+
+From a77d33649918a08ca926638384dd271ef8f9d3da Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Sat, 30 May 2026 17:40:41 +0700
+Subject: [PATCH 4/7] fix: correct Codex history pagination and timestamp basis
+
+---
+ README.md         |  2 ++
+ app.py            | 25 +++++++++++++++----------
+ tests/test_app.py | 45 ++++++++++++++++++++++++++++++++++++++++-----
+ 3 files changed, 57 insertions(+), 15 deletions(-)
+
+diff --git a/README.md b/README.md
+index 98dc1a6..9f2363f 100644
+--- a/README.md
++++ b/README.md
+@@ -106,6 +106,8 @@ referenced rollout JSONL file. The trusted token fields are:
+ - `input_tokens - cached_input_tokens` → dashboard input, to match OpenCode's non-cache input semantics
+ - `output_tokens` → output tokens
+ 
++The adapter filters, groups, sorts, and displays Codex records by thread `updated_at`, not `created_at`, because token metrics are latest cumulative rollout usage for the thread. This keeps long-lived threads updated inside the selected range from appearing on out-of-range created dates.
++
+ Total tokens remain dashboard non-cache input + output. Cache read/write tokens are shown
+ separately and excluded from total tokens. Codex local JSONL does not expose
+ cache-write tokens, so the dashboard shows cache write as unavailable for Codex
+diff --git a/app.py b/app.py
+index 0ba5e1b..57f9c9e 100644
+--- a/app.py
++++ b/app.py
+@@ -205,10 +205,12 @@ def codex_records(days: int | None = None) -> list[dict]:
+ 
+     Trust boundary: ~/.codex/state_5.sqlite is used for session metadata, while
+     the latest cumulative `total_token_usage` in each rollout JSONL is used for
+-    token metrics. Codex reports cached tokens inside `input_tokens`; the
+-    dashboard subtracts `cached_input_tokens` so the public input column is
+-    comparable with OpenCode's non-cache input. Codex does not expose
+-    cache-write tokens in this local format, so cache_write remains None.
++    token metrics. Codex records are windowed, grouped, sorted, and displayed by
++    updated_at so a long-lived thread updated inside the selected range does not
++    render on an out-of-range created_at date. Codex reports cached tokens inside
++    `input_tokens`; the dashboard subtracts `cached_input_tokens` so the public
++    input column is comparable with OpenCode's non-cache input. Codex does not
++    expose cache-write tokens in this local format, so cache_write remains None.
+     """
+     if not codex_source_available():
+         return []
+@@ -265,10 +267,11 @@ def codex_records(days: int | None = None) -> list[dict]:
+             "source_path": display_path(CODEX_SOURCE_PATH),
+             "id": row["id"],
+             "session_id": row["id"],
+-            "timestamp": created_ms,
+-            "created": created_dt.strftime("%Y-%m-%d %H:%M:%S") if created_dt else None,
++            "timestamp": updated_ms,
++            "created": updated_dt.strftime("%Y-%m-%d %H:%M:%S") if updated_dt else None,
++            "created_at": created_dt.strftime("%Y-%m-%d %H:%M:%S") if created_dt else None,
+             "updated": updated_dt.strftime("%Y-%m-%d %H:%M:%S") if updated_dt else None,
+-            "date": created_dt.date().isoformat() if created_dt else None,
++            "date": updated_dt.date().isoformat() if updated_dt else None,
+             "title": row["title"] or row["preview"] or row["id"],
+             "directory": row["cwd"],
+             "provider": provider,
+@@ -1308,6 +1311,7 @@ def api_usage_history():
+             GROUP BY session_id
+         )
+         SELECT
++            s.time_created,
+             datetime(s.time_created / 1000, 'unixepoch', 'localtime') as created,
+             datetime(s.time_updated / 1000, 'unixepoch', 'localtime') as updated,
+             s.id,
+@@ -1325,8 +1329,7 @@ def api_usage_history():
+         LEFT JOIN session_models sm ON sm.session_id = s.id
+         WHERE s.model IS NOT NULL AND s.model != ''
+         ORDER BY s.time_created DESC
+-        LIMIT ? OFFSET ?
+-    """, (limit, offset))
++    """)
+ 
+     sessions = []
+     for row in cur.fetchall():
+@@ -1341,6 +1344,7 @@ def api_usage_history():
+             "title": row["title"],
+             "created": row["created"],
+             "updated": row["updated"],
++            "timestamp": row["time_created"],
+             "directory": row["directory"],
+             "model": model_label,
+             "messages": row["messages"] or 0,
+@@ -1362,6 +1366,7 @@ def api_usage_history():
+             "title": record["title"],
+             "created": record["created"],
+             "updated": record["updated"],
++            "timestamp": record["timestamp"],
+             "directory": record["directory"],
+             "model": record["model"],
+             "messages": record["messages"],
+@@ -1375,7 +1380,7 @@ def api_usage_history():
+             "additions": None,
+             "deletions": None,
+         })
+-    sessions.sort(key=lambda item: item.get("created") or "", reverse=True)
++    sessions.sort(key=lambda item: item.get("timestamp") or 0, reverse=True)
+     start = int(offset or 0)
+     count = int(limit or 50)
+     return jsonify(sessions[start: start + count])
+diff --git a/tests/test_app.py b/tests/test_app.py
+index c02bf12..290aa58 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -266,15 +266,31 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertEqual(history[0]['tool'], 'OpenCode')
+         self.assertEqual(history[0]['tool_id'], 'opencode')
+         self.assertEqual(history[0]['tool_color'], '#3B82F6')
++    def test_usage_history_applies_offset_after_merging_sources(self):
++        response = self.client.get('/api/usage-history?limit=1&offset=1')
++        self.assertEqual(response.status_code, 200)
++        history = response.get_json()
++
++        self.assertEqual(len(history), 1)
++        self.assertEqual(history[0]['id'], 'sess-1')
+ 
+ 
+-    def _write_codex_fixture(self) -> None:
++    def _write_codex_fixture(
++        self,
++        *,
++        created_ms: int | None = None,
++        updated_ms: int | None = None,
++        thread_id: str = "codex-1",
++    ) -> None:
+         state = Path(self.tmpdir.name) / "codex-state.sqlite"
+-        rollout = Path(self.tmpdir.name) / "codex-rollout.jsonl"
+-        created_ms = int(time.time() * 1000) - 3600000
++        if state.exists():
++            state.unlink()
++        rollout = Path(self.tmpdir.name) / f"{thread_id}-rollout.jsonl"
++        created_ms = created_ms if created_ms is not None else int(time.time() * 1000) - 3600000
++        updated_ms = updated_ms if updated_ms is not None else created_ms + 120000
+         rollout.write_text(
+             '\n'.join([
+-                json.dumps({"timestamp": "2026-05-30T00:00:00Z", "type": "session_meta", "payload": {"id": "codex-1"}}),
++                json.dumps({"timestamp": "2026-05-30T00:00:00Z", "type": "session_meta", "payload": {"id": thread_id}}),
+                 json.dumps({"timestamp": "2026-05-30T00:01:00Z", "type": "event_msg", "payload": {"type": "task_complete", "info": {"total_token_usage": {"input_tokens": 1000, "cached_input_tokens": 250, "output_tokens": 125, "reasoning_output_tokens": 25, "total_tokens": 1125}}}}),
+                 json.dumps({"timestamp": "2026-05-30T00:02:00Z", "type": "event_msg", "payload": {"type": "task_complete", "info": {"total_token_usage": {"input_tokens": 1500, "cached_input_tokens": 400, "output_tokens": 225, "reasoning_output_tokens": 40, "total_tokens": 1725}}}}),
+             ]) + '\n'
+@@ -307,7 +323,7 @@ class DashboardApiTests(unittest.TestCase):
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             """,
+             (
+-                "codex-1", str(rollout), created_ms // 1000, created_ms // 1000, created_ms, created_ms + 120000,
++                thread_id, str(rollout), created_ms // 1000, updated_ms // 1000, created_ms, updated_ms,
+                 "cli", "openai", "/tmp/codex-project", "Codex adapter spike", 1725, "Codex adapter spike", "gpt-5.5",
+             ),
+         )
+@@ -352,6 +368,25 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertEqual(codex_history['tokens_input'], 1100)
+         self.assertIsNone(codex_history['cache_write'])
+ 
++    def test_codex_records_use_updated_timestamp_for_window_and_display_date(self):
++        now_ms = int(time.time() * 1000)
++        created_ms = now_ms - 40 * 86400000
++        updated_ms = now_ms - 3600000
++        self._write_codex_fixture(created_ms=created_ms, updated_ms=updated_ms, thread_id="codex-long-lived")
++
++        records = dashboard_app.codex_records(days=30)
++        self.assertEqual(len(records), 1)
++        record = records[0]
++        expected_updated_date = time.strftime('%Y-%m-%d', time.localtime(updated_ms / 1000))
++        old_created_date = time.strftime('%Y-%m-%d', time.localtime(created_ms / 1000))
++
++        self.assertEqual(record['id'], 'codex-long-lived')
++        self.assertEqual(record['timestamp'], updated_ms)
++        self.assertEqual(record['date'], expected_updated_date)
++        self.assertTrue(record['created'].startswith(expected_updated_date))
++        self.assertNotEqual(record['date'], old_created_date)
++
++
+     def test_settings_page_describes_current_cost_and_token_rules(self):
+         response = self.client.get('/settings')
+         self.assertEqual(response.status_code, 200)
+-- 
+2.43.0
+
+
+From 25500995d7bfeeae020c2ba293ffd6ca1082df58 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Sat, 30 May 2026 18:10:47 +0700
+Subject: [PATCH 5/7] docs: align source and token guidance
+
+---
+ AGENTS.md               | 4 ++--
+ templates/settings.html | 2 +-
+ tests/test_app.py       | 2 ++
+ tests/test_readme.py    | 8 ++++++++
+ 4 files changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/AGENTS.md b/AGENTS.md
+index c4e2cca..e2768c5 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -5,7 +5,7 @@ Guidance for agents working in this repo.
+ ## Scope
+ 
+ - This repo is a local Flask dashboard for coding-agent usage data.
+-- The active production data source is OpenCode at `~/.local/share/opencode/opencode.db`.
++- Active production data sources are OpenCode at `~/.local/share/opencode/opencode.db` and Codex CLI via `~/.codex/state_5.sqlite` when that local state file exists.
+ - Keep the current product contract explicit: show where totals come from, avoid ambiguous labels, and do not invent data when a source is missing.
+ 
+ ## Working style
+@@ -29,7 +29,7 @@ Guidance for agents working in this repo.
+ ## Data and UX rules
+ 
+ - Source provenance must stay visible. If a chart or summary only reflects OpenCode, say so.
+-- Total tokens means `input + output assistant-message tokens`. Cache read/write stays separate unless the task explicitly changes that definition.
++- Total tokens means `non-cache input + output assistant-message tokens`. Cache read/write stays separate unless the task explicitly changes that definition.
+ - Unpriced or unsupported models must remain clearly labeled instead of guessed.
+ - Simulated/demo mode should stay deterministic enough for screenshots, regression checks, and design review.
+ - Tooltips and interactive affordances should work for hover, focus, and tap.
+diff --git a/templates/settings.html b/templates/settings.html
+index 83cf244..9b5acfd 100644
+--- a/templates/settings.html
++++ b/templates/settings.html
+@@ -60,7 +60,7 @@
+ <div class="card">
+   <h2>Database Location</h2>
+   <div class="path">~/.local/share/opencode/opencode.db</div>
+-  <p style="margin-top:8px;">Read directly from local coding-agent usage sources. OpenCode is the active source today. The dashboard uses read-only connections and does not modify source data.</p>
++  <p style="margin-top:8px;">Read directly from local coding-agent usage sources. OpenCode is always supported, and Codex CLI becomes active when <code>~/.codex/state_5.sqlite</code> is present. The dashboard uses read-only connections and does not modify source data.</p>
+ </div>
+ 
+ <div class="card">
+diff --git a/tests/test_app.py b/tests/test_app.py
+index 290aa58..aed5949 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -393,6 +393,8 @@ class DashboardApiTests(unittest.TestCase):
+         html = response.get_data(as_text=True)
+         self.assertIn('Total tokens are defined as non-cache input + output assistant-message tokens.', html)
+         self.assertIn('this dashboard subtracts cache read where needed', html)
++        self.assertIn('Codex CLI becomes active when', html)
++        self.assertNotIn('OpenCode is the active source today', html)
+         self.assertIn('Cost is estimated from matched OpenRouter pricing when available.', html)
+ 
+     def test_overview_page_includes_clickable_metric_tooltips(self):
+diff --git a/tests/test_readme.py b/tests/test_readme.py
+index c693052..02cd37e 100644
+--- a/tests/test_readme.py
++++ b/tests/test_readme.py
+@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
+ README = ROOT / 'README.md'
+ PYPROJECT = ROOT / 'pyproject.toml'
+ UV_LOCK = ROOT / 'uv.lock'
++AGENTS = ROOT / 'AGENTS.md'
+ 
+ 
+ class ReadmeTests(unittest.TestCase):
+@@ -36,6 +37,13 @@ class ReadmeTests(unittest.TestCase):
+         self.assertIn('version = 1', lock_text)
+         self.assertIn('name = "coding-agent-usage-dashboard"', lock_text)
+ 
++    def test_agent_guidance_matches_token_and_source_contract(self):
++        content = AGENTS.read_text()
++
++        self.assertIn('Codex CLI via `~/.codex/state_5.sqlite`', content)
++        self.assertIn('Total tokens means `non-cache input + output assistant-message tokens`', content)
++        self.assertNotIn('Total tokens means `input + output assistant-message tokens`', content)
++
+ 
+ if __name__ == '__main__':
+     unittest.main()
+-- 
+2.43.0
+
+
+From 9d352961ca6df6c15cabd052b93f1c702ee00a9f Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Sat, 30 May 2026 18:48:37 +0700
+Subject: [PATCH 6/7] fix: align dashboard footer source provenance
+
+---
+ templates/index.html | 5 +++--
+ tests/test_app.py    | 3 +++
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/templates/index.html b/templates/index.html
+index 51de635..4de6e84 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -776,7 +776,7 @@
+     </section>
+ 
+     <div class="footer">
+-      ◇ active source: <span id="db-path-display">OpenCode · ~/.local/share/opencode/opencode.db</span>
++      ◇ active sources: <span id="db-path-display">Loading...</span>
+       ☤ last updated: <span id="last-updated">—</span>
+     </div>
+   </main>
+@@ -1049,6 +1049,7 @@ async function loadOverview(days) {
+ 
+     const sourceLabel = d.active_tool_label || 'OpenCode';
+     const sourcePath = d.source_path || '~/.local/share/opencode/opencode.db';
++    document.getElementById('db-path-display').textContent = `${sourceLabel} · ${sourcePath}`;
+     const totalAvg = fmtTokens(d.total_tokens / Math.max(d.total_sessions, 1));
+     const inputAvg = fmtTokens(d.total_input / Math.max(d.total_sessions, 1));
+     const outputAvg = fmtTokens(d.total_output / Math.max(d.total_sessions, 1));
+@@ -1060,7 +1061,7 @@ async function loadOverview(days) {
+     setCardMeta(
+       'tokens-sub',
+       `${fmtTokens(d.cache_read)} read / ${fmtTokens(d.cache_write)} write cache`,
+-      `${d.token_total_definition || 'Total tokens are non-cache input + output.'} ${totalAvg} avg/session. Source: ${sourceLabel} only.`,
++      `${d.token_total_definition || 'Total tokens are non-cache input + output.'} ${totalAvg} avg/session. Active sources: ${sourceLabel}.`,
+     );
+     setCardMeta(
+       'input-sub',
+diff --git a/tests/test_app.py b/tests/test_app.py
+index aed5949..b13411d 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -419,6 +419,9 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertNotIn('role="button" data-chart-model-id', html)
+         self.assertIn('if (!r.ok)', html)
+         self.assertIn("document.getElementById('chart-note').textContent = chartData.error", html)
++        self.assertIn('active sources:', html)
++        self.assertIn("document.getElementById('db-path-display').textContent = `${sourceLabel} · ${sourcePath}`", html)
++        self.assertNotIn('OpenCode · ~/.local/share/opencode/opencode.db</span>', html)
+ 
+     def test_tool_source_render_includes_path_handling(self):
+         response = self.client.get('/')
+-- 
+2.43.0
+
+
+From 0dc530189bf4b116868e39e959b1c67577624289 Mon Sep 17 00:00:00 2001
+From: Raymond Christopher <raymond.christopher@gdplabs.id>
+Date: Sat, 30 May 2026 19:00:30 +0700
+Subject: [PATCH 7/7] fix: add dashboard favicon
+
+---
+ app.py                  | 10 +++++++++-
+ static/favicon.svg      |  7 +++++++
+ templates/index.html    |  1 +
+ templates/settings.html |  1 +
+ tests/test_app.py       |  7 +++++++
+ 5 files changed, 25 insertions(+), 1 deletion(-)
+ create mode 100644 static/favicon.svg
+
+diff --git a/app.py b/app.py
+index 57f9c9e..3e1ffd0 100644
+--- a/app.py
++++ b/app.py
+@@ -13,7 +13,7 @@ import time
+ import urllib.request
+ from pathlib import Path
+ 
+-from flask import Flask, jsonify, render_template, request
++from flask import Flask, Response, jsonify, render_template, request
+ 
+ app = Flask(__name__)
+ 
+@@ -1413,6 +1413,14 @@ def settings():
+     return render_template("settings.html")
+ 
+ 
++@app.route("/favicon.ico")
++def favicon():
++    return Response(
++        Path(app.root_path, "static", "favicon.svg").read_text(),
++        mimetype="image/svg+xml",
++    )
++
++
+ # ── Main ────────────────────────────────────────────────────────────────────
+ 
+ 
+diff --git a/static/favicon.svg b/static/favicon.svg
+new file mode 100644
+index 0000000..0b83960
+--- /dev/null
++++ b/static/favicon.svg
+@@ -0,0 +1,7 @@
++<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Coding Agent Usage Dashboard">
++  <rect width="64" height="64" rx="14" fill="#08090a"/>
++  <path d="M18 19h28M18 32h28M18 45h28" stroke="#38bdf8" stroke-width="5" stroke-linecap="round"/>
++  <circle cx="18" cy="19" r="4" fill="#a855f7"/>
++  <circle cx="46" cy="32" r="4" fill="#34d399"/>
++  <circle cx="18" cy="45" r="4" fill="#f59e0b"/>
++</svg>
+diff --git a/templates/index.html b/templates/index.html
+index 4de6e84..d18ee5d 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -4,6 +4,7 @@
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>Coding Agent Usage Dashboard</title>
++<link rel="icon" href="/favicon.ico" type="image/svg+xml">
+ <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+ <script src="/static/color-modes.js"></script>
+ <style>
+diff --git a/templates/settings.html b/templates/settings.html
+index 9b5acfd..3b0a45e 100644
+--- a/templates/settings.html
++++ b/templates/settings.html
+@@ -4,6 +4,7 @@
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>Settings — Coding Agent Usage Dashboard</title>
++<link rel="icon" href="/favicon.ico" type="image/svg+xml">
+ <script src="/static/color-modes.js"></script>
+ <style>
+   :root {
+diff --git a/tests/test_app.py b/tests/test_app.py
+index b13411d..43a4895 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -407,6 +407,13 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertIn('Non-cache Input', html)
+         self.assertIn('Raw provider usage may include cache reads', html)
+         self.assertIn('bindMetaInfoInteractions', html)
++        self.assertIn('<link rel="icon" href="/favicon.ico" type="image/svg+xml">', html)
++
++    def test_favicon_route_returns_svg_icon(self):
++        response = self.client.get('/favicon.ico')
++        self.assertEqual(response.status_code, 200)
++        self.assertEqual(response.mimetype, 'image/svg+xml')
++        self.assertIn('<svg', response.get_data(as_text=True))
+ 
+     def test_dashboard_template_uses_button_based_accessible_controls(self):
+         response = self.client.get('/')
+-- 
+2.43.0
+

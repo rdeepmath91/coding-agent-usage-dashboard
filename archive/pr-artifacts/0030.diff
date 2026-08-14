@@ -1,0 +1,164 @@
+diff --git a/dashboard/sources.py b/dashboard/sources.py
+index 3ff024e769d253e10d6ab1c55fa6ddccc4a5fc73..25882e1b005107100b518e5fd187a5300152527c 100644
+--- a/dashboard/sources.py
++++ b/dashboard/sources.py
+@@ -71,12 +71,8 @@ def codex_records(days: int | None = None) -> list[dict]:
+     if days is not None:
+         since_ms = int((datetime.datetime.now() - datetime.timedelta(days=days)).timestamp() * 1000)
+ 
+-    conn = sqlite3.connect(f"file:{config.CODEX_STATE_PATH}?mode=ro", uri=True)
+-    conn.row_factory = sqlite3.Row
+-    where = "WHERE COALESCE(updated_at_ms, updated_at * 1000, created_at_ms, created_at * 1000) >= ?" if since_ms else ""
+-    params = (since_ms,) if since_ms else ()
+-    try:
+-        rows = conn.execute(f"""
++    def _fetch_rows_with_preview(conn, where: str, params: tuple) -> list[sqlite3.Row]:
++        return conn.execute(f"""
+             SELECT
+                 id,
+                 rollout_path,
+@@ -92,6 +88,36 @@ def codex_records(days: int | None = None) -> list[dict]:
+             {where}
+             ORDER BY COALESCE(updated_at_ms, updated_at * 1000, created_at_ms, created_at * 1000) DESC
+         """, params).fetchall()
++
++    def _fetch_rows_without_preview(conn, where: str, params: tuple) -> list[sqlite3.Row]:
++        return conn.execute(f"""
++            SELECT
++                id,
++                rollout_path,
++                COALESCE(created_at_ms, created_at * 1000) as created_ms,
++                COALESCE(updated_at_ms, updated_at * 1000) as updated_ms,
++                model_provider,
++                model,
++                title,
++                cwd,
++                tokens_used
++            FROM threads
++            {where}
++            ORDER BY COALESCE(updated_at_ms, updated_at * 1000, created_at_ms, created_at * 1000) DESC
++        """, params).fetchall()
++
++    conn = sqlite3.connect(f"file:{config.CODEX_STATE_PATH}?mode=ro", uri=True)
++    conn.row_factory = sqlite3.Row
++    where = "WHERE COALESCE(updated_at_ms, updated_at * 1000, created_at_ms, created_at * 1000) >= ?" if since_ms else ""
++    params = (since_ms,) if since_ms else ()
++    try:
++        try:
++            rows = _fetch_rows_with_preview(conn, where, params)
++        except sqlite3.OperationalError as e:
++            if "no such column: preview" in str(e).lower():
++                rows = _fetch_rows_without_preview(conn, where, params)
++            else:
++                raise
+     finally:
+         conn.close()
+ 
+@@ -124,7 +150,7 @@ def codex_records(days: int | None = None) -> list[dict]:
+             "created_at": created_dt.strftime("%Y-%m-%d %H:%M:%S") if created_dt else None,
+             "updated": updated_dt.strftime("%Y-%m-%d %H:%M:%S") if updated_dt else None,
+             "date": updated_dt.date().isoformat() if updated_dt else None,
+-            "title": row["title"] or row["preview"] or row["id"],
++            "title": row["title"] or (row["preview"] if "preview" in row.keys() else "") or row["id"],
+             "directory": row["cwd"],
+             "provider": provider,
+             "model_id": model_id,
+diff --git a/tests/test_app.py b/tests/test_app.py
+index babee6ea2850b15b907592cd283db465fa5d1ae8..aac63068da474daab812a54a358b4990d517b0e7 100644
+--- a/tests/test_app.py
++++ b/tests/test_app.py
+@@ -410,6 +410,8 @@ class DashboardApiTests(unittest.TestCase):
+         created_ms: int | None = None,
+         updated_ms: int | None = None,
+         thread_id: str = "codex-1",
++        title: str = "Codex adapter spike",
++        include_preview: bool = True,
+     ) -> None:
+         state = Path(self.tmpdir.name) / "codex-state.sqlite"
+         if state.exists():
+@@ -425,8 +427,9 @@ class DashboardApiTests(unittest.TestCase):
+             ]) + '\n'
+         )
+         conn = sqlite3.connect(state)
++        preview_column = ",\n                preview TEXT NOT NULL DEFAULT ''" if include_preview else ""
+         conn.execute(
+-            """
++            f"""
+             CREATE TABLE threads (
+                 id TEXT PRIMARY KEY,
+                 rollout_path TEXT NOT NULL,
+@@ -438,24 +441,37 @@ class DashboardApiTests(unittest.TestCase):
+                 model_provider TEXT NOT NULL,
+                 cwd TEXT NOT NULL,
+                 title TEXT NOT NULL,
+-                tokens_used INTEGER NOT NULL DEFAULT 0,
+-                preview TEXT NOT NULL DEFAULT '',
++                tokens_used INTEGER NOT NULL DEFAULT 0{preview_column},
+                 model TEXT
+             )
+             """
+         )
+-        conn.execute(
+-            """
+-            INSERT INTO threads (
+-                id, rollout_path, created_at, updated_at, created_at_ms, updated_at_ms,
+-                source, model_provider, cwd, title, tokens_used, preview, model
+-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+-            """,
+-            (
+-                thread_id, str(rollout), created_ms // 1000, updated_ms // 1000, created_ms, updated_ms,
+-                "cli", "openai", "/tmp/codex-project", "Codex adapter spike", 1725, "Codex adapter spike", "gpt-5.5",
+-            ),
+-        )
++        if include_preview:
++            conn.execute(
++                """
++                INSERT INTO threads (
++                    id, rollout_path, created_at, updated_at, created_at_ms, updated_at_ms,
++                    source, model_provider, cwd, title, tokens_used, preview, model
++                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
++                """,
++                (
++                    thread_id, str(rollout), created_ms // 1000, updated_ms // 1000, created_ms, updated_ms,
++                    "cli", "openai", "/tmp/codex-project", title, 1725, "Codex adapter spike", "gpt-5.5",
++                ),
++            )
++        else:
++            conn.execute(
++                """
++                INSERT INTO threads (
++                    id, rollout_path, created_at, updated_at, created_at_ms, updated_at_ms,
++                    source, model_provider, cwd, title, tokens_used, model
++                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
++                """,
++                (
++                    thread_id, str(rollout), created_ms // 1000, updated_ms // 1000, created_ms, updated_ms,
++                    "cli", "openai", "/tmp/codex-project", title, 1725, "gpt-5.5",
++                ),
++            )
+         conn.commit()
+         conn.close()
+         dashboard_config.CODEX_STATE_PATH = str(state)
+@@ -519,6 +535,22 @@ class DashboardApiTests(unittest.TestCase):
+         self.assertTrue(record['created'].startswith(expected_updated_date))
+         self.assertNotEqual(record['date'], old_created_date)
+ 
++    def test_codex_records_support_older_state_without_preview_column(self):
++        self._write_codex_fixture(
++            thread_id="codex-old-schema",
++            title="",
++            include_preview=False,
++        )
++
++        records = dashboard_app.codex_records(days=30)
++
++        self.assertEqual(len(records), 1)
++        record = records[0]
++        self.assertEqual(record['id'], 'codex-old-schema')
++        self.assertEqual(record['title'], 'codex-old-schema')
++        self.assertEqual(record['tokens_input'], 1100)
++        self.assertEqual(record['tokens_output'], 225)
++
+     def _write_hermes_fixture(self, *, started_at: float | None = None, session_id: str = 'hermes-1') -> None:
+         state = Path(self.tmpdir.name) / 'hermes-state.db'
+         if state.exists():
