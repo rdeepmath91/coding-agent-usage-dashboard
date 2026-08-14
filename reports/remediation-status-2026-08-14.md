@@ -36,6 +36,10 @@ Destination PR #53 still has no successful GitHub check on its unchanged head
 3. Dispatching the workflow on destination `main` created run `31810963075`,
    which failed before any steps and has no available job log.
 
+4. The destination currently reports zero self-hosted runners. The failed job
+   `94801219949` has `runner_id: 0`, an empty runner name, no steps, and the
+   `ubuntu-latest` label, confirming that no runner ever started it.
+
 The PR head was not changed merely to force a check. Local tests and fresh-clone
 tests pass, but the destination GitHub CI requirement remains unresolved.
 
