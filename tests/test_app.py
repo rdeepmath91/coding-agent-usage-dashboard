@@ -371,7 +371,11 @@ class DashboardApiTests(unittest.TestCase):
             and item.get('pricing_status') in {'priced', 'partial'}
         ]
         self.assertTrue(api_priced)
-        self.assertTrue(all(item.get('pricing_url', '').startswith('https://openrouter.ai/') for item in api_priced))
+        self.assertTrue(all(
+            item.get('pricing_url', '').startswith('https://openrouter.ai/')
+            or item.get('pricing_url') == dashboard_pricing.OPENAI_PRICING_URL
+            for item in api_priced
+        ))
 
     def test_usage_history_applies_offset_after_merging_sources(self):
         response = self.client.get('/api/usage-history?limit=1&offset=1')
@@ -589,6 +593,8 @@ class DashboardApiTests(unittest.TestCase):
         thread_id: str = "codex-1",
         title: str = "Codex adapter spike",
         include_preview: bool = True,
+        model_provider: str = "openai",
+        model_id: str = "gpt-5.5",
     ) -> None:
         state = Path(self.tmpdir.name) / "codex-state.sqlite"
         if state.exists():
@@ -633,7 +639,7 @@ class DashboardApiTests(unittest.TestCase):
                 """,
                 (
                     thread_id, str(rollout), created_ms // 1000, updated_ms // 1000, created_ms, updated_ms,
-                    "cli", "openai", "/tmp/codex-project", title, 1725, "Codex adapter spike", "gpt-5.5",
+                    "cli", model_provider, "/tmp/codex-project", title, 1725, "Codex adapter spike", model_id,
                 ),
             )
         else:
@@ -646,7 +652,7 @@ class DashboardApiTests(unittest.TestCase):
                 """,
                 (
                     thread_id, str(rollout), created_ms // 1000, updated_ms // 1000, created_ms, updated_ms,
-                    "cli", "openai", "/tmp/codex-project", title, 1725, "gpt-5.5",
+                    "cli", model_provider, "/tmp/codex-project", title, 1725, model_id,
                 ),
             )
         conn.commit()
@@ -694,6 +700,69 @@ class DashboardApiTests(unittest.TestCase):
         codex_history = next(item for item in history if item['tool_id'] == 'codex')
         self.assertEqual(codex_history['tokens_input'], 1100)
         self.assertIsNone(codex_history['cache_write'])
+
+    def test_codex_plugin_namespace_overrides_compatibility_provider_and_stays_unpriced(self):
+        self._write_codex_fixture(
+            thread_id="codex-opencode-go",
+            model_provider="openai",
+            model_id="opencode-go/deepseek-v4-flash",
+        )
+
+        records = dashboard_sources.codex_records(days=30)
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record['provider'], 'opencode-go')
+        self.assertEqual(record['model_id'], 'deepseek-v4-flash')
+        self.assertEqual(record['label'], 'deepseek-v4-flash (go)')
+        self.assertEqual(record['chart_model_id'], 'opencode-go/deepseek-v4-flash')
+
+        model = next(
+            item for item in self.client.get('/api/models?days=30').get_json()
+            if item['tool_id'] == 'codex'
+        )
+        self.assertEqual(model['provider'], 'opencode-go')
+        self.assertEqual(model['model_id'], 'deepseek-v4-flash')
+        self.assertEqual(model['label'], 'deepseek-v4-flash (go)')
+        self.assertEqual(model['pricing_status'], 'unpriced')
+        self.assertIsNone(model['estimated_cost'])
+
+    def test_codex_free_plugin_namespace_remains_explicitly_free(self):
+        self._write_codex_fixture(
+            thread_id="codex-opencode-free",
+            model_provider="openai",
+            model_id="opencode-free/deepseek-v4-flash-free",
+        )
+
+        model = next(
+            item for item in self.client.get('/api/models?days=30').get_json()
+            if item['tool_id'] == 'codex'
+        )
+        self.assertEqual(model['provider'], 'opencode-free')
+        self.assertEqual(model['model_id'], 'deepseek-v4-flash-free')
+        self.assertEqual(model['pricing_status'], 'priced')
+        self.assertEqual(model['estimated_cost'], 0.0)
+
+    def test_deepseek_v4_flash_paid_alias_is_unpriced_even_if_remote_pricing_exists(self):
+        with mock.patch.object(
+            dashboard_pricing,
+            'openrouter_prices',
+            return_value={
+                'deepseek/deepseek-v4-flash': {
+                    'prompt': '0.0000001',
+                    'completion': '0.0000002',
+                }
+            },
+        ):
+            result = dashboard_pricing.estimate_cost(
+                'opencode-go',
+                'deepseek-v4-flash',
+                1000,
+                500,
+            )
+
+        self.assertEqual(result['pricing_status'], 'unpriced')
+        self.assertIsNone(result['estimated_cost'])
+        self.assertEqual(result['pricing_model_id'], 'deepseek/deepseek-v4-flash')
 
     def test_codex_records_use_updated_timestamp_for_window_and_display_date(self):
         now_ms = int(time.time() * 1000)
@@ -1085,7 +1154,7 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(hermes_model['tokens_total'], 6200)
         self.assertEqual(hermes_model['pricing_status'], 'partial')
         self.assertIsNone(hermes_model['estimated_cost'])
-        self.assertIn('OpenRouter /api/v1/models', hermes_model['pricing_source'])
+        self.assertIn('OpenAI official API pricing', hermes_model['pricing_source'])
         self.assertIn('Hermes session accounting covers 1/2 sessions', hermes_model['pricing_source'])
         self.assertEqual(hermes_model['pricing_model_id'], 'openai/gpt-5.5')
         self.assertEqual(hermes_model['partial_cost_usd'], 0.0695)
@@ -1597,9 +1666,9 @@ class DashboardApiTests(unittest.TestCase):
                 "fetched_at": time.time(),
                 "prices": {
                     "openai/gpt-5.5": {
-                        "prompt": "0.000005",
-                        "completion": "0.00003",
-                        "input_cache_read": "0.0000005",
+                        "prompt": "5",
+                        "completion": "30",
+                        "input_cache_read": "0.5",
                         "input_cache_write": "0",
                     }
                 },
@@ -1621,6 +1690,131 @@ class DashboardApiTests(unittest.TestCase):
         self.assertIsNone(result["estimated_cost"])
         self.assertGreater(result["partial_cost_usd"], 0)
         self.assertIn("input_cache_write", result["missing_price_buckets"])
+
+    def test_official_gpt_5_6_prices_override_stale_openrouter_rates(self):
+        stale_openrouter_prices = {
+            "openai/gpt-5.6-sol": {
+                "prompt": "1",
+                "completion": "2",
+                "input_cache_read": "0.1",
+                "input_cache_write": "0.2",
+            },
+            "openai/gpt-5.6-luna": {
+                "prompt": "0.05",
+                "completion": "0.1",
+                "input_cache_read": "0.005",
+                "input_cache_write": "0.01",
+            },
+        }
+        official_fixture = {
+            "openai/gpt-5.6-sol": {
+                "prompt": "10",
+                "completion": "20",
+                "input_cache_read": "1",
+                "input_cache_write": "2",
+            },
+            "openai/gpt-5.6-luna": {
+                "prompt": "0.4",
+                "completion": "0.8",
+                "input_cache_read": "0.04",
+                "input_cache_write": "0.1",
+            },
+        }
+        with mock.patch.object(dashboard_pricing, 'openrouter_prices', return_value=stale_openrouter_prices), \
+                mock.patch.object(dashboard_pricing, 'OFFICIAL_MODEL_PRICES', official_fixture):
+            sol = dashboard_pricing.estimate_cost(
+                "openai",
+                "gpt-5.6-sol",
+                tokens_input=1_000_000,
+                tokens_output=1_000_000,
+                cache_read=1_000_000,
+                cache_write=1_000_000,
+            )
+            luna = dashboard_pricing.estimate_cost(
+                "openai",
+                "gpt-5.6-luna",
+                tokens_input=1_000_000,
+                tokens_output=1_000_000,
+                cache_read=1_000_000,
+                cache_write=1_000_000,
+            )
+
+        self.assertEqual(sol['pricing_status'], 'priced')
+        self.assertEqual(sol['pricing_source'], 'OpenAI official API pricing')
+        self.assertAlmostEqual(sol['estimated_cost'], 33.0)
+        self.assertEqual(sol['input_price'], 10.0)
+        self.assertEqual(sol['output_price'], 20.0)
+        self.assertEqual(sol['cache_read_price'], 1.0)
+        self.assertEqual(sol['cache_write_price'], 2.0)
+        self.assertEqual(sol['price_unit'], 'USD per 1M tokens')
+
+        self.assertEqual(luna['pricing_status'], 'priced')
+        self.assertEqual(luna['pricing_source'], 'OpenAI official API pricing')
+        self.assertAlmostEqual(luna['estimated_cost'], 1.34)
+        self.assertEqual(luna['input_price'], 0.4)
+        self.assertEqual(luna['output_price'], 0.8)
+        self.assertEqual(luna['cache_read_price'], 0.04)
+        self.assertEqual(luna['cache_write_price'], 0.1)
+        self.assertEqual(luna['price_unit'], 'USD per 1M tokens')
+
+    def test_openrouter_prices_are_normalized_to_per_million_tokens(self):
+        original_cache = dict(dashboard_pricing.PRICING_CACHE)
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        payload = {
+            "data": [{
+                "id": "openai/gpt-5.6-sol",
+                "pricing": {
+                    "prompt": "0.000005",
+                    "completion": "0.00003",
+                    "input_cache_read": "0.0000005",
+                    "input_cache_write": "0.00000625",
+                    "overrides": [{"prompt": "0.00001"}],
+                },
+            }],
+        }
+        try:
+            dashboard_pricing.PRICING_CACHE.clear()
+            dashboard_pricing.PRICING_CACHE.update({"fetched_at": 0, "prices": {}})
+            with mock.patch.object(dashboard_pricing.urllib.request, 'urlopen', return_value=response), \
+                    mock.patch.object(dashboard_pricing.json, 'load', return_value=payload):
+                prices = dashboard_pricing.openrouter_prices()
+        finally:
+            dashboard_pricing.PRICING_CACHE.clear()
+            dashboard_pricing.PRICING_CACHE.update(original_cache)
+
+        self.assertEqual(prices["openai/gpt-5.6-sol"]["prompt"], 5.0)
+        self.assertEqual(prices["openai/gpt-5.6-sol"]["completion"], 30.0)
+        self.assertEqual(prices["openai/gpt-5.6-sol"]["input_cache_read"], 0.5)
+        self.assertEqual(prices["openai/gpt-5.6-sol"]["input_cache_write"], 6.25)
+        self.assertNotIn("overrides", prices["openai/gpt-5.6-sol"])
+
+    def test_supported_openai_models_prefer_official_pricing_over_openrouter(self):
+        model_ids = (
+            "gpt-5.3-codex-spark",
+            "gpt-5.5",
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
+        )
+        stale_prices = {
+            f"openai/{model_id.removesuffix('-spark')}": {
+                "prompt": "999",
+                "completion": "999",
+            }
+            for model_id in model_ids
+        }
+        with mock.patch.object(dashboard_pricing, 'openrouter_prices', return_value=stale_prices):
+            results = [
+                dashboard_pricing.estimate_cost("openai", model_id, 1_000_000, 1_000_000)
+                for model_id in model_ids
+            ]
+
+        self.assertTrue(all(result['pricing_status'] == 'priced' for result in results))
+        self.assertTrue(all(result['pricing_source'].startswith('OpenAI official API pricing') for result in results))
+        self.assertTrue(all(result['pricing_url'] == dashboard_pricing.OPENAI_PRICING_URL for result in results))
+        self.assertTrue(all(result['input_price'] != 999.0 for result in results))
+        self.assertTrue(all(result['output_price'] != 999.0 for result in results))
 
     def test_pricing_alias_registry_resolves_target_aliases(self):
         with mock.patch.object(dashboard_pricing, 'openrouter_prices', return_value={}):
@@ -1673,7 +1867,7 @@ class DashboardApiTests(unittest.TestCase):
 
         self.assertEqual(opencode_spark["pricing_status"], "priced")
         self.assertEqual(opencode_spark["pricing_model_id"], "openai/gpt-5.3-codex")
-        self.assertEqual(opencode_spark["pricing_url"], "https://openrouter.ai/openai/gpt-5.3-codex")
+        self.assertEqual(opencode_spark["pricing_url"], dashboard_pricing.OPENAI_PRICING_URL)
         self.assertIn("alias registry: opencode-go/gpt-5.3-codex-spark -> openai/gpt-5.3-codex", opencode_spark["pricing_source"])
 
         self.assertEqual(codex_spark["pricing_status"], "priced")

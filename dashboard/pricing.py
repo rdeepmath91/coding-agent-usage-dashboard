@@ -8,73 +8,94 @@ import urllib.request
 
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 OPENROUTER_MODEL_PAGE_BASE = "https://openrouter.ai"
+OPENAI_PRICING_URL = "https://developers.openai.com/api/docs/pricing"
+TOKENS_PER_MILLION = 1_000_000
 PRICING_CACHE = {"fetched_at": 0, "prices": {}}
 
 HARDCODED_MODEL_PRICES = {
-    "openai/gpt-5.5": {
-        "prompt": "0.000005",
-        "completion": "0.00003",
-        "input_cache_read": "0.0000005",
-    },
-    "openai/gpt-5.4": {
-        "prompt": "0.0000025",
-        "completion": "0.000015",
-        "input_cache_read": "0.00000025",
-    },
-    "openai/gpt-5.4-mini": {
-        "prompt": "0.00000075",
-        "completion": "0.0000045",
-        "input_cache_read": "0.000000075",
-    },
-    "openai/gpt-5.3-codex": {
-        "prompt": "0.00000175",
-        "completion": "0.000014",
-        "input_cache_read": "0.000000175",
-    },
     "deepseek/deepseek-v4-flash:free": {
         "prompt": "0",
         "completion": "0",
     },
-    "deepseek/deepseek-v4-flash": {
-        "prompt": "0.0000001",
-        "completion": "0.0000002",
-        "input_cache_read": "0.00000002",
-    },
     "deepseek/deepseek-v4-pro": {
-        "prompt": "0.000000435",
-        "completion": "0.00000087",
-        "input_cache_read": "0.000000003625",
+        "prompt": "0.435",
+        "completion": "0.87",
+        "input_cache_read": "0.003625",
     },
     "moonshotai/kimi-k2.6": {
-        "prompt": "0.00000073",
-        "completion": "0.00000349",
-        "input_cache_read": "0.00000025",
+        "prompt": "0.73",
+        "completion": "3.49",
+        "input_cache_read": "0.25",
     },
     "qwen/qwen3.6-plus": {
-        "prompt": "0.000000325",
-        "completion": "0.00000195",
-        "input_cache_write": "0.00000040625",
+        "prompt": "0.325",
+        "completion": "1.95",
+        "input_cache_write": "0.40625",
     },
     "minimax/minimax-m2.5:free": {
         "prompt": "0",
         "completion": "0",
     },
     "inclusionai/ling-2.6-flash": {
-        "prompt": "0.00000001",
-        "completion": "0.00000003",
-        "input_cache_read": "0.000000002",
+        "prompt": "0.01",
+        "completion": "0.03",
+        "input_cache_read": "0.002",
     },
     "anthropic/claude-sonnet-4": {
-        "prompt": "0.000003",
-        "completion": "0.000015",
-        "input_cache_read": "0.0000003",
-        "input_cache_write": "0.00000375",
+        "prompt": "3",
+        "completion": "15",
+        "input_cache_read": "0.3",
+        "input_cache_write": "3.75",
     },
     "google/gemini-3.1-pro-preview": {
-        "prompt": "0.000002",
-        "completion": "0.000012",
-        "input_cache_read": "0.0000002",
-        "input_cache_write": "0.000000375",
+        "prompt": "2",
+        "completion": "12",
+        "input_cache_read": "0.2",
+        "input_cache_write": "0.375",
+    },
+}
+
+# OpenAI's pricing page is authoritative for first-party OpenAI models. Keep
+# these values ahead of aggregator data because provider catalogs can lag an
+# official price change.
+OFFICIAL_MODEL_PRICES = {
+    "openai/gpt-5.3-codex": {
+        "prompt": "1.75",
+        "completion": "14",
+        "input_cache_read": "0.175",
+    },
+    "openai/gpt-5.4": {
+        "prompt": "2.5",
+        "completion": "15",
+        "input_cache_read": "0.25",
+    },
+    "openai/gpt-5.4-mini": {
+        "prompt": "0.75",
+        "completion": "4.5",
+        "input_cache_read": "0.075",
+    },
+    "openai/gpt-5.5": {
+        "prompt": "5",
+        "completion": "30",
+        "input_cache_read": "0.5",
+    },
+    "openai/gpt-5.6-sol": {
+        "prompt": "5",
+        "completion": "30",
+        "input_cache_read": "0.5",
+        "input_cache_write": "6.25",
+    },
+    "openai/gpt-5.6-terra": {
+        "prompt": "2",
+        "completion": "12",
+        "input_cache_read": "0.2",
+        "input_cache_write": "2.5",
+    },
+    "openai/gpt-5.6-luna": {
+        "prompt": "0.2",
+        "completion": "1.2",
+        "input_cache_read": "0.02",
+        "input_cache_write": "0.25",
     },
 }
 
@@ -103,6 +124,18 @@ PRICING_MODEL_ALIASES = {
 FREE_SUFFIX_MODEL_ALIASES = {
     "deepseek-v4-flash": "deepseek/deepseek-v4-flash:free",
     "minimax-m2.5": "minimax/minimax-m2.5:free",
+}
+
+# DeepSeek V4 Flash is available through OpenCode plugins, but no trusted
+# provider rate is configured for the non-free model yet. Keep the explicit
+# `:free` alias separately priced at zero above.
+UNPRICED_CANONICAL_MODEL_IDS = {
+    "deepseek/deepseek-v4-flash",
+}
+
+CODEX_MODEL_PROVIDER_NAMESPACES = {
+    "opencode-go",
+    "opencode-free",
 }
 
 PROVIDER_MODEL_NAMESPACES = {
@@ -149,6 +182,17 @@ def normalize_model(raw: str) -> dict:
         label = f"{model_id} ({provider})"
 
     return {"id": model_id, "provider": provider, "label": label, "variant": variant}
+
+
+def normalize_provider_model(provider: str, model_id: str) -> tuple[str, str]:
+    """Recover a plugin provider encoded in a Codex model namespace."""
+    provider_key = (provider or "unknown").strip().lower()
+    model_key = (model_id or "unknown").strip()
+    if "/" in model_key:
+        namespace, namespaced_model = model_key.split("/", 1)
+        if namespace in CODEX_MODEL_PROVIDER_NAMESPACES and namespaced_model:
+            return namespace, namespaced_model
+    return provider_key, model_key
 
 QUALITATIVE_COLORS = [
     "#38BDF8",
@@ -218,8 +262,15 @@ def _pricing_source(base_source: str, resolution: PricingResolution) -> str:
         return f"{base_source}; {resolution.source}"
     return base_source
 
+def _per_million(value):
+    try:
+        return float(value) * TOKENS_PER_MILLION
+    except (TypeError, ValueError):
+        return value
+
+
 def openrouter_prices() -> dict:
-    """Fetch public OpenRouter per-token pricing, cached for one hour."""
+    """Fetch public OpenRouter pricing, normalized to USD per 1M tokens."""
     now = time.time()
     if PRICING_CACHE["prices"] and now - PRICING_CACHE["fetched_at"] < 3600:
         return PRICING_CACHE["prices"]
@@ -227,19 +278,37 @@ def openrouter_prices() -> dict:
     try:
         with urllib.request.urlopen(OPENROUTER_MODELS_URL, timeout=8) as response:
             payload = json.load(response)
-        prices = {m.get("id"): m.get("pricing", {}) for m in payload.get("data", []) if m.get("id")}
+        prices = {
+            model.get("id"): {
+                key: _per_million(value)
+                for key, value in (model.get("pricing") or {}).items()
+                if key != "overrides"
+            }
+            for model in payload.get("data", [])
+            if model.get("id")
+        }
         PRICING_CACHE.update({"fetched_at": now, "prices": prices})
         return prices
     except Exception:
         return PRICING_CACHE["prices"]
 
+
 def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output: int, cache_read: int = 0, cache_write: int = 0) -> dict:
-    """Estimate USD cost from token counts using latest fetched OpenRouter pricing."""
+    """Estimate USD cost from raw token counts and per-million-token rates."""
     resolution = pricing_model_resolution(provider, model_id)
     router_id = resolution.model_id
+    if router_id in UNPRICED_CANONICAL_MODEL_IDS:
+        return {
+            "estimated_cost": None,
+            "pricing_status": "unpriced",
+            "pricing_source": f"No trusted pricing configured for {router_id}",
+            "pricing_model_id": router_id,
+            "pricing_url": openrouter_model_url(router_id),
+        }
     fallback_pricing = HARDCODED_MODEL_PRICES.get(router_id or "", {})
     fetched_pricing = openrouter_prices().get(router_id or "", {})
-    pricing = {**fallback_pricing, **fetched_pricing}
+    official_pricing = OFFICIAL_MODEL_PRICES.get(router_id or "", {})
+    pricing = {**fallback_pricing, **fetched_pricing, **official_pricing}
 
     def price(key: str) -> float:
         try:
@@ -278,19 +347,21 @@ def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output
     ]
 
     estimated = (
-        token_buckets["prompt"] * input_price
-        + token_buckets["completion"] * output_price
-        + token_buckets["input_cache_read"] * cache_read_price
-        + token_buckets["input_cache_write"] * cache_write_price
+        token_buckets["prompt"] / TOKENS_PER_MILLION * input_price
+        + token_buckets["completion"] / TOKENS_PER_MILLION * output_price
+        + token_buckets["input_cache_read"] / TOKENS_PER_MILLION * cache_read_price
+        + token_buckets["input_cache_write"] / TOKENS_PER_MILLION * cache_write_price
     )
     cost_breakdown = {
-        "input": token_buckets["prompt"] * input_price,
-        "output": token_buckets["completion"] * output_price,
-        "cache_read": token_buckets["input_cache_read"] * cache_read_price,
-        "cache_write": token_buckets["input_cache_write"] * cache_write_price,
+        "input": token_buckets["prompt"] / TOKENS_PER_MILLION * input_price,
+        "output": token_buckets["completion"] / TOKENS_PER_MILLION * output_price,
+        "cache_read": token_buckets["input_cache_read"] / TOKENS_PER_MILLION * cache_read_price,
+        "cache_write": token_buckets["input_cache_write"] / TOKENS_PER_MILLION * cache_write_price,
     }
     source = _pricing_source(
-        "OpenRouter /api/v1/models" if fetched_pricing else "Hardcoded pricing fallback",
+        "OpenAI official API pricing"
+        if official_pricing
+        else "OpenRouter /api/v1/models" if fetched_pricing else "Hardcoded pricing fallback",
         resolution,
     )
     result = {
@@ -298,13 +369,14 @@ def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output
         "pricing_status": "priced",
         "pricing_source": source,
         "pricing_model_id": router_id,
-        "pricing_url": openrouter_model_url(router_id),
+        "pricing_url": OPENAI_PRICING_URL if official_pricing else openrouter_model_url(router_id),
         "cost_basis": "api_equivalent_estimate",
         "cost_breakdown": cost_breakdown,
         "input_price": input_price,
         "output_price": output_price,
         "cache_read_price": cache_read_price,
         "cache_write_price": cache_write_price,
+        "price_unit": "USD per 1M tokens",
     }
     if missing_price_buckets:
         result.update({
