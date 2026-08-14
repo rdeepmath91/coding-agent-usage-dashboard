@@ -35,11 +35,6 @@ HARDCODED_MODEL_PRICES = {
         "prompt": "0",
         "completion": "0",
     },
-    "deepseek/deepseek-v4-flash": {
-        "prompt": "0.0000001",
-        "completion": "0.0000002",
-        "input_cache_read": "0.00000002",
-    },
     "deepseek/deepseek-v4-pro": {
         "prompt": "0.000000435",
         "completion": "0.00000087",
@@ -105,6 +100,18 @@ FREE_SUFFIX_MODEL_ALIASES = {
     "minimax-m2.5": "minimax/minimax-m2.5:free",
 }
 
+# DeepSeek V4 Flash is available through OpenCode plugins, but no trusted
+# provider rate is configured for the non-free model yet. Keep the explicit
+# `:free` alias separately priced at zero above.
+UNPRICED_CANONICAL_MODEL_IDS = {
+    "deepseek/deepseek-v4-flash",
+}
+
+CODEX_MODEL_PROVIDER_NAMESPACES = {
+    "opencode-go",
+    "opencode-free",
+}
+
 PROVIDER_MODEL_NAMESPACES = {
     "openai": "openai",
     "openai-codex": "openai",
@@ -149,6 +156,17 @@ def normalize_model(raw: str) -> dict:
         label = f"{model_id} ({provider})"
 
     return {"id": model_id, "provider": provider, "label": label, "variant": variant}
+
+
+def normalize_provider_model(provider: str, model_id: str) -> tuple[str, str]:
+    """Recover a plugin provider encoded in a Codex model namespace."""
+    provider_key = (provider or "unknown").strip().lower()
+    model_key = (model_id or "unknown").strip()
+    if "/" in model_key:
+        namespace, namespaced_model = model_key.split("/", 1)
+        if namespace in CODEX_MODEL_PROVIDER_NAMESPACES and namespaced_model:
+            return namespace, namespaced_model
+    return provider_key, model_key
 
 QUALITATIVE_COLORS = [
     "#38BDF8",
@@ -237,6 +255,14 @@ def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output
     """Estimate USD cost from token counts using latest fetched OpenRouter pricing."""
     resolution = pricing_model_resolution(provider, model_id)
     router_id = resolution.model_id
+    if router_id in UNPRICED_CANONICAL_MODEL_IDS:
+        return {
+            "estimated_cost": None,
+            "pricing_status": "unpriced",
+            "pricing_source": f"No trusted pricing configured for {router_id}",
+            "pricing_model_id": router_id,
+            "pricing_url": openrouter_model_url(router_id),
+        }
     fallback_pricing = HARDCODED_MODEL_PRICES.get(router_id or "", {})
     fetched_pricing = openrouter_prices().get(router_id or "", {})
     pricing = {**fallback_pricing, **fetched_pricing}

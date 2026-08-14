@@ -8,7 +8,13 @@ from pathlib import Path
 
 from . import config
 from .config import display_path
-from .pricing import estimate_cost, normalize_model, openrouter_model_url, pricing_model_resolution
+from .pricing import (
+    estimate_cost,
+    normalize_model,
+    normalize_provider_model,
+    openrouter_model_url,
+    pricing_model_resolution,
+)
 from .token_metrics import effective_token_total
 
 
@@ -135,6 +141,7 @@ def codex_records(days: int | None = None) -> list[dict]:
             input_tokens = max(0, raw_input_tokens - cache_read)
         model_id = row["model"] or "unknown"
         provider = row["model_provider"] or "unknown"
+        provider, model_id = normalize_provider_model(provider, model_id)
         created_ms = _safe_int(row["created_ms"], 0) or 0
         updated_ms = _safe_int(row["updated_ms"], created_ms) or created_ms
         created_dt = datetime.datetime.fromtimestamp(created_ms / 1000) if created_ms else None
