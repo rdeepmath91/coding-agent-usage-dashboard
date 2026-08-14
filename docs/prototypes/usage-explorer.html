@@ -1,0 +1,867 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Usage Explorer prototype</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #090b0d;
+      --surface: #0e1114;
+      --surface-2: #12161a;
+      --surface-3: #171c21;
+      --border: #2a3036;
+      --border-strong: #3b444d;
+      --text: #f4f4f5;
+      --muted: #a1a1aa;
+      --dim: #71717a;
+      --accent: #38bdf8;
+      --accent-soft: rgb(56 189 248 / 0.12);
+      --green: #34d399;
+      --orange: #f59e0b;
+      --danger: #fb7185;
+      --radius: 6px;
+      --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    button, input, select { font: inherit; }
+    button, select { cursor: pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .shell { max-width: 1540px; margin: 0 auto; padding: 22px; }
+
+    .page-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 18px;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 5px; font-size: 28px; line-height: 1.2; }
+    h2 { margin-bottom: 5px; font-size: 17px; }
+    h3 { margin-bottom: 5px; font-size: 14px; }
+    .subtitle, .section-copy, .meta { color: var(--muted); }
+    .subtitle { margin: 0; }
+
+    .source-state {
+      display: grid;
+      justify-items: end;
+      gap: 4px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      text-align: right;
+    }
+
+    .source-state strong { color: var(--green); font-weight: 700; }
+
+    .prototype-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 12px;
+      padding: 9px 12px;
+      border: 1px solid #55420e;
+      border-radius: var(--radius);
+      background: #191608;
+      color: #fde68a;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    .prototype-banner strong { color: #fef3c7; }
+
+    .filter-panel {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      margin-bottom: 12px;
+    }
+
+    .filter-grid {
+      display: grid;
+      grid-template-columns: minmax(240px, 1.35fr) repeat(3, minmax(145px, .8fr)) minmax(190px, 1.1fr) auto;
+      gap: 10px;
+      padding: 12px;
+      align-items: end;
+    }
+
+    .field { display: grid; gap: 5px; min-width: 0; }
+    .field label, .filter-label {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    input, select, .control {
+      min-height: 38px;
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      color: var(--text);
+      padding: 8px 10px;
+    }
+
+    input::placeholder { color: var(--dim); }
+    input:hover, select:hover, .control:hover { border-color: var(--border-strong); }
+
+    .range-wrap { display: grid; gap: 6px; }
+    .range-buttons { display: flex; gap: 5px; }
+    .range-button {
+      min-height: 38px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      color: var(--muted);
+      padding: 6px 10px;
+      white-space: nowrap;
+    }
+
+    .range-button:hover { color: var(--text); border-color: var(--border-strong); }
+    .range-button[aria-pressed="true"] {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--text);
+    }
+
+    .apply-button {
+      min-height: 38px;
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      background: var(--accent);
+      color: #041016;
+      font-weight: 800;
+      padding: 8px 15px;
+    }
+
+    .apply-button:active, .range-button:active, .text-button:active { transform: translateY(1px); }
+
+    .filter-state {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 7px;
+      min-height: 44px;
+      padding: 8px 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .filter-label { margin-right: 2px; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 28px;
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      background: var(--surface-2);
+      color: var(--text);
+      padding: 4px 9px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .chip button {
+      width: 18px;
+      height: 18px;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--muted);
+      padding: 0;
+      line-height: 1;
+    }
+
+    .chip button:hover { color: var(--text); background: var(--surface-3); }
+    .clear-button { margin-left: auto; }
+    .text-button {
+      border: 0;
+      background: transparent;
+      color: var(--accent);
+      padding: 5px 7px;
+      font-weight: 700;
+    }
+
+    .summary-strip {
+      display: grid;
+      grid-template-columns: minmax(150px, .7fr) minmax(260px, 1.35fr) minmax(240px, 1fr) minmax(250px, 1.1fr);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      margin-bottom: 12px;
+    }
+
+    .summary-block { padding: 13px 15px; min-width: 0; }
+    .summary-block + .summary-block { border-left: 1px solid var(--border); }
+    .summary-label {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .summary-value { font-size: 21px; font-weight: 800; }
+    .summary-detail { color: var(--muted); font-size: 12px; }
+    .positive { color: var(--green); }
+    .warning { color: var(--orange); }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .metric-card, .panel {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .metric-card { padding: 13px 14px; }
+    .metric-label {
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    .metric-value { margin: 5px 0 3px; font: 800 23px/1.2 var(--font-mono); }
+    .metric-detail { color: var(--muted); font: 12px/1.45 var(--font-mono); }
+
+    .primary-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.75fr) minmax(285px, .65fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-header p { margin: 0; color: var(--muted); font: 12px/1.45 var(--font-mono); }
+    .panel-action { white-space: nowrap; }
+
+    .chart-scroll { overflow-x: auto; padding: 16px 14px 12px; }
+    .chart {
+      display: grid;
+      grid-template-columns: 48px repeat(14, minmax(34px, 1fr));
+      grid-template-rows: repeat(4, 42px) 28px;
+      min-width: 760px;
+      height: 216px;
+      position: relative;
+    }
+
+    .gridline {
+      grid-column: 2 / -1;
+      border-top: 1px solid #252b30;
+      position: relative;
+    }
+    .gridline span {
+      position: absolute;
+      right: calc(100% + 8px);
+      top: -9px;
+      color: var(--dim);
+      font: 10px var(--font-mono);
+      white-space: nowrap;
+    }
+    .g1 { grid-row: 1; }
+    .g2 { grid-row: 2; }
+    .g3 { grid-row: 3; }
+    .g4 { grid-row: 4; }
+
+    .bar {
+      align-self: end;
+      justify-self: stretch;
+      margin: 0 4px;
+      min-height: 4px;
+      border: 0;
+      border-radius: 2px 2px 0 0;
+      background: linear-gradient(to top, #0ea5e9 0 44%, #22c55e 44% 73%, #f59e0b 73% 89%, #8b5cf6 89% 100%);
+      opacity: .88;
+      position: relative;
+    }
+    .bar:hover, .bar:focus-visible { opacity: 1; filter: brightness(1.15); }
+    .bar[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--accent); }
+    .bar::after {
+      content: attr(data-label);
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--dim);
+      font: 10px var(--font-mono);
+      white-space: nowrap;
+    }
+
+    .bar:nth-of-type(even)::after { display: none; }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 0 14px 14px;
+      color: var(--muted);
+      font: 11px var(--font-mono);
+    }
+    .legend span::before {
+      content: "";
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      margin-right: 6px;
+      border-radius: 2px;
+      background: var(--swatch);
+    }
+
+    .driver-list { display: grid; }
+    .driver {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 11px 13px;
+      border-bottom: 1px solid var(--border);
+    }
+    .driver:last-child { border-bottom: 0; }
+    .rank { color: var(--dim); font: 11px var(--font-mono); }
+    .driver strong { display: block; font: 700 12px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .driver small { color: var(--muted); font: 11px var(--font-mono); }
+    .driver-value { text-align: right; font: 700 12px var(--font-mono); }
+
+    .table-panel { margin-bottom: 12px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 880px; }
+    th {
+      padding: 9px 12px;
+      color: var(--muted);
+      font: 11px var(--font-mono);
+      text-align: left;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      font: 12px var(--font-mono);
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: #11161a; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .tool-tag {
+      display: inline-flex;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 10px;
+      color: var(--accent);
+    }
+    .tool-tag.codex { color: #e879f9; }
+    .tool-tag.hermes { color: #facc15; }
+    .model-name { color: var(--text); font-weight: 700; }
+    .muted { color: var(--muted); }
+
+    .session-button {
+      border: 0;
+      background: transparent;
+      color: var(--accent);
+      padding: 3px 0;
+      text-align: left;
+      font-family: var(--font-mono);
+      font-weight: 700;
+    }
+    .session-button:hover { text-decoration: underline; }
+
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 15px;
+      padding: 10px 12px;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font: 11px var(--font-mono);
+    }
+    .pager-controls { display: flex; gap: 6px; }
+    .pager-controls button {
+      min-height: 30px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      color: var(--text);
+      padding: 4px 9px;
+    }
+    .pager-controls button:disabled { color: var(--dim); cursor: not-allowed; opacity: .55; }
+
+    .detail-drawer {
+      position: fixed;
+      inset: 0 0 0 auto;
+      width: min(440px, 100%);
+      z-index: 10;
+      border-left: 1px solid var(--border-strong);
+      background: #0c0f12;
+      box-shadow: -20px 0 60px rgb(0 0 0 / .45);
+      padding: 18px;
+      overflow-y: auto;
+    }
+    .detail-drawer[hidden] { display: none; }
+    .drawer-header { display: flex; justify-content: space-between; gap: 15px; border-bottom: 1px solid var(--border); padding-bottom: 13px; }
+    .close-button {
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      color: var(--text);
+    }
+    .detail-list { display: grid; grid-template-columns: 130px 1fr; gap: 10px 12px; padding: 16px 0; margin: 0; }
+    .detail-list dt { color: var(--muted); font: 11px var(--font-mono); }
+    .detail-list dd { margin: 0; font: 12px var(--font-mono); overflow-wrap: anywhere; }
+    .detail-note { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 12px; color: var(--muted); }
+
+    .prototype-notes {
+      padding: 13px 14px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .prototype-notes ul { margin: 7px 0 0; padding-left: 18px; }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 1120px) {
+      .filter-grid { grid-template-columns: repeat(3, 1fr); }
+      .filter-grid .range-wrap { grid-column: 1 / -1; }
+      .summary-strip { grid-template-columns: repeat(2, 1fr); }
+      .summary-block:nth-child(3) { border-left: 0; border-top: 1px solid var(--border); }
+      .summary-block:nth-child(4) { border-top: 1px solid var(--border); }
+      .metric-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 760px) {
+      .shell { padding: 12px; }
+      .page-header { display: grid; gap: 10px; }
+      .source-state { justify-items: start; text-align: left; }
+      .prototype-banner { display: grid; gap: 4px; align-items: flex-start; }
+      .filter-grid { grid-template-columns: 1fr; }
+      .filter-grid .range-wrap { grid-column: auto; }
+      .range-buttons { overflow-x: auto; padding-bottom: 2px; }
+      .clear-button { margin-left: 0; }
+      .summary-strip, .metric-grid, .primary-grid { grid-template-columns: 1fr; }
+      .summary-block + .summary-block { border-left: 0; border-top: 1px solid var(--border); }
+      .panel-header { align-items: flex-start; }
+      .driver-list { grid-template-columns: 1fr; }
+      h1 { font-size: 24px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="page-header">
+      <div>
+        <h1>Usage Explorer</h1>
+        <p class="subtitle">Trace usage from period summary to the sessions that produced it.</p>
+      </div>
+      <div class="source-state" aria-label="Data freshness">
+        <strong>Local sources ready</strong>
+        <span>OpenCode, Codex CLI, Hermes, Cursor</span>
+        <span>Refreshed 42 seconds ago</span>
+      </div>
+    </header>
+
+    <div class="prototype-banner" role="note">
+      <span><strong>Visual prototype</strong> with deterministic sample data. Values are not production measurements.</span>
+      <span>Scope: filters, drilldown, URL state, pagination</span>
+    </div>
+
+    <section class="filter-panel" aria-labelledby="filter-heading">
+      <h2 id="filter-heading" class="sr-only">Filter usage</h2>
+      <form id="filter-form">
+        <div class="filter-grid">
+          <div class="range-wrap">
+            <span class="filter-label">Range</span>
+            <div class="range-buttons" aria-label="Quick date range">
+              <button class="range-button" type="button" data-days="7" aria-pressed="false">7d</button>
+              <button class="range-button" type="button" data-days="30" aria-pressed="true">30d</button>
+              <button class="range-button" type="button" data-days="90" aria-pressed="false">90d</button>
+              <button class="range-button" type="button" data-days="all" aria-pressed="false">All</button>
+              <button class="range-button" type="button" data-days="custom" aria-pressed="false">Dates</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="tool-filter">Tool</label>
+            <select id="tool-filter">
+              <option value="">All tools</option>
+              <option>OpenCode</option>
+              <option selected>Codex CLI</option>
+              <option>Hermes</option>
+              <option>Cursor</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="model-filter">Model</label>
+            <select id="model-filter">
+              <option value="">All models</option>
+              <option selected>gpt-5.6-sol</option>
+              <option>gpt-5.6-luna</option>
+              <option>gpt-5.5</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="project-filter">Project</label>
+            <select id="project-filter">
+              <option value="">All projects</option>
+              <option selected>agent-platform</option>
+              <option>usage-dashboard</option>
+              <option>jlpt-dojo</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="search-filter">Search sessions</label>
+            <input id="search-filter" type="search" placeholder="Title, model, or project">
+          </div>
+          <button class="apply-button" type="submit">Apply</button>
+        </div>
+        <div class="filter-state" id="active-filters" aria-live="polite">
+          <span class="filter-label">Active scope</span>
+          <span class="chip" data-filter-chip="range">Range: 30 days <button type="button" aria-label="Clear range filter">×</button></span>
+          <span class="chip" data-filter-chip="tool">Tool: Codex CLI <button type="button" aria-label="Clear tool filter">×</button></span>
+          <span class="chip" data-filter-chip="model">Model: gpt-5.6-sol <button type="button" aria-label="Clear model filter">×</button></span>
+          <span class="chip" data-filter-chip="project">Project: agent-platform <button type="button" aria-label="Clear project filter">×</button></span>
+          <button class="text-button clear-button" id="clear-all" type="button">Clear all</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="summary-strip" aria-label="Selected period summary">
+      <div class="summary-block">
+        <span class="summary-label">Selected period</span>
+        <div class="summary-value">30 days</div>
+        <div class="summary-detail">Jul 16 to Aug 14</div>
+      </div>
+      <div class="summary-block">
+        <span class="summary-label">What changed</span>
+        <div class="summary-value positive">+18% token volume</div>
+        <div class="summary-detail">Compared with the previous 30 days</div>
+      </div>
+      <div class="summary-block">
+        <span class="summary-label">Top driver</span>
+        <div class="summary-value">agent-platform</div>
+        <div class="summary-detail">41% of scoped effective volume</div>
+      </div>
+      <div class="summary-block">
+        <span class="summary-label">Accounting confidence</span>
+        <div class="summary-value warning">Partial estimate</div>
+        <div class="summary-detail">6 of 8 models priced in this scope</div>
+      </div>
+    </section>
+
+    <section class="metric-grid" aria-label="Usage metrics">
+      <article class="metric-card">
+        <span class="metric-label">Total tokens</span>
+        <div class="metric-value">9.84B</div>
+        <div class="metric-detail">2.31B direct, 7.53B cached</div>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">API-equivalent cost</span>
+        <div class="metric-value">$4,216.80</div>
+        <div class="metric-detail">Partial estimate, not subscription spend</div>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Cache share</span>
+        <div class="metric-value">76.5%</div>
+        <div class="metric-detail">Capability matched for selected sources</div>
+      </article>
+      <article class="metric-card">
+        <span class="metric-label">Sessions</span>
+        <div class="metric-value">184</div>
+        <div class="metric-detail">6.1 per day across 3 projects</div>
+      </article>
+    </section>
+
+    <section class="primary-grid">
+      <article class="panel" aria-labelledby="trend-heading">
+        <header class="panel-header">
+          <div>
+            <h2 id="trend-heading">Daily tokens by model</h2>
+            <p>Click a day to add it to the Explorer scope. Legend controls only show or hide series.</p>
+          </div>
+          <button class="text-button panel-action" type="button" id="show-table">Show data table</button>
+        </header>
+        <div class="chart-scroll">
+          <div class="chart" role="img" aria-label="Stacked daily token bars for fourteen days">
+            <div class="gridline g1"><span>3.0B</span></div>
+            <div class="gridline g2"><span>2.0B</span></div>
+            <div class="gridline g3"><span>1.0B</span></div>
+            <div class="gridline g4"><span>0</span></div>
+            <button class="bar" style="grid-column:2; grid-row:1 / 5; height:38%" data-label="Aug 01" aria-label="Aug 1, 1.1 billion tokens" aria-pressed="false"></button>
+            <button class="bar" style="grid-column:3; grid-row:1 / 5; height:53%" data-label="Aug 02" aria-label="Aug 2, 1.6 billion tokens" aria-pressed="false"></button>
+            <button class="bar" style="grid-column:4; grid-row:1 / 5; height:47%" data-label="Aug 03" aria-label="Aug 3, 1.4 billion tokens" aria-pressed="false"></button>
+            <button class="bar" style="grid-column:5; grid-row:1 / 5; height:72%" data-label="Aug 04" aria-label="Aug 4, 2.2 billion tokens" aria-pressed="false"></button>
+            <button class="bar" style="grid-column:6; grid-row:1 / 5; height:49%" data-label="Aug 05" aria-label="Aug 5, 1.5 billion tokens" aria-pressed="false"></button>
+            <button class="bar" style="grid-column:7; grid-row:1 / 5; height:86%" data-label="Aug 06" aria-label="Aug 6, 2.6 billion tokens" aria-pressed="false"></button>
+            <button class="bar" style="grid-column:8; grid-row:1 / 5; height:64%" data-label="Aug 07" aria-label="Aug 7, 1.9 billion tokens" aria-pressed="false"></button>
+            <button class="bar" style="grid-column:9; grid-row:1 / 5; height:91%" data-label="Aug 08" aria-label="Aug 8, 2.8 billion tokens" aria-pressed="false"></button>
+            <button class="bar" style="grid-column:10; grid-row:1 / 5; height:58%" data-label="Aug 09" aria-label="Aug 9, 1.7 billion tokens" aria-pressed="false"></button>
+            <button class="bar" style="grid-column:11; grid-row:1 / 5; height:68%" data-label="Aug 10" aria-label="Aug 10, 2.0 billion tokens" aria-pressed="false"></button>
+            <button class="bar" style="grid-column:12; grid-row:1 / 5; height:100%" data-label="Aug 11" aria-label="Aug 11, 3.0 billion tokens" aria-pressed="false"></button>
+            <button class="bar" style="grid-column:13; grid-row:1 / 5; height:79%" data-label="Aug 12" aria-label="Aug 12, 2.4 billion tokens" aria-pressed="false"></button>
+            <button class="bar" style="grid-column:14; grid-row:1 / 5; height:62%" data-label="Aug 13" aria-label="Aug 13, 1.9 billion tokens" aria-pressed="false"></button>
+            <button class="bar" style="grid-column:15; grid-row:1 / 5; height:44%" data-label="Aug 14" aria-label="Aug 14, 1.3 billion tokens" aria-pressed="false"></button>
+          </div>
+        </div>
+        <div class="legend" aria-label="Chart series visibility">
+          <span style="--swatch:#0ea5e9">gpt-5.6-sol</span>
+          <span style="--swatch:#22c55e">gpt-5.5</span>
+          <span style="--swatch:#f59e0b">gpt-5.4-mini</span>
+          <span style="--swatch:#8b5cf6">Other</span>
+        </div>
+        <div id="chart-table" hidden>
+          <table>
+            <caption class="sr-only">Example chart data</caption>
+            <thead><tr><th>Date</th><th class="num">Total tokens</th><th class="num">Sessions</th></tr></thead>
+            <tbody><tr><td>Aug 11</td><td class="num">3.0B</td><td class="num">19</td></tr><tr><td>Aug 8</td><td class="num">2.8B</td><td class="num">17</td></tr><tr><td>Aug 6</td><td class="num">2.6B</td><td class="num">16</td></tr></tbody>
+          </table>
+        </div>
+      </article>
+
+      <aside class="panel" aria-labelledby="drivers-heading">
+        <header class="panel-header">
+          <div>
+            <h2 id="drivers-heading">Top drivers</h2>
+            <p>Ranked within the active scope.</p>
+          </div>
+        </header>
+        <div class="driver-list">
+          <div class="driver"><span class="rank">01</span><div><strong>agent-platform</strong><small>Project</small></div><span class="driver-value">41%</span></div>
+          <div class="driver"><span class="rank">02</span><div><strong>gpt-5.6-sol</strong><small>Model</small></div><span class="driver-value">37%</span></div>
+          <div class="driver"><span class="rank">03</span><div><strong>Aug 11</strong><small>Peak day</small></div><span class="driver-value">3.0B</span></div>
+          <div class="driver"><span class="rank">04</span><div><strong>2 unpriced models</strong><small>Coverage gap</small></div><span class="driver-value warning">Review</span></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="panel table-panel" aria-labelledby="models-heading">
+      <header class="panel-header">
+        <div>
+          <h2 id="models-heading">Model breakdown</h2>
+          <p>Uses the same tool, model, project, and date scope as the chart and history.</p>
+        </div>
+        <button class="text-button panel-action" type="button">Export scoped CSV</button>
+      </header>
+      <div class="table-wrap" role="region" aria-label="Model breakdown table" tabindex="0">
+        <table>
+          <thead><tr><th>Tool</th><th>Model</th><th class="num">Sessions</th><th class="num">Total tokens</th><th class="num">Cache read</th><th class="num">API-equiv. cost</th></tr></thead>
+          <tbody>
+            <tr><td><span class="tool-tag codex">Codex CLI</span></td><td class="model-name">gpt-5.6-sol</td><td class="num">92</td><td class="num">6.31B</td><td class="num">4.77B</td><td class="num">$3,845.20</td></tr>
+            <tr><td><span class="tool-tag codex">Codex CLI</span></td><td class="model-name">gpt-5.5</td><td class="num">48</td><td class="num">2.14B</td><td class="num">1.72B</td><td class="num">$371.60</td></tr>
+            <tr><td><span class="tool-tag codex">Codex CLI</span></td><td class="model-name">gpt-5.4-mini</td><td class="num">21</td><td class="num">1.03B</td><td class="num">891M</td><td class="num muted">Unpriced</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel table-panel" aria-labelledby="history-heading">
+      <header class="panel-header">
+        <div>
+          <h2 id="history-heading">Usage history</h2>
+          <p>184 matching sessions. Open a row for metadata-first detail without exposing prompt content.</p>
+        </div>
+        <button class="text-button panel-action" type="button">Copy view URL</button>
+      </header>
+      <div class="table-wrap" role="region" aria-label="Usage history table" tabindex="0">
+        <table>
+          <thead><tr><th>Tool</th><th>Date</th><th>Project</th><th>Model</th><th>Session</th><th class="num">Tokens</th><th class="num">Cost</th></tr></thead>
+          <tbody>
+            <tr><td><span class="tool-tag codex">Codex CLI</span></td><td>Aug 14 15:42</td><td>agent-platform</td><td>gpt-5.6-sol</td><td><button class="session-button" type="button" data-session="SDK adapter review">SDK adapter review</button></td><td class="num">184.2M</td><td class="num">$91.42</td></tr>
+            <tr><td><span class="tool-tag codex">Codex CLI</span></td><td>Aug 14 13:18</td><td>agent-platform</td><td>gpt-5.6-sol</td><td><button class="session-button" type="button" data-session="Roadmap dependency audit">Roadmap dependency audit</button></td><td class="num">147.8M</td><td class="num">$73.11</td></tr>
+            <tr><td><span class="tool-tag codex">Codex CLI</span></td><td>Aug 13 22:05</td><td>agent-platform</td><td>gpt-5.5</td><td><button class="session-button" type="button" data-session="Provider contract validation">Provider contract validation</button></td><td class="num">113.4M</td><td class="num">$22.06</td></tr>
+            <tr><td><span class="tool-tag codex">Codex CLI</span></td><td>Aug 13 18:51</td><td>agent-platform</td><td>gpt-5.6-sol</td><td><button class="session-button" type="button" data-session="Visual verification pass">Visual verification pass</button></td><td class="num">98.6M</td><td class="num">$48.73</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <footer class="pagination">
+        <span>Showing 1-25 of 184 sessions</span>
+        <div class="pager-controls"><button type="button" disabled>Previous</button><button type="button">Next</button></div>
+      </footer>
+    </section>
+
+    <section class="panel prototype-notes" aria-labelledby="notes-heading">
+      <h2 id="notes-heading">Prototype contract</h2>
+      <ul>
+        <li>Conceptual: exact visual spacing, sample values, and final endpoint shapes.</li>
+        <li>Expected behavior: one canonical filter scope, URL persistence, chart-to-row drilldown, server pagination, and metadata-first session detail.</li>
+        <li>Out of scope: real-time agent control, prompt content, provider credential setup, and production chart rendering.</li>
+      </ul>
+    </section>
+  </main>
+
+  <aside class="detail-drawer" id="detail-drawer" hidden aria-labelledby="detail-title">
+    <div class="drawer-header">
+      <div><span class="summary-label">Session detail</span><h2 id="detail-title">SDK adapter review</h2><p class="meta">Metadata only. Prompt and message content remain private.</p></div>
+      <button class="close-button" id="close-detail" type="button" aria-label="Close session detail">×</button>
+    </div>
+    <dl class="detail-list">
+      <dt>Tool</dt><dd>Codex CLI</dd>
+      <dt>Project</dt><dd>agent-platform</dd>
+      <dt>Model</dt><dd>gpt-5.6-sol</dd>
+      <dt>Started</dt><dd>2026-08-14 15:42 local time</dd>
+      <dt>Session tokens</dt><dd>184.2M</dd>
+      <dt>Cache read</dt><dd>141.7M</dd>
+      <dt>API-equiv. cost</dt><dd>$91.42, official OpenAI pricing</dd>
+      <dt>Source</dt><dd>~/.codex/state_5.sqlite plus referenced rollout log</dd>
+    </dl>
+    <div class="detail-note">The production detail should expose only source-supported metadata. Missing duration, project, cache, or pricing fields remain unavailable rather than zero.</div>
+  </aside>
+
+  <script>
+    (() => {
+      const form = document.getElementById('filter-form');
+      const rangeButtons = [...document.querySelectorAll('.range-button')];
+      const activeFilters = document.getElementById('active-filters');
+      const drawer = document.getElementById('detail-drawer');
+      const closeDetail = document.getElementById('close-detail');
+      let lastTrigger = null;
+
+      const labels = {
+        tool: 'Tool',
+        model: 'Model',
+        project: 'Project',
+        search: 'Search'
+      };
+
+      function setRange(button) {
+        rangeButtons.forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+        const existing = activeFilters.querySelector('[data-filter-chip="range"]');
+        const value = button.dataset.days === 'all' ? 'All time' : button.dataset.days === 'custom' ? 'Explicit dates' : `${button.dataset.days} days`;
+        if (existing) existing.firstChild.textContent = `Range: ${value} `;
+      }
+
+      function setChip(key, value) {
+        const existing = activeFilters.querySelector(`[data-filter-chip="${key}"]`);
+        if (!value) {
+          if (existing) existing.remove();
+          return;
+        }
+        if (existing) {
+          existing.firstChild.textContent = `${labels[key]}: ${value} `;
+          return;
+        }
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.dataset.filterChip = key;
+        chip.append(document.createTextNode(`${labels[key]}: ${value} `));
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.setAttribute('aria-label', `Clear ${labels[key].toLowerCase()} filter`);
+        remove.textContent = '×';
+        chip.append(remove);
+        activeFilters.insertBefore(chip, document.getElementById('clear-all'));
+      }
+
+      rangeButtons.forEach(button => button.addEventListener('click', () => setRange(button)));
+
+      form.addEventListener('submit', event => {
+        event.preventDefault();
+        setChip('tool', document.getElementById('tool-filter').value);
+        setChip('model', document.getElementById('model-filter').value);
+        setChip('project', document.getElementById('project-filter').value);
+        setChip('search', document.getElementById('search-filter').value.trim());
+      });
+
+      activeFilters.addEventListener('click', event => {
+        const button = event.target.closest('.chip button');
+        if (!button) return;
+        const chip = button.closest('.chip');
+        const key = chip.dataset.filterChip;
+        if (key === 'range') {
+          setRange(rangeButtons.find(item => item.dataset.days === '30'));
+          return;
+        }
+        const control = document.getElementById(`${key}-filter`);
+        if (control) control.value = '';
+        chip.remove();
+      });
+
+      document.getElementById('clear-all').addEventListener('click', () => {
+        [...activeFilters.querySelectorAll('.chip')].forEach(chip => chip.remove());
+        ['tool-filter', 'model-filter', 'project-filter', 'search-filter'].forEach(id => document.getElementById(id).value = '');
+        rangeButtons.forEach(item => item.setAttribute('aria-pressed', 'false'));
+      });
+
+      document.querySelectorAll('.bar').forEach(bar => bar.addEventListener('click', () => {
+        document.querySelectorAll('.bar').forEach(item => item.setAttribute('aria-pressed', String(item === bar)));
+        setChip('search', `Date ${bar.dataset.label}`);
+      }));
+
+      document.getElementById('show-table').addEventListener('click', event => {
+        const table = document.getElementById('chart-table');
+        table.hidden = !table.hidden;
+        event.currentTarget.textContent = table.hidden ? 'Show data table' : 'Hide data table';
+      });
+
+      function openDrawer(trigger) {
+        lastTrigger = trigger;
+        document.getElementById('detail-title').textContent = trigger.dataset.session;
+        drawer.hidden = false;
+        closeDetail.focus();
+      }
+
+      function hideDrawer() {
+        drawer.hidden = true;
+        if (lastTrigger) lastTrigger.focus();
+      }
+
+      document.querySelectorAll('.session-button').forEach(button => button.addEventListener('click', () => openDrawer(button)));
+      closeDetail.addEventListener('click', hideDrawer);
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && !drawer.hidden) hideDrawer();
+      });
+    })();
+  </script>
+</body>
+</html>
