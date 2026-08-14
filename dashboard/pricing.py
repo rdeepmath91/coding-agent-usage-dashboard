@@ -8,6 +8,7 @@ import urllib.request
 
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 OPENROUTER_MODEL_PAGE_BASE = "https://openrouter.ai"
+OPENAI_PRICING_URL = "https://developers.openai.com/api/docs/pricing"
 PRICING_CACHE = {"fetched_at": 0, "prices": {}}
 
 HARDCODED_MODEL_PRICES = {
@@ -70,6 +71,24 @@ HARDCODED_MODEL_PRICES = {
         "completion": "0.000012",
         "input_cache_read": "0.0000002",
         "input_cache_write": "0.000000375",
+    },
+}
+
+# OpenAI's pricing page is authoritative for first-party OpenAI models. Keep
+# these values ahead of aggregator data because provider catalogs can lag an
+# official price change.
+OFFICIAL_MODEL_PRICES = {
+    "openai/gpt-5.6-sol": {
+        "prompt": "0.000005",
+        "completion": "0.00003",
+        "input_cache_read": "0.0000005",
+        "input_cache_write": "0.00000625",
+    },
+    "openai/gpt-5.6-luna": {
+        "prompt": "0.0000002",
+        "completion": "0.0000012",
+        "input_cache_read": "0.00000002",
+        "input_cache_write": "0.00000025",
     },
 }
 
@@ -265,7 +284,8 @@ def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output
         }
     fallback_pricing = HARDCODED_MODEL_PRICES.get(router_id or "", {})
     fetched_pricing = openrouter_prices().get(router_id or "", {})
-    pricing = {**fallback_pricing, **fetched_pricing}
+    official_pricing = OFFICIAL_MODEL_PRICES.get(router_id or "", {})
+    pricing = {**fallback_pricing, **fetched_pricing, **official_pricing}
 
     def price(key: str) -> float:
         try:
@@ -316,7 +336,9 @@ def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output
         "cache_write": token_buckets["input_cache_write"] * cache_write_price,
     }
     source = _pricing_source(
-        "OpenRouter /api/v1/models" if fetched_pricing else "Hardcoded pricing fallback",
+        "OpenAI official API pricing"
+        if official_pricing
+        else "OpenRouter /api/v1/models" if fetched_pricing else "Hardcoded pricing fallback",
         resolution,
     )
     result = {
@@ -324,7 +346,7 @@ def estimate_cost(provider: str, model_id: str, tokens_input: int, tokens_output
         "pricing_status": "priced",
         "pricing_source": source,
         "pricing_model_id": router_id,
-        "pricing_url": openrouter_model_url(router_id),
+        "pricing_url": OPENAI_PRICING_URL if official_pricing else openrouter_model_url(router_id),
         "cost_basis": "api_equivalent_estimate",
         "cost_breakdown": cost_breakdown,
         "input_price": input_price,
