@@ -1,5 +1,6 @@
 {
-  "apply": false,
+  "applied_at_utc": "2026-08-14T14:28:27.244005Z",
+  "apply": true,
   "change_count": 25,
   "changes": [
     {
@@ -128,7 +129,7 @@
       "number": "https://api.github.com/repos/rdeepmath91/coding-agent-usage-dashboard/issues/34"
     }
   ],
-  "generated_at_utc": "2026-08-14T14:26:47.539476Z",
+  "generated_at_utc": "2026-08-14T14:27:55.328565Z",
   "link_count": 54,
   "links": {
     "https://github.com/raychrisgdp/coding-agent-usage-dashboard/blob/edd02b199a9b1c7c2b64e7233bb52b6b872af64c/docs/prototypes/usage-explorer-desktop.png": {

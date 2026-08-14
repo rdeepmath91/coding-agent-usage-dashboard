@@ -1,0 +1,17 @@
+{
+  "operation": "workflow-dispatch-pr-53-head",
+  "destination": "rdeepmath91/coding-agent-usage-dashboard",
+  "head_ref": "design/usage-explorer-prototype",
+  "head_sha": "edd02b199a9b1c7c2b64e7233bb52b6b872af64c",
+  "status": "blocked",
+  "reason": "GitHub returned HTTP 422: Workflow does not have workflow_dispatch trigger on the target ref. The trigger was added to destination main, but the unchanged PR head branch still contains the original workflow file.",
+  "main_dispatch_run": {
+    "id": 31810963075,
+    "head_sha": "0c643299dff197f1e7a0f98cc6a9f15a229daa4a",
+    "event": "workflow_dispatch",
+    "conclusion": "failure",
+    "steps": 0,
+    "logs": "GitHub returned no job log; the job failed before steps began."
+  },
+  "note": "The PR head was not changed to force a workflow file update. Local clean-clone tests remain the code verification evidence."
+}
