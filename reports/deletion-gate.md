@@ -18,7 +18,15 @@ Status: **migration verified; awaiting separate explicit deletion approval**
 - The canonical recovery bundle is `archive/source-with-pull-refs.bundle` with
   its portable relative-path manifest; the older `source-current` artifacts
   are retained only as explicitly superseded pre-remediation evidence.
-- The recovery archive remains at `/home/raymond-christopher/migration-backups/coding-agent-usage-dashboard-20260814T101757Z.tar.gz` with SHA-256 `d67e06864fffd7374317451821c55483cb6bf85826eeceb410372eff6e2a1103`.
+- A complete post-remediation package is available at
+  `/home/raymond-christopher/migration-backups/coding-agent-usage-dashboard-post-remediation-20260815T010820Z.tar.gz`
+  with SHA-256
+  `1acdca0f8e828c96ac7075a23d60750509b6623bd08e5d00e45142208394246a`.
+- The earlier recovery archive remains at
+  `/home/raymond-christopher/migration-backups/coding-agent-usage-dashboard-20260814T101757Z.tar.gz`
+  with SHA-256 `d67e06864fffd7374317451821c55483cb6bf85826eeceb410372eff6e2a1103`;
+  it is a pre-remediation baseline and is not sufficient by itself for full
+  PR-object recovery.
 
 ## Unavoidable residue
 

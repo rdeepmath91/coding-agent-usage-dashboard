@@ -14,6 +14,9 @@ Updated: 2026-08-14
 - Actions logs: all 89 source run log bundles downloaded and hashed; no source log was unavailable.
 - Checksum portability: fresh archive clone verified 275 raw entries, 36 PR artifacts, 89 Actions logs, and the replacement bundle using relative paths.
 - Canonical recovery evidence: `archive/source-with-pull-refs.bundle` contains all 110 PR-related SHAs; the former `source-current.*` files are explicitly superseded pre-remediation evidence.
+- Recovery package: the complete post-remediation package is
+  `/home/raymond-christopher/migration-backups/coding-agent-usage-dashboard-post-remediation-20260815T010820Z.tar.gz`, SHA-256
+  `1acdca0f8e828c96ac7075a23d60750509b6623bd08e5d00e45142208394246a`.
 - Local refs: stale tracking refs refreshed; `test-update-button-doc-note` now tracks its same-named destination branch; seven dangling local commits are protected under `archive/local-dangling/`.
 - Fresh destination mirror: `git fsck --full --strict` passed, all 110 PR-related SHAs are present, and a fresh destination `main` clone passed all 62 tests.
 
