@@ -1,6 +1,11 @@
-# Preflight — coding-agent-usage-dashboard private mirror
+# Preflight — coding-agent-usage-dashboard private mirror (historical baseline)
 
 Captured: 2026-08-14
+
+This document records the pre-migration baseline. It is retained for audit
+history; the current canonical recovery evidence is documented in the deletion
+gate and uses `archive/source-with-pull-refs.bundle` plus the post-remediation
+package, not the original preflight tarball.
 
 ## Current live source
 
@@ -19,15 +24,15 @@ Captured: 2026-08-14
 - Path: `/home/raymond-christopher/migration-backups/coding-agent-usage-dashboard-20260814T101757Z.tar.gz`
 - SHA-256: `d67e06864fffd7374317451821c55483cb6bf85826eeceb410372eff6e2a1103`
 - Gzip and tar listing checks: passed
-- Archived bundle verification: reports a complete history and 41 refs
+- Archived bundle verification: the pre-remediation baseline bundle reports a complete history and 41 refs; it is not the canonical recovery bundle
 - Archived worktrees: 10
 
 ## Fresh local Git capture
 
-- Bundle: `archive/source-current.bundle`
-- Bundle verification: passed; complete history, 41 bundle refs
-- Ref snapshot: `archive/source-current.show-ref` (31 ordinary refs)
-- Bundle SHA-256: `8b07b204ca1e8adb3acbf273e11ee2f513fd8ee047575ab0a8f6e2d1192772be`
+- Bundle: `archive/source-with-pull-refs.bundle` (canonical; includes hidden pull refs)
+- Bundle verification: passed; complete history, 57 bundle refs
+- Ref snapshot: `archive/source-pull-refs.txt` (19 preserved hidden pull refs)
+- Bundle SHA-256: `86c26247ad1653420531c1fe1246097a01ccdfd251afffa80932fa914d210e27`
 - Git LFS: unavailable and no `.gitattributes` LFS rules were found
 - Local wiki checkout: absent; wiki availability still requires GitHub API/UI verification
 

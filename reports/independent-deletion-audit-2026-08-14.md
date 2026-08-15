@@ -136,6 +136,11 @@ Required remediation:
 2. Record any expired/unavailable log IDs explicitly.
 3. Trigger destination CI for native PR #53 without changing its code diff, then verify the destination head has a successful `test` check.
 
+Owner disposition recorded 2026-08-15: the missing native destination check is
+accepted as an explicit exception. No self-hosted runner was created or
+registered. This does not change the preserved Git objects, archive artifacts,
+or fresh-clone test results.
+
 ### 5. Nine original assignee records are not visible in destination objects
 
 Original assignee `raychrisgdp` was omitted from objects #2, #6, #14, #19, #21, #26, #27, #37, and #48. The data exists only in raw JSON and `object-map.json`; destination bodies do not state the original assignee.

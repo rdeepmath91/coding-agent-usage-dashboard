@@ -28,6 +28,11 @@ def main() -> int:
     parser.add_argument("--source", default="raychrisgdp/coding-agent-usage-dashboard")
     parser.add_argument("--source-gh", default="gh")
     parser.add_argument(
+        "--include-pr53",
+        action="store_true",
+        help="also archive native PR #53 through the GitHub API media-type endpoint",
+    )
+    parser.add_argument(
         "--git-dir",
         type=Path,
         default=None,
@@ -38,6 +43,8 @@ def main() -> int:
     raw = args.root / "archive" / "raw" / "github"
     manifest = json.loads((args.root / "state" / "source-manifest.json").read_text(encoding="utf-8"))
     pr_numbers = [int(number) for number in manifest["numbered"]["pull_request_numbers"] if int(number) != 53]
+    if args.include_pr53:
+        pr_numbers.append(53)
     token = subprocess.check_output([args.source_gh, "auth", "token"], text=True).strip()
     git_dir = args.git_dir or args.root / "archive" / "source-pull-archive.git"
     artifact_root = args.root / "archive" / "pr-artifacts"
@@ -46,19 +53,25 @@ def main() -> int:
         detail = json.loads((raw / "pull-details" / f"{number:04d}.json").read_text(encoding="utf-8"))
         for suffix in ("patch", "diff"):
             url = f"https://github.com/{args.source}/pull/{number}.{suffix}"
+            retrieval_url = url
+            accept = "application/vnd.github+json"
+            if number == 53:
+                retrieval_url = f"https://api.github.com/repos/{args.source}/pulls/{number}"
+                accept = f"application/vnd.github.{suffix}"
             destination = artifact_root / f"{number:04d}.{suffix}"
             record = {
                 "source_number": number,
                 "kind": suffix,
                 "source_url": url,
                 "source_api_url": detail.get(f"{suffix}_url"),
+                "retrieval_url": retrieval_url,
                 "path": str(destination.relative_to(args.root)),
             }
             request = urllib.request.Request(
-                url,
+                retrieval_url,
                 headers={
                     "Authorization": f"Bearer {token}",
-                    "Accept": "application/vnd.github+json",
+                    "Accept": accept,
                     "User-Agent": "private-mirror-migration",
                 },
             )
