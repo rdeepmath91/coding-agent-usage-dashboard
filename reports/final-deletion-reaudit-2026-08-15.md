@@ -32,9 +32,9 @@ explicit instruction naming `raychrisgdp/coding-agent-usage-dashboard`.
 
 ## Recovery package
 
-- Path: `/home/raymond-christopher/migration-backups/coding-agent-usage-dashboard-post-remediation-20260815T010820Z.tar.gz`
-- SHA-256: `1acdca0f8e828c96ac7075a23d60750509b6623bd08e5d00e45142208394246a`
-- Neutral extraction passed all 638 package-file checks.
+- Path: `/home/raymond-christopher/migration-backups/coding-agent-usage-dashboard-post-remediation-20260815T011157Z.tar.gz`
+- SHA-256: `9fc0ed5f927c6e91bd5bc8c4dde5bfe78a877256b9c7b6c5343bac2e91d8bcf2`
+- Neutral extraction passed all 645 package-file checks.
 - It contains the current destination mirror, archive branch history and
   checkout, source pull-ref archive, raw records, Actions logs, PR artifacts,
   state maps, and reports.

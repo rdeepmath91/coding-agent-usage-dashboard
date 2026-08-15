@@ -19,9 +19,9 @@ Status: **migration verified; awaiting separate explicit deletion approval**
   its portable relative-path manifest; the older `source-current` artifacts
   are retained only as explicitly superseded pre-remediation evidence.
 - A complete post-remediation package is available at
-  `/home/raymond-christopher/migration-backups/coding-agent-usage-dashboard-post-remediation-20260815T010820Z.tar.gz`
+  `/home/raymond-christopher/migration-backups/coding-agent-usage-dashboard-post-remediation-20260815T011157Z.tar.gz`
   with SHA-256
-  `1acdca0f8e828c96ac7075a23d60750509b6623bd08e5d00e45142208394246a`.
+  `9fc0ed5f927c6e91bd5bc8c4dde5bfe78a877256b9c7b6c5343bac2e91d8bcf2`.
 - The earlier recovery archive remains at
   `/home/raymond-christopher/migration-backups/coding-agent-usage-dashboard-20260814T101757Z.tar.gz`
   with SHA-256 `d67e06864fffd7374317451821c55483cb6bf85826eeceb410372eff6e2a1103`;
