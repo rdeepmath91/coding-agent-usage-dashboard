@@ -960,8 +960,8 @@
     <!-- Pill tabs -->
     <div class="pill-tabs" id="range-tabs" role="group" aria-label="Usage date range">
       <button class="pill" data-days="3" aria-pressed="false">3d</button>
-      <button class="pill" data-days="7" aria-pressed="false">7d</button>
-      <button class="pill active" data-days="30" aria-pressed="true">30d</button>
+      <button class="pill active" data-days="7" aria-pressed="true">7d</button>
+      <button class="pill" data-days="30" aria-pressed="false">30d</button>
       <button class="pill" data-days="90" aria-pressed="false">90d</button>
       <button class="pill" data-days="0" aria-pressed="false">All</button>
       <span class="custom-range">
@@ -1634,7 +1634,7 @@ function setStatLoading(on) {
 }
 
 // ── Range tabs ──────────────────────────────────────────────────────────────
-let currentDays = 30;
+let currentDays = 7;
 const pageSearch = new URLSearchParams(window.location.search);
 
 function rangeParam() {
